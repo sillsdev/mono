@@ -1728,16 +1728,15 @@ namespace System.Windows.Forms {
 
 					if (xevent.AnyEvent.type == XEventName.KeyPress ||
 					    xevent.AnyEvent.type == XEventName.KeyRelease) {
+						if (Keyboard.ClientWindow != IntPtr.Zero) {
+							xevent.KeyEvent.window = Keyboard.ClientWindow;
+						}
 						// PreFilter() handles "shift key state updates.
 						Keyboard.PreFilter (xevent);
-						if (XFilterEvent (ref xevent, Keyboard.ClientWindow)) {
-							// probably here we could raise WM_IME_KEYDOWN and
-							// WM_IME_KEYUP, but I'm not sure it is worthy.
-							continue;
-						}
 					}
-					else if (XFilterEvent (ref xevent, IntPtr.Zero))
+					if (XFilterEvent (ref xevent, IntPtr.Zero)) {
 						continue;
+					}
 				}
 
 				hwnd = Hwnd.GetObjectFromWindow(xevent.AnyEvent.window);
