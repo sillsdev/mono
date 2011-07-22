@@ -4450,7 +4450,9 @@ namespace System.Windows.Forms {
 				return;
 			}
 
-			if (hitTest.Type == DataGridViewHitTestType.RowHeader && MouseOverRowResize (hitTest.RowIndex, e.Y)) {
+			if ((hitTest.Type == DataGridViewHitTestType.RowHeader ||
+			     (hitTest.Type == DataGridViewHitTestType.Cell && !RowHeadersVisible))
+			    && MouseOverRowResize (hitTest.RowIndex, e.Y)) {
 				if (e.Clicks == 2) {
 					AutoResizeRow (hitTest.RowIndex);
 					return;
@@ -4545,6 +4547,9 @@ namespace System.Windows.Forms {
 				EnteredHeaderCell = Columns [hit.ColumnIndex].HeaderCell;
 				if (MouseOverColumnResize (hit.ColumnIndex, e.X))
 					new_cursor = Cursors.VSplit;
+			} else if (!RowHeadersVisible && hit.Type == DataGridViewHitTestType.Cell && MouseOverRowResize (hit.RowIndex, e.Y)) {
+				EnteredHeaderCell = Rows[hit.RowIndex].HeaderCell;
+				new_cursor = Cursors.HSplit;
 			} else if (hit.Type == DataGridViewHitTestType.Cell) {
 				EnteredHeaderCell = null;
 
