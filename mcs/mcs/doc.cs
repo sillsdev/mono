@@ -516,6 +516,11 @@ namespace Mono.CSharp {
 				name = signature.Substring (0, brace_pos).Trim (wsChars);
 				parameters = signature.Substring (brace_pos + 1, signature.Length - brace_pos - 2).Trim (wsChars);
 			}
+			else if ((signature.IndexOf('{') > 0 && signature [ signature.Length - 1] == '}') ||
+				(signature.IndexOf('<') > 0 && signature [ signature.Length - 1] == '>')) {
+				// in a cref bla<T> and bla{T} are equivalent to T:bla`1. This fixes bug #480862.
+				return;
+			}
 			else {
 				name = signature;
 				parameters = null;
