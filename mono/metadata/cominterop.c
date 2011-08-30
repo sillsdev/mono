@@ -34,6 +34,7 @@
 #include "mono/utils/mono-counters.h"
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
 
 #ifndef DISABLE_COM
 
@@ -1664,6 +1665,11 @@ cominterop_rcw_finalizer (gpointer key, gpointer value, gpointer user_data)
 	return TRUE;
 }
 
+void justexit(int sig)
+{
+	_exit(0);
+}
+
 void
 cominterop_release_all_rcws (void)
 {
@@ -1671,10 +1677,17 @@ cominterop_release_all_rcws (void)
 		return;
 
 	mono_cominterop_lock ();
+	sighandler_t oldAbrt = signal(SIGABRT, justexit);
+	sighandler_t oldSegv = signal(SIGSEGV, justexit);
+	sighandler_t oldFpe = signal(SIGFPE, justexit);
 
 	g_hash_table_foreach_remove (rcw_hash, cominterop_rcw_finalizer, NULL);
 	g_hash_table_destroy (rcw_hash);
 	rcw_hash = NULL;
+
+	signal(SIGABRT, oldAbrt);
+	signal(SIGABRT, oldSegv);
+	signal(SIGFPE, oldFpe);
 
 	mono_cominterop_unlock ();
 }
