@@ -101,6 +101,8 @@ namespace System.Windows.Forms
 
 		public virtual void Clear ()
 		{
+			dataGridView.CurrentCell = null;
+
 			base.List.Clear ();
 			
 			// When we clear the column collection, all rows get deleted
