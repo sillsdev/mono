@@ -1362,6 +1362,7 @@ namespace System.Windows.Forms {
 					} else {
 						Controls.Remove (editingControl);
 					}
+					editingControl.Dispose();
 				}
 				
 				
@@ -3358,6 +3359,17 @@ namespace System.Windows.Forms {
 		}
 
 		protected override void Dispose (bool disposing) {
+			if (disposing) {
+				foreach (DataGridViewColumn column in Columns)
+					column.Dispose();
+				Columns.Clear();
+				foreach (DataGridViewRow row in Rows)
+					row.Dispose();
+				Rows.Clear();
+			}
+			editingControl = null;
+
+			base.Dispose(disposing);
 		}
 
 		protected override AccessibleObject GetAccessibilityObjectById (int objectId)
