@@ -2333,7 +2333,10 @@ namespace System.Windows.Forms {
 						return true;
 					}
 					else if (accept_button != null) {
-						accept_button.PerformClick();
+						// Set ActiveControl to force any Validation to take place.
+						ActiveControl = (accept_button as Control);
+						if (ActiveControl == accept_button) // else Validation failed
+							accept_button.PerformClick();
 						return true;
 					}
 				} else if (keyData == Keys.Escape && cancel_button != null) {
