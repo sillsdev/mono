@@ -71,6 +71,8 @@ namespace System.Configuration
 		public virtual Type GetConfigType (string typeName, bool throwOnError)
 		{
 			Type type = Type.GetType (typeName);
+			if (type == null && typeName.Split(',').Length == 1) // try System.dll if nothing else specified
+				type = Type.GetType (typeName + ",System");
 			if (type == null && throwOnError)
 				throw new ConfigurationErrorsException ("Type '" + typeName + "' not found.");
 			return type;

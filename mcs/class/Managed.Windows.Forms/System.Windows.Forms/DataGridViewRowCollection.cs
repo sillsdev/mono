@@ -255,6 +255,8 @@ namespace System.Windows.Forms
 
 		public virtual void Clear ()
 		{
+			dataGridView.CurrentCell = null;
+
 			int total = list.Count;
 			
 			DataGridView.OnRowsPreRemovedInternal (new DataGridViewRowsRemovedEventArgs (0, total));
