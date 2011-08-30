@@ -1813,11 +1813,6 @@ namespace System.Windows.Forms
 				return;
 			}
 
-			Point pt = PointToClient (Cursor.Position);
-
-			if (!bounds.Contains (pt) && !Capture)
-				return;
-
 			if (cursor != null || use_wait_cursor) {
 				XplatUI.SetCursor (window.Handle, Cursor.handle);
 			} else {
