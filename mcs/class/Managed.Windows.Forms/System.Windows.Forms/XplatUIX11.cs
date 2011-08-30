@@ -4986,6 +4986,23 @@ namespace System.Windows.Forms {
 			}
 
 			OverrideCursorHandle = cursor;
+
+			// Immediately update cursor visually to behave more like .NET
+			if (LastPointerWindow != null && LastPointerWindow != IntPtr.Zero)
+			{
+				// LastPointerWindow might be a Button widget.
+				// Just setting cursor for a widget won't set the cursor for the rest of that form immediately.
+				// Set cursor for each parent widget to impact many of the elements on the form, though
+				// missing other widgets in the hierarchy such as sibling widgets.
+				Hwnd widget = Hwnd.ObjectFromHandle (LastPointerWindow);
+				while (widget != null)
+				{
+					SetCursor (widget.Handle, OverrideCursorHandle);
+					widget = widget.Parent;
+				}
+				// Get X to update mouse cursor immediately
+				XPending (DisplayHandle);
+			}
 		}
 
 		internal override PaintEventArgs PaintEventStart(ref Message msg, IntPtr handle, bool client)
