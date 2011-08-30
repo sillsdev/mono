@@ -934,6 +934,14 @@ namespace System.Windows.Forms
 		{
 			this.Close (reason);
 			base.Dismiss (reason);
+
+			// ContextMenuStrip won't have a parent
+			if (this.OwnerItem == null)
+				return;
+			
+			// Ensure Submenu loses keyboard capture when closing.
+			ToolStrip parent_strip = this.OwnerItem.Parent;
+			ToolStripManager.SetActiveToolStrip (null, false);			
 		}
 
 		internal override ToolStrip GetTopLevelToolStrip ()
