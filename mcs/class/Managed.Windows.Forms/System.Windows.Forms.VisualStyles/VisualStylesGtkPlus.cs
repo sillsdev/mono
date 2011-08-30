@@ -1100,7 +1100,7 @@ namespace System.Windows.Forms.VisualStyles
 		}
 		public string VisualStyleInformationColorScheme {
 			get {
-				return null;
+				return Environment.GetEnvironmentVariable ("MONO_VISUAL_STYLE_COLOR_SCHEME");
 			}
 		}
 		public string VisualStyleInformationCompany {
@@ -1130,7 +1130,7 @@ namespace System.Windows.Forms.VisualStyles
 		}
 		public string VisualStyleInformationFileName {
 			get {
-				return null;
+				return VisualStyleInformationColorScheme;
 			}
 		}
 		public bool VisualStyleInformationIsSupportedByOS
