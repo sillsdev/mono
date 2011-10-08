@@ -641,6 +641,7 @@ public class CompareInfoTest
 	}
 
 	[Test]
+	[Ignore ("#1358")]
 	public void GetSortKeyHungarianTailoring ()
 	{
 		if (!doTest)
