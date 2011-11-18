@@ -1981,9 +1981,9 @@ namespace System.Windows.Forms {
 		}
 
 		protected void CenterToScreen() {
-			Size	DisplaySize;
-			int	w;
-			int	h;
+			Size displaySize;
+			int w;
+			int h;
 
 			// MS creates the handle here.
 			if (TopLevel) {
@@ -2003,8 +2003,12 @@ namespace System.Windows.Forms {
 				h = DefaultSize.Height;
 			}
 
-			XplatUI.GetDisplaySize(out DisplaySize);
-			this.Location = new Point(DisplaySize.Width / 2 - w / 2, DisplaySize.Height / 2 - h / 2);
+			if (TopLevel) {
+				displaySize = Screen.FromControl(this).WorkingArea.Size;
+			} else {
+				displaySize = Screen.PrimaryScreen.WorkingArea.Size;
+			}
+			this.Location = new Point(displaySize.Width / 2 - w / 2, displaySize.Height / 2 - h / 2);
 		}
 
 		[EditorBrowsable(EditorBrowsableState.Advanced)]
