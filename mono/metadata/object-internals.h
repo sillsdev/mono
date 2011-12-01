@@ -322,6 +322,7 @@ typedef struct {
 	MonoMarshalByRefObject object;
 	gpointer iunknown;
 	GHashTable* itf_hash;
+	MonoObject *synchronization_context;
 } MonoComObject;
 
 typedef struct {
