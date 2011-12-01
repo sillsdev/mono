@@ -1500,6 +1500,18 @@ namespace MonoTests.System.Runtime.Serialization
 		}
 
 		[Test]
+		public void Bug642227_IgnoreUnknownElement()
+		{
+			string xml = @"
+<DataContractSerializerTest.Sample1 xmlns=""http://schemas.datacontract.org/2004/07/MonoTests.System.Runtime.Serialization"">
+	<Member2>bla</Member2>
+	<Member1>bar</Member1>
+</DataContractSerializerTest.Sample1>";
+			new DataContractSerializer (typeof (Sample1))
+				.ReadObject (XmlReader.Create (new StringReader (xml)));
+		}
+
+		[Test]
 		[ExpectedException (typeof (InvalidDataContractException))] // BaseConstraintType1 is neither DataContract nor Serializable.
 		public void BaseConstraint1 ()
 		{
