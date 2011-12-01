@@ -4842,6 +4842,18 @@ namespace System.Windows.Forms
 			UpdateBounds(x, y, width, height, width - (rect.Right - rect.Left), height - (rect.Bottom - rect.Top));
 		}
 
+		internal static bool m_ignoreUpdates = false;
+
+		public static void IgnoreUpdates()
+		{
+			m_ignoreUpdates = true;
+		}
+
+		public static void UnignoreUpdates()
+		{
+			m_ignoreUpdates = false;
+		}
+
 		[EditorBrowsable(EditorBrowsableState.Advanced)]
 		protected void UpdateBounds(int x, int y, int width, int height, int clientWidth, int clientHeight) {
 			// UpdateBounds only seems to set our sizes and fire events but not update the GUI window to match
@@ -4869,17 +4881,20 @@ namespace System.Windows.Forms
 			client_size.Width=clientWidth;
 			client_size.Height=clientHeight;
 
-			if (moved) {
-				OnLocationChanged(EventArgs.Empty);
+			if (!m_ignoreUpdates)
+			{
+				if (moved) {
+					OnLocationChanged(EventArgs.Empty);
 
-				if (!background_color.IsEmpty && background_color.A < byte.MaxValue)
-					Invalidate ();
-			}
-
-			if (resized) {
-				OnSizeInitializedOrChanged ();
-				OnSizeChanged(EventArgs.Empty);
-				OnClientSizeChanged (EventArgs.Empty);
+					if (!background_color.IsEmpty && background_color.A < byte.MaxValue)
+						Invalidate ();
+				}
+			
+				if (resized) {
+					OnSizeInitializedOrChanged ();
+					OnSizeChanged(EventArgs.Empty);
+					OnClientSizeChanged (EventArgs.Empty);
+				}
 			}
 		}
 
