@@ -333,7 +333,9 @@ namespace System.Resources
 			ResourceSet set = null;
 			
 			/* if we already have this resource set, return it */
+#if false
 			set = (ResourceSet) ResourceSets [culture];
+#endif
 			if (set != null) {
 				try {
 					if (!set.IsDisposed)
