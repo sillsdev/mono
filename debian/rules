@@ -16,6 +16,9 @@ DEB_SHLIBDEPS_INCLUDE = $(LIBFW)
 #DEB_DH_MAKESHLIBS_ARGS_ALL = -X$(LIBFW)/
 DEB_DH_STRIP_ARGS = -k
 
+DEB_CONFIGURE_SCRIPT := ./autogen.sh
+DEB_MAKE_CLEAN_TARGET := distclean
+
 install/fieldworks-mono::
 	# Some versions of nant expect mono to use the pkg-config name of 'mono', but
 	# new versions of mono use name 'mono-2'. Support both for now.
