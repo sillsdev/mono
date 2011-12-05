@@ -1,0 +1,14 @@
+Index: fieldworks-mono/mcs/class/corlib/System.Resources/ResourceManager.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/corlib/System.Resources/ResourceManager.cs
++++ fieldworks-mono/mcs/class/corlib/System.Resources/ResourceManager.cs
+@@ -333,7 +333,9 @@
+ 			ResourceSet set = null;
+ 			
+ 			/* if we already have this resource set, return it */
++#if false
+ 			set = (ResourceSet) ResourceSets [culture];
++#endif
+ 			if (set != null) {
+ 				try {
+ 					if (!set.IsDisposed)

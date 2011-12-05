@@ -1,0 +1,29 @@
+From 58e2681c0e9c76a49e0d893748af88736050a3a0 Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:34 +0200
+Subject: [PATCH] bug-519648
+
+Could not identify an FWNX for this
+---
+ .../System.Data.Common/DataContainer.cs            |    8 +++++++-
+ 1 files changed, 7 insertions(+), 1 deletions(-)
+
+Index: fieldworks-mono/mcs/class/System.Data/System.Data.Common/DataContainer.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/System.Data/System.Data.Common/DataContainer.cs
++++ fieldworks-mono/mcs/class/System.Data/System.Data.Common/DataContainer.cs
+@@ -52,7 +52,13 @@
+ 			get { return IsNull (index) ? DBNull.Value : GetValue (index); }
+ 			set {
+ 				if (value == null) {
+-					CopyValue (Column.Table.DefaultValuesRowIndex, index);
++					// Table might not have a default values row to copy from
++					if (Column.Table.DefaultValuesRowIndex == -1) {
++						ZeroOut (index);
++						null_values [index] = true;
++					} else {
++						CopyValue (Column.Table.DefaultValuesRowIndex, index);
++					}
+ 					return;
+ 				}
+ 

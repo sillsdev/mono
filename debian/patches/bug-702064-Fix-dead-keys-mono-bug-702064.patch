@@ -1,0 +1,38 @@
+From 26c21412c8dfa33e48ac382cac5831cc3cc453ee Mon Sep 17 00:00:00 2001
+From: Eberhard Beilharz <eb1@sil.org>
+Date: Fri, 24 Jun 2011 17:33:09 +0200
+Subject: [PATCH] bug-702064: Fix dead keys (mono bug #702064)
+
+Window events need to be routed to the correct window
+(client window), otherwise it only works when the mouse
+pointer is inside of the text box.
+---
+ .../System.Windows.Forms/XplatUIX11.cs             |   11 +++++------
+ 1 files changed, 5 insertions(+), 6 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
+@@ -1728,16 +1728,15 @@
+ 
+ 					if (xevent.AnyEvent.type == XEventName.KeyPress ||
+ 					    xevent.AnyEvent.type == XEventName.KeyRelease) {
++						if (Keyboard.ClientWindow != IntPtr.Zero) {
++							xevent.KeyEvent.window = Keyboard.ClientWindow;
++						}
+ 						// PreFilter() handles "shift key state updates.
+ 						Keyboard.PreFilter (xevent);
+-						if (XFilterEvent (ref xevent, Keyboard.ClientWindow)) {
+-							// probably here we could raise WM_IME_KEYDOWN and
+-							// WM_IME_KEYUP, but I'm not sure it is worthy.
+-							continue;
+-						}
+ 					}
+-					else if (XFilterEvent (ref xevent, IntPtr.Zero))
++					if (XFilterEvent (ref xevent, IntPtr.Zero)) {
+ 						continue;
++					}
+ 				}
+ 
+ 				hwnd = Hwnd.GetObjectFromWindow(xevent.AnyEvent.window);

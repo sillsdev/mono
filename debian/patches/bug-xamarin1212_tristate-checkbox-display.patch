@@ -1,0 +1,29 @@
+From 59662316866ce4fe09a3187ab17f593affdb869f Mon Sep 17 00:00:00 2001
+From: Stephen McConnel <stephen_mcconnel@sil.org>
+Date: Fri, 21 Oct 2011 17:25:14 -0500
+Subject: [PATCH] Fix Xamarin bug 1212: tristate checkbox display
+
+---
+ .../Default/CheckBoxPainter.cs                     |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms.Theming/Default/CheckBoxPainter.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms.Theming/Default/CheckBoxPainter.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms.Theming/Default/CheckBoxPainter.cs
+@@ -129,7 +129,7 @@
+ 			if (state == CheckState.Checked)
+ 				DrawCheck (g, bounds, Color.Black);
+ 			else if (state == CheckState.Indeterminate)
+-				DrawCheck (g, bounds, SystemColors.ControlDarkDark);
++				DrawCheck (g, bounds, SystemColors.ControlDark);
+ 		}
+ 		
+ 		public virtual void DrawHotCheckBox (Graphics g, Rectangle bounds, Color backColor, Color foreColor, CheckState state)
+@@ -356,4 +356,4 @@
+ 		#endregion
+ 	}
+ }
+-#endif
+\ No newline at end of file
++#endif

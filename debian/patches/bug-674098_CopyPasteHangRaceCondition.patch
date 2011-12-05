@@ -1,0 +1,29 @@
+From 6cd2d4380adb1ea3b142569bdc992fc862beb521 Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:37 +0200
+Subject: [PATCH] bug-674098_CopyPasteHangRaceCondition
+
+FWNX-637
+---
+ .../System.Windows.Forms/XplatUIX11.cs             |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
+@@ -2687,9 +2687,14 @@
+ 			while (f != null) {
+ 				XConvertSelection(DisplayHandle, CLIPBOARD, (IntPtr)f.Id, (IntPtr)f.Id, FosterParent, IntPtr.Zero);
+ 
++				var timeToWaitForSelectionFormats = TimeSpan.FromSeconds(4);
++				var startTime = DateTime.Now;
+ 				Clipboard.Enumerating = true;
+ 				while (Clipboard.Enumerating) {
+ 					UpdateMessageQueue(null, false);
++
++					if (DateTime.Now - startTime > timeToWaitForSelectionFormats)
++						break;
+ 				}
+ 				f = f.Next;
+ 			}

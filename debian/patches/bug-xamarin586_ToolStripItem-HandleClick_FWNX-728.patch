@@ -1,0 +1,13 @@
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/ToolStripItem.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/ToolStripItem.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/ToolStripItem.cs
+@@ -1805,6 +1805,8 @@
+ 		
+ 		internal virtual void HandleClick (int mouse_clicks, EventArgs e)
+ 		{
++			if (Parent == null)
++				return;
+ 			this.Parent.HandleItemClick (this);
+ 			if (mouse_clicks == 2 && double_click_enabled)
+ 				this.OnDoubleClick (e);

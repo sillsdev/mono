@@ -1,0 +1,57 @@
+Could not identify an FWNX for this
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Control.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Control.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Control.cs
+@@ -4841,6 +4841,18 @@
+ 			UpdateBounds(x, y, width, height, width - (rect.Right - rect.Left), height - (rect.Bottom - rect.Top));
+ 		}
+ 
++		internal static bool m_ignoreUpdates = false;
++
++		public static void IgnoreUpdates()
++		{
++			m_ignoreUpdates = true;
++		}
++
++		public static void UnignoreUpdates()
++		{
++			m_ignoreUpdates = false;
++		}
++
+ 		[EditorBrowsable(EditorBrowsableState.Advanced)]
+ 		protected void UpdateBounds(int x, int y, int width, int height, int clientWidth, int clientHeight) {
+ 			// UpdateBounds only seems to set our sizes and fire events but not update the GUI window to match
+@@ -4868,17 +4880,21 @@
+ 			client_size.Width=clientWidth;
+ 			client_size.Height=clientHeight;
+ 
+-			if (moved) {
+-				OnLocationChanged(EventArgs.Empty);
+-
+-				if (!background_color.IsEmpty && background_color.A < byte.MaxValue)
+-					Invalidate ();
++			if (!m_ignoreUpdates)
++			{
++				if (moved) {
++
++					OnLocationChanged(EventArgs.Empty);
++
++					if (!background_color.IsEmpty && background_color.A < byte.MaxValue)
++						Invalidate ();
++				}
++
++				if (resized) {
++					OnSizeInitializedOrChanged ();
++					OnSizeChanged(EventArgs.Empty);
++					OnClientSizeChanged (EventArgs.Empty);
+ 			}
+-
+-			if (resized) {
+-				OnSizeInitializedOrChanged ();
+-				OnSizeChanged(EventArgs.Empty);
+-				OnClientSizeChanged (EventArgs.Empty);
+ 			}
+ 		}
+ 

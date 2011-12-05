@@ -1,0 +1,127 @@
+From bb0cc82f7f8394c1b7b50e2d8926e9c6fddaec7c Mon Sep 17 00:00:00 2001
+From: Eberhard Beilharz <eb1@sil.org>
+Date: Fri, 24 Jun 2011 11:32:29 +0200
+Subject: [PATCH] bug-692206: Improved fix for mono bug #692206
+
+In contrast to Xutf8LookupString, XLookupString returns the number
+of characters stored in the buffer instead of a status. If the buffer
+is too small the output is truncated, but we don't know it. However, it
+seems pretty unlikely that a buffer of 24 chars shouldn't be enough for a
+single key press, so I simplified the code a little bit.
+Also, XLookupString converts the keySym to an ISO Latin-1
+character so that there is no need to do an explicit conversion.
+
+Add variable to store Ansi encoding so that we have to get it only once.
+
+Fix a few problems encountered debugging this problem.
+---
+ .../System.Windows.Forms/X11Keyboard.cs            |   33 +++++++++++--------
+ 1 files changed, 19 insertions(+), 14 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/X11Keyboard.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/X11Keyboard.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/X11Keyboard.cs
+@@ -61,6 +61,7 @@
+ 		private bool num_state, cap_state;
+ 		private bool initialized;
+ 		private bool menu_state = false;
++		private Encoding encoding;
+ 
+ 		private int NumLockMask;
+ 		private int AltGrMask;
+@@ -72,6 +73,16 @@
+ 			EnsureLayoutInitialized ();
+ 		}
+ 
++		private Encoding AnsiEncoding
++		{
++			get
++			{
++				if (encoding == null)
++					encoding = Encoding.GetEncoding(new CultureInfo(lcid).TextInfo.ANSICodePage);
++				return encoding;
++			}
++		}
++
+ 		public IntPtr ClientWindow {
+ 			get { return client_window; }
+ 		}
+@@ -197,10 +208,10 @@
+ 
+ 		public void FocusIn (IntPtr window)
+ 		{
++			this.client_window = window;
+ 			if (xim == IntPtr.Zero)
+ 				return;
+ 
+-			this.client_window = window;
+ 			if (!xic_table.ContainsKey ((long) window))
+ 				CreateXicForWindow (window);
+ 			IntPtr xic = GetXic (window);
+@@ -210,10 +221,10 @@
+ 
+ 		public void FocusOut (IntPtr window)
+ 		{
++			this.client_window = IntPtr.Zero;
+ 			if (xim == IntPtr.Zero)
+ 				return;
+ 
+-			this.client_window = IntPtr.Zero;
+ 			IntPtr xic = GetXic (window);
+ 			if (xic != IntPtr.Zero) {
+ 				Xutf8ResetIC (xic);
+@@ -451,8 +462,7 @@
+ 				if (dead_char != 0) {
+ 					byte [] bytes = new byte [1];
+ 					bytes [0] = (byte) dead_char;
+-					Encoding encoding = Encoding.GetEncoding (new CultureInfo (lcid).TextInfo.ANSICodePage);
+-					buffer = new string (encoding.GetChars (bytes));
++					buffer = new string (AnsiEncoding.GetChars (bytes));
+ 					res = -1;
+ 				}
+ 			} else {
+@@ -973,6 +983,7 @@
+ 				xic = XCreateIC (xim,
+ 					XNames.XNInputStyle, styleRoot,
+ 					XNames.XNClientWindow, window,
++					XNames.XNFocusWindow, window,
+ 					IntPtr.Zero);
+ 			}
+ 			return xic;
+@@ -1180,7 +1191,7 @@
+ 
+ 			status = IntPtr.Zero;
+ 			IntPtr xic = GetXic (client_window);
+-			if (xic != IntPtr.Zero) {
++			if (xic != IntPtr.Zero && xevent.type == XEventName.KeyPress) {
+ 				do {
+ 					res = Xutf8LookupString (xic, ref xevent, lookup_byte_buffer, 100, out keysym_res,  out status);
+ 					if ((int) status != -1) // XLookupBufferOverflow
+@@ -1193,15 +1204,9 @@
+ 				keysym = (XKeySym) keysym_res.ToInt32 ();
+ 				return s.Length;
+ 			} else {
+-				do {
+-					res = XLookupString (ref xevent, lookup_byte_buffer, 100, out keysym_res, out status);
+-					if ((int) status != -1) // XLookupBufferOverflow
+-						break;
+-					lookup_byte_buffer = new byte [lookup_byte_buffer.Length << 1];
+-				} while (true);
++				IntPtr statusPtr = IntPtr.Zero;
+ 				lookup_buffer.Length = 0;
+-				string s = Encoding.ASCII.GetString (lookup_byte_buffer, 0, res);
+-				lookup_buffer.Append (s);
++				res = XLookupString (ref xevent, lookup_buffer, len, out keysym_res, out statusPtr);
+ 				keysym = (XKeySym) keysym_res.ToInt32 ();
+ 				return res;
+ 			}
+@@ -1267,7 +1272,7 @@
+ 		private static extern bool XSetLocaleModifiers (string mods);
+ 
+ 		[DllImport ("libX11")]
+-		internal extern static int XLookupString(ref XEvent xevent, byte [] buffer, int num_bytes, out IntPtr keysym, out IntPtr status);
++		internal extern static int XLookupString(ref XEvent xevent, StringBuilder buffer, int num_bytes, out IntPtr keysym, out IntPtr status);
+ 		[DllImport ("libX11")]
+ 		internal extern static int Xutf8LookupString(IntPtr xic, ref XEvent xevent, byte [] buffer, int num_bytes, out IntPtr keysym, out IntPtr status);
+ 

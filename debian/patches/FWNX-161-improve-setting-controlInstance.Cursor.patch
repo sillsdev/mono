@@ -1,0 +1,25 @@
+From c4426bb7f08eeda88dfd7872a7cf47ecf2046297 Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:37 +0200
+Subject: [PATCH] FWNX-161-improve-setting-controlInstance.Cursor
+
+---
+ .../System.Windows.Forms/Control.cs                |    5 -----
+ 1 files changed, 0 insertions(+), 5 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Control.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Control.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Control.cs
+@@ -1813,11 +1813,6 @@
+ 				return;
+ 			}
+ 
+-			Point pt = PointToClient (Cursor.Position);
+-
+-			if (!bounds.Contains (pt) && !Capture)
+-				return;
+-
+ 			if (cursor != null || use_wait_cursor) {
+ 				XplatUI.SetCursor (window.Handle, Cursor.handle);
+ 			} else {

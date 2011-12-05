@@ -1,0 +1,38 @@
+From 648098fb3951c0451b0bd05783e386a89964f26b Mon Sep 17 00:00:00 2001
+From: Stephen McConnel <stephen_mcconnel@sil.org>
+Date: Fri, 21 Oct 2011 17:18:18 -0500
+Subject: [PATCH] Fix Xamarin bug 919: possible Form.ShowDialog() crash
+
+---
+ .../System.Windows.Forms/Form.cs                   |   11 ++++++++++-
+ 1 files changed, 10 insertions(+), 1 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
+@@ -1733,6 +1733,7 @@
+ 			bool		confined;
+ 			IntPtr		capture_window;
+ 
++			IWin32Window original_owner = owner;
+ 			Form owner_to_be = null;
+ 
+ 			if ((owner == null) && (Application.MWFThread.Current.Context != null)) {
+@@ -1749,7 +1750,15 @@
+ 			}
+ 
+ 			if (owner_to_be == this) {
+-				throw new ArgumentException ("Forms cannot own themselves or their owners.", "owner");
++				// Don't let a null owner become self-referential.  This has been observed,
++				// but the circumstances are unclear.
++				if (original_owner == null) {
++					owner = null;
++					owner_to_be = null;
++				}
++				else {
++					throw new ArgumentException ("Forms cannot own themselves or their owners.", "owner");
++				}
+ 			}
+ 
+ 			if (is_modal) {

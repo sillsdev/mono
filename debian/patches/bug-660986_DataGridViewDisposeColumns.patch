@@ -1,0 +1,63 @@
+From 9ab63ae1b2f7085814dffa6ba78854125fb5eb15 Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:36 +0200
+Subject: [PATCH] bug-660986_DataGridViewDisposeColumns
+
+FWNX-455
+---
+ .../System.Windows.Forms/DataGridView.cs           |   12 ++++++++++++
+ .../System.Windows.Forms/DataGridViewBand.cs       |    4 +++-
+ 2 files changed, 15 insertions(+), 1 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridView.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridView.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridView.cs
+@@ -1362,6 +1362,7 @@
+ 					} else {
+ 						Controls.Remove (editingControl);
+ 					}
++					editingControl.Dispose();
+ 				}
+ 				
+ 				
+@@ -3358,6 +3359,17 @@
+ 		}
+ 
+ 		protected override void Dispose (bool disposing) {
++			if (disposing) {
++				foreach (DataGridViewColumn column in Columns)
++					column.Dispose();
++				Columns.Clear();
++				foreach (DataGridViewRow row in Rows)
++					row.Dispose();
++				Rows.Clear();
++			}
++			editingControl = null;
++
++			base.Dispose(disposing);
+ 		}
+ 
+ 		protected override AccessibleObject GetAccessibilityObjectById (int objectId)
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridViewBand.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridViewBand.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridViewBand.cs
+@@ -53,7 +53,7 @@
+ 
+ 		~DataGridViewBand ()
+ 		{
+-			Dispose();
++			Dispose(false);
+ 		}
+ 
+ 		[DefaultValue (null)]
+@@ -227,6 +227,8 @@
+ 		//public sealed void Dispose () {
+ 		public void Dispose ()
+ 		{
++			Dispose(true);
++			GC.SuppressFinalize(this);
+ 		}
+ 
+ 		public override string ToString ()

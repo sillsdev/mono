@@ -1,0 +1,26 @@
+From 3897d2dd45f6425ab7192b1ae5d2aca238c3a425 Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:36 +0200
+Subject: [PATCH] bug-660860_DoValidationOnAcceptButton
+
+FWNX-579
+---
+ .../System.Windows.Forms/Form.cs                   |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
+@@ -2333,7 +2333,10 @@
+ 						return true;
+ 					}
+ 					else if (accept_button != null) {
+-						accept_button.PerformClick();
++						// Set ActiveControl to force any Validation to take place.
++						ActiveControl = (accept_button as Control);
++						if (ActiveControl == accept_button) // else Validation failed
++							accept_button.PerformClick();
+ 						return true;
+ 					}
+ 				} else if (keyData == Keys.Escape && cancel_button != null) {

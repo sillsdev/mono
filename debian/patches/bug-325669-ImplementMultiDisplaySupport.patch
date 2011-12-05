@@ -1,0 +1,393 @@
+From 756c423a158fcee030980ccfe0d1455b143c2f44 Mon Sep 17 00:00:00 2001
+From: Eberhard Beilharz <eb1@sil.org>
+Date: Fri, 18 Nov 2011 18:36:32 +0100
+Subject: [PATCH] Novell-325669: Implement multi-display support on Linux
+
+The number of displays and sizes can be retrieved with the help of
+libXinerama. The implementation was done in a way that is backwards
+compatible, so on non-Linux systems or when libXinerama is not
+available the behavior will be the same as before.
+
+Also fixed the implementation of FormStartPosition.CenterScreen to
+bring up the form centered on the current display. This fixes
+Novell bug#325669 on Linux.
+---
+ configure.in                                       |   14 ++++++
+ data/config.in                                     |    1 +
+ .../System.Windows.Forms/Form.cs                   |   14 ++++--
+ .../System.Windows.Forms/Screen.cs                 |   32 ++++++++-----
+ .../System.Windows.Forms/SystemInformation.cs      |   24 ++++++++--
+ .../System.Windows.Forms/X11Structs.cs             |   10 ++++
+ .../System.Windows.Forms/XplatUI.cs                |    6 ++
+ .../System.Windows.Forms/XplatUICarbon.cs          |    8 +++
+ .../System.Windows.Forms/XplatUIDriver.cs          |    1 +
+ .../System.Windows.Forms/XplatUIWin32.cs           |    8 +++
+ .../System.Windows.Forms/XplatUIX11.cs             |   49 ++++++++++++++++++++
+ 11 files changed, 145 insertions(+), 22 deletions(-)
+
+Index: fieldworks-mono/configure.in
+===================================================================
+--- fieldworks-mono.orig/configure.in
++++ fieldworks-mono/configure.in
+@@ -2141,6 +2141,7 @@
+ SQLITE="libsqlite.so.0"
+ SQLITE3="libsqlite3.so.0"
+ X11="libX11.so"
++XINERAMA="libXinerama.so"
+ 
+ sizeof_register="SIZEOF_VOID_P"
+ 
+@@ -2583,6 +2584,18 @@
+ 	if test "x$X11" = "xlibX11.so"; then
+ 		AC_MSG_WARN([Could not find X development libs. Do you have the -devel package installed? WinForms may not work...]);
+ 	fi
++	AC_MSG_CHECKING(for the soname of libXinerama.so)
++	for i in $x_libraries $dlsearch_path; do
++		for r in 1 2 3; do
++			if test -f $i/libXinerama.so.$r; then
++				XINERAMA=libXinerama.so.$r
++				AC_MSG_RESULT($XINERAMA)
++			fi
++		done
++	done
++	if test "x$XINERAMA" = "xlibXinerama.so"; then
++		AC_MSG_WARN([Could not find Xinerama development libs. Support for multiple monitors might not work...]);
++	fi
+ 	;;
+ esac
+ 
+@@ -2821,6 +2834,7 @@
+ AC_SUBST(SQLITE)
+ AC_SUBST(SQLITE3)
+ AC_SUBST(X11)
++AC_SUBST(XINERAMA)
+ AC_DEFINE_UNQUOTED(ARCHITECTURE,"$arch_target",[The architecture this is running on])
+ AC_SUBST(arch_target)
+ AC_SUBST(CFLAGS)
+Index: fieldworks-mono/data/config.in
+===================================================================
+--- fieldworks-mono.orig/data/config.in
++++ fieldworks-mono/data/config.in
+@@ -16,6 +16,7 @@
+ 	<dllmap dll="sqlite" target="@SQLITE@" os="!windows"/>
+ 	<dllmap dll="sqlite3" target="@SQLITE3@" os="!windows"/>
+ 	<dllmap dll="libX11" target="@X11@" os="!windows" />
++	<dllmap dll="libXinerama" target="@XINERAMA@" os="!windows" />
+ 	<dllmap dll="libcairo-2.dll" target="libcairo.so.2" os="!windows"/>
+ 	<dllmap dll="libcairo-2.dll" target="libcairo.2.dylib" os="osx"/>
+ 	<dllmap dll="libcups" target="libcups.so.2" os="!windows"/>
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Form.cs
+@@ -1981,9 +1981,9 @@
+ 		}
+ 
+ 		protected void CenterToScreen() {
+-			Size	DisplaySize;
+-			int	w;
+-			int	h;
++			Size displaySize;
++			int w;
++			int h;
+ 
+ 			// MS creates the handle here.
+ 			if (TopLevel) {
+@@ -2003,8 +2003,12 @@
+ 				h = DefaultSize.Height;
+ 			}
+ 
+-			XplatUI.GetDisplaySize(out DisplaySize);
+-			this.Location = new Point(DisplaySize.Width / 2 - w / 2, DisplaySize.Height / 2 - h / 2);
++			if (TopLevel) {
++				displaySize = Screen.FromControl(this).WorkingArea.Size;
++			} else {
++				displaySize = Screen.PrimaryScreen.WorkingArea.Size;
++			}
++			this.Location = new Point(displaySize.Width / 2 - w / 2, displaySize.Height / 2 - h / 2);
+ 		}
+ 
+ 		[EditorBrowsable(EditorBrowsableState.Advanced)]
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Screen.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Screen.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/Screen.cs
+@@ -24,21 +24,13 @@
+ //
+ //
+ 
+-// NOTE: We made a concious decision to have only a single 'screen'
+-// due to the differences in platforms. On Win32 we could gather
+-// all information, but not for X11 (and possibly Mac). So for now
+-// we'll stick with a single screen, but the functions are still 
+-// written to support multiple screens, simply beef up the all_screens 
+-// assignment to get multiples
+-// To support multiples, we need to use GetMonitorInfo API on Win32
+-
+ using System;
+ using System.Drawing;
+ 
+ namespace System.Windows.Forms {
+ 	public class Screen {
+ 		#region Local Variables
+-		private static Screen[] all_screens = { new Screen(true, "Mono MWF Primary Display", SystemInformation.VirtualScreen, SystemInformation.WorkingArea) };
++		private static Screen[] all_screens;
+ 		private bool		primary;
+ 		private Rectangle	bounds;
+ 		private Rectangle	workarea;
+@@ -49,12 +41,28 @@
+ 		#endregion	// Local Variables
+ 
+ 		#region	Constructors
+-		private Screen() {
++		static Screen ()
++		{
++			try {
++				all_screens = XplatUI.AllScreens;
++			}
++			catch (Exception e) {
++				Console.WriteLine ("{0} trying to get all screens: {1}", e.GetType (), e.Message);
++			}
++
++			if (all_screens == null || all_screens.Length == 0) {
++				// just use a default one
++				all_screens = new[] { new Screen(true, "Mono MWF Primary Display",
++					XplatUI.VirtualScreen, XplatUI.WorkingArea) };
++			}
++		}
++
++		internal Screen() {
+ 			this.primary = true;
+-			this.bounds = SystemInformation.WorkingArea;
++			this.bounds = XplatUI.WorkingArea;
+ 		}
+ 
+-		private Screen(bool primary, string name, Rectangle bounds, Rectangle workarea) {
++		internal Screen(bool primary, string name, Rectangle bounds, Rectangle workarea) {
+ 			this.primary = primary;
+ 			this.name = name;
+ 			this.bounds = bounds;
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/SystemInformation.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/SystemInformation.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/SystemInformation.cs
+@@ -418,12 +418,18 @@
+ 
+ 		public static int MonitorCount {
+ 			get {
+-				return 1;		// Why bother...
++				return Screen.AllScreens.Length;
+ 			}
+ 		}
+ 
+ 		public static bool MonitorsSameDisplayFormat {
+ 			get {
++				var isSame = true;
++				var rect = Screen.PrimaryScreen.Bounds;
++				foreach (var screen in Screen.AllScreens) {
++					if (rect != screen.Bounds)
++						return false;
++				}
+ 				return true;
+ 			}
+ 		}
+@@ -516,13 +522,15 @@
+ 
+ 		public static Size PrimaryMonitorMaximizedWindowSize {
+ 			get {
+-				return new Size(WorkingArea.Width, WorkingArea.Height);
++				var workingArea = Screen.PrimaryScreen.WorkingArea;
++				return new Size (workingArea.Width, workingArea.Height);
+ 			}
+ 		}
+ 
+ 		public static Size PrimaryMonitorSize {
+ 			get {
+-				return new Size(WorkingArea.Width, WorkingArea.Height);
++				var bounds = Screen.PrimaryScreen.Bounds;
++				return new Size (bounds.Width, bounds.Height);
+ 			}
+ 		}
+ 
+@@ -640,13 +648,19 @@
+ 
+ 		public static Rectangle VirtualScreen {
+ 			get {
+-				return XplatUI.VirtualScreen;
++				var rect = new Rectangle ();
++				foreach (var screen in Screen.AllScreens)
++					rect = Rectangle.Union (rect, screen.Bounds);
++				return rect;
+ 			}
+ 		}
+ 
+ 		public static Rectangle WorkingArea {
+ 			get {
+-				return XplatUI.WorkingArea;
++				var rect = new Rectangle ();
++				foreach (var screen in Screen.AllScreens)
++					rect = Rectangle.Union (rect, screen.WorkingArea);
++				return rect;
+ 			}
+ 		}
+ 	}
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/X11Structs.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/X11Structs.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/X11Structs.cs
+@@ -1808,4 +1808,14 @@
+ 		public const string XNSpotLocation = "spotLocation";
+ 		public const string XNFontSet = "fontSet";
+ 	}
++
++	[StructLayout (LayoutKind.Sequential)]
++	internal struct XineramaScreenInfo
++	{
++		public int screen_number;
++		public short x_org;
++		public short y_org;
++		public short width;
++		public short height;
++	}
+ }
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUI.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUI.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUI.cs
+@@ -427,6 +427,12 @@
+ 			}
+ 		}
+ 
++		public static Screen[] AllScreens {
++			get {
++				return driver.AllScreens;
++			}
++		}
++
+ 		public static bool ThemesEnabled {
+ 			get {
+ 				return XplatUI.driver.ThemesEnabled;
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUICarbon.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUICarbon.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUICarbon.cs
+@@ -2261,6 +2261,14 @@
+ 				return new Rectangle ((int)bounds.origin.x, (int)bounds.origin.y, (int)bounds.size.width, (int)bounds.size.height);
+ 			}
+ 		}
++
++		[MonoTODO]
++		internal override Screen[] AllScreens {
++			get {
++				throw new NotImplementedException();
++			}
++		}
++
+ 		internal override bool ThemesEnabled {
+ 			get {
+ 				return XplatUICarbon.themes_enabled;
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIDriver.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIDriver.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIDriver.cs
+@@ -248,6 +248,7 @@
+ 		internal abstract bool MouseWheelPresent { get; }
+ 		internal abstract Rectangle VirtualScreen { get; }
+ 		internal abstract Rectangle WorkingArea { get; }
++		internal abstract Screen[] AllScreens { get; }
+ 		internal abstract bool ThemesEnabled { get; }
+ 
+ 		internal virtual bool RequiresPositiveClientAreaSize {
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIWin32.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIWin32.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIWin32.cs
+@@ -1505,6 +1505,14 @@
+ 			}
+ 		}
+ 
++		[MonoTODO]
++		internal override Screen[] AllScreens {
++			get {
++				// To support multiples, we need to use GetMonitorInfo API on Win32
++				throw new NotImplementedException();
++			}
++		}
++
+ 		internal override bool ThemesEnabled {
+ 			get {
+ 				return XplatUIWin32.themes_enabled;
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
+@@ -2553,6 +2553,29 @@
+ 			}
+ 		}
+ 
++		internal override Screen[] AllScreens {
++			get {
++				if (!XineramaIsActive (DisplayHandle))
++					return null;
++				int nScreens;
++				IntPtr xineramaScreens = XineramaQueryScreens (DisplayHandle, out nScreens);
++				var screens = new Screen [nScreens];
++				IntPtr current = xineramaScreens;
++				for (int i = 0; i < nScreens; i++) {
++					var screen = (XineramaScreenInfo)Marshal.PtrToStructure (current,
++						typeof (XineramaScreenInfo));
++					var screenRect = new Rectangle (screen.x_org, screen.y_org, screen.width,
++						screen.height);
++					var isPrimary = (screen.x_org == 0 && screen.y_org == 0);
++					var name = string.Format ("Display {0}", screen.screen_number);
++					screens [i] = new Screen (isPrimary, name, screenRect, screenRect);
++					current = (IntPtr)((ulong)current + (ulong)Marshal.SizeOf(typeof(XineramaScreenInfo)));
++				}
++				XFree (xineramaScreens);
++				return screens;
++			}
++		}
++
+ 		internal override bool ThemesEnabled {
+ 			get {
+ 				return XplatUIX11.themes_enabled;
+@@ -7186,6 +7209,23 @@
+ 		}
+ #endregion
+ 
++#region Xinerama imports
++		[DllImport ("libXinerama", EntryPoint="XineramaQueryScreens")]
++		internal extern static IntPtr _XineramaQueryScreens (IntPtr display, out int number);
++		internal static IntPtr XineramaQueryScreens (IntPtr display, out int number)
++		{
++			DebugHelper.TraceWriteLine ("XineramaQueryScreens");
++			return _XineramaQueryScreens (display, out number);
++		}
++
++		[DllImport ("libXinerama", EntryPoint="XineramaIsActive")]
++		internal extern static bool _XineramaIsActive (IntPtr display);
++		internal static bool XineramaIsActive (IntPtr display)
++		{
++			DebugHelper.TraceWriteLine ("XineramaIsActive");
++			return _XineramaIsActive (display);
++		}
++#endregion
+ 
+ #else //no TRACE defined
+ 
+@@ -7536,6 +7576,15 @@
+ 		[DllImport ("libX11", EntryPoint="XIfEvent")]
+ 		internal extern static void XIfEvent (IntPtr display, ref XEvent xevent, Delegate event_predicate, IntPtr arg);
+ 		#endregion
++
++#region Xinerama imports
++		[DllImport ("libXinerama")]
++		internal extern static IntPtr XineramaQueryScreens (IntPtr display, out int number);
++
++		[DllImport ("libXinerama")]
++		internal extern static bool XineramaIsActive (IntPtr display);
++#endregion
++
+ #endif
+ 	}
+ }

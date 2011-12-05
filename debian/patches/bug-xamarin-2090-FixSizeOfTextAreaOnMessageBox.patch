@@ -1,0 +1,41 @@
+From 717ea6f6258f56664b694c437900c2daa1ce6d29 Mon Sep 17 00:00:00 2001
+From: Eberhard Beilharz <eb1@sil.org>
+Date: Fri, 18 Nov 2011 16:10:24 +0100
+Subject: [PATCH] Xamarin-2090: Fix size of text area on message box
+
+Previously some characters might have been concatenated on a message
+box that displayed an icon because the size of the text area was
+calculated wrong.
+---
+ .../System.Windows.Forms/MessageBox.cs             |   10 +++++++---
+ 1 files changed, 7 insertions(+), 3 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/MessageBox.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/MessageBox.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/MessageBox.cs
+@@ -219,10 +219,12 @@
+ 
+ 				// First we have to know the size of text + image
+ 				Drawing.SizeF tsize = TextRenderer.MeasureString (msgbox_text, this.Font, max_width);
+-				text_rect.Size = tsize;
+-				
++				text_rect.Height = tsize.Height;
++
++				int iconImageWidth = 0;
+ 				if (icon_image != null) {
+-					tsize.Width += icon_image.Width + 10;
++					iconImageWidth = icon_image.Width + 10;
++					tsize.Width += iconImageWidth;
+ 					if(icon_image.Height > tsize.Height) {
+ 						// Place text middle-right
+ 						text_rect.Location = new Point (icon_image.Width + space_image_text + space_border, (int)((icon_image.Height/2)-(tsize.Height/2)) + space_border);
+@@ -287,6 +289,8 @@
+ 				else
+ 					this.ClientSize = new Size (tb_width + (space_border * 2), Height = new_size.Height + (space_border * 4));
+ 
++				text_rect.Width = new_size.Width - iconImageWidth;
++
+ 				// Now we set the left of the buttons
+ 				button_left = (this.ClientSize.Width / 2) - (tb_width / 2) + 5;
+ 				AddButtons ();

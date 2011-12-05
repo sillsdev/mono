@@ -1,0 +1,29 @@
+From f952af2db2e07e03896d0b141d448fbd428428f5 Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:36 +0200
+Subject: [PATCH] bug-665233_FixToolStripNotReleasingKeyboardCapture
+
+FWNX-597
+---
+ .../System.Windows.Forms/ToolStripDropDown.cs      |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/ToolStripDropDown.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/ToolStripDropDown.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/ToolStripDropDown.cs
+@@ -934,6 +934,14 @@
+ 		{
+ 			this.Close (reason);
+ 			base.Dismiss (reason);
++
++			// ContextMenuStrip won't have a parent
++			if (this.OwnerItem == null)
++				return;
++			
++			// Ensure Submenu loses keyboard capture when closing.
++			ToolStrip parent_strip = this.OwnerItem.Parent;
++			ToolStripManager.SetActiveToolStrip (null, false);			
+ 		}
+ 
+ 		internal override ToolStrip GetTopLevelToolStrip ()

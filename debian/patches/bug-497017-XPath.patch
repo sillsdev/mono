@@ -1,0 +1,26 @@
+From b10b789ea3d3c10e8257299d7a5391afbcdfcc2e Mon Sep 17 00:00:00 2001
+From: David Eisner <david.eisner@oriel.oxon.org>
+Date: Thu, 21 Jul 2011 23:07:02 +0100
+Subject: [PATCH 1/2] Fixed the XPath built-in position function for bug
+ #497017
+
+According to http://www.w3.org/TR/xpath#predicates, a predicate [n] should be equivalent to [position()=n] for a number expression n. However, we currently have a PredicateIterator intepretation of [n] that has been corrected for the issue outlined in the bug report, leaving the position() function behind with an inappropriate, document-order value for reverse axes. Note that [n] is not treated by parsing or transforming to the same form as [position()=n] before evaluation, valid as that would be.
+
+The discussion in that same section of the recommendation about forward and reverse axes and further remarks in http://www.w3.org/TR/xpath#node-sets make it clear that the predicate [1] has the sense of "nearest" rather than "first in the document" which then, depending on the axis type, may be the same or reverse of the document order. It does not seem to me to be so clear whether the order given by a navigator for a location path expression should mirror this or always give the document order. The .Net implementation seems to always give the document order, as well as predicates having the correct reverse/forward senses, so I have added test cases that explore both.
+---
+ .../System.XML/System.Xml.XPath/DefaultContext.cs  |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+Index: fieldworks-mono/mcs/class/System.XML/System.Xml.XPath/DefaultContext.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/System.XML/System.Xml.XPath/DefaultContext.cs
++++ fieldworks-mono/mcs/class/System.XML/System.Xml.XPath/DefaultContext.cs
+@@ -207,7 +207,7 @@
+ 
+ 		public override object Evaluate (BaseIterator iter)
+ 		{
+-			return (double) iter.CurrentPosition;
++			return (double) iter.ComparablePosition;
+ 		}
+ 
+ 		public override string ToString ()

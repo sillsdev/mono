@@ -1,0 +1,26 @@
+From 4968ce0e35856255c541aafab39b92759356d57d Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:34 +0200
+Subject: [PATCH] bug-480862
+
+Could not identify an FWN issue for this
+---
+ mcs/mcs/doc.cs |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+Index: fieldworks-mono/mcs/mcs/doc.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/mcs/doc.cs
++++ fieldworks-mono/mcs/mcs/doc.cs
+@@ -516,6 +516,11 @@
+ 				name = signature.Substring (0, brace_pos).Trim (wsChars);
+ 				parameters = signature.Substring (brace_pos + 1, signature.Length - brace_pos - 2).Trim (wsChars);
+ 			}
++			else if ((signature.IndexOf('{') > 0 && signature [ signature.Length - 1] == '}') ||
++				(signature.IndexOf('<') > 0 && signature [ signature.Length - 1] == '>')) {
++				// in a cref bla<T> and bla{T} are equivalent to T:bla`1. This fixes bug #480862.
++				return;
++			}
+ 			else {
+ 				name = signature;
+ 				parameters = null;

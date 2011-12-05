@@ -1,0 +1,37 @@
+From 96caf2ac474aacf9851637847ac365a9433ace20 Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:38 +0200
+Subject: [PATCH] FWNX-161-improve-setting-Cursor.Current
+
+---
+ .../System.Windows.Forms/XplatUIX11.cs             |   17 +++++++++++++++++
+ 1 files changed, 17 insertions(+), 0 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/XplatUIX11.cs
+@@ -4986,6 +4986,23 @@
+ 			}
+ 
+ 			OverrideCursorHandle = cursor;
++			
++			// Immediately update cursor visually to behave more like .NET
++			if (LastPointerWindow != null && LastPointerWindow != IntPtr.Zero)
++			{
++				// LastPointerWindow might be a Button widget.
++				// Just setting cursor for a widget won't set the cursor for the rest of that form immediately.
++				// Set cursor for each parent widget to impact many of the elements on the form, though 
++				// missing other widgets in the hierarchy such as sibling widgets.
++				Hwnd widget = Hwnd.ObjectFromHandle (LastPointerWindow);
++				while (widget != null)
++				{
++					SetCursor (widget.Handle, OverrideCursorHandle);
++					widget = widget.Parent;
++				}
++				// Get X to update mouse cursor immediately
++				XPending (DisplayHandle);
++			}
+ 		}
+ 
+ 		internal override PaintEventArgs PaintEventStart(ref Message msg, IntPtr handle, bool client)

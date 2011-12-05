@@ -1,0 +1,35 @@
+From 5584be5fc1e7e6d63691299aa0ed96f1460a3e91 Mon Sep 17 00:00:00 2001
+From: David Eisner <david.eisner@oriel.oxon.org>
+Date: Fri, 22 Jul 2011 13:47:53 +0100
+Subject: [PATCH 2/2] [winforms] DataGridView row height resize handles added
+ for bug #490247
+
+---
+ .../System.Windows.Forms/DataGridView.cs           |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridView.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridView.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms/DataGridView.cs
+@@ -4450,7 +4450,9 @@
+ 				return;
+ 			}
+ 
+-			if (hitTest.Type == DataGridViewHitTestType.RowHeader && MouseOverRowResize (hitTest.RowIndex, e.Y)) {
++			if ((hitTest.Type == DataGridViewHitTestType.RowHeader ||
++			     (hitTest.Type == DataGridViewHitTestType.Cell && !RowHeadersVisible))
++			    && MouseOverRowResize (hitTest.RowIndex, e.Y)) {
+ 				if (e.Clicks == 2) {
+ 					AutoResizeRow (hitTest.RowIndex);
+ 					return;
+@@ -4545,6 +4547,9 @@
+ 				EnteredHeaderCell = Columns [hit.ColumnIndex].HeaderCell;
+ 				if (MouseOverColumnResize (hit.ColumnIndex, e.X))
+ 					new_cursor = Cursors.VSplit;
++			} else if (!RowHeadersVisible && hit.Type == DataGridViewHitTestType.Cell && MouseOverRowResize (hit.RowIndex, e.Y)) {
++				EnteredHeaderCell = Rows[hit.RowIndex].HeaderCell;
++				new_cursor = Cursors.HSplit;
+ 			} else if (hit.Type == DataGridViewHitTestType.Cell) {
+ 				EnteredHeaderCell = null;
+ 

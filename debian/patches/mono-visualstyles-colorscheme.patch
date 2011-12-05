@@ -1,0 +1,31 @@
+From 0b3380e7dfce74a81762a45d73761b7d037d8854 Mon Sep 17 00:00:00 2001
+From: Quilt patch <unknown@unknown.com>
+Date: Tue, 30 Aug 2011 16:56:38 +0200
+Subject: [PATCH] mono-visualstyles-colorscheme
+
+---
+ .../VisualStylesGtkPlus.cs                         |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+Index: fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms.VisualStyles/VisualStylesGtkPlus.cs
+===================================================================
+--- fieldworks-mono.orig/mcs/class/Managed.Windows.Forms/System.Windows.Forms.VisualStyles/VisualStylesGtkPlus.cs
++++ fieldworks-mono/mcs/class/Managed.Windows.Forms/System.Windows.Forms.VisualStyles/VisualStylesGtkPlus.cs
+@@ -1100,7 +1100,7 @@
+ 		}
+ 		public string VisualStyleInformationColorScheme {
+ 			get {
+-				return null;
++				return Environment.GetEnvironmentVariable ("MONO_VISUAL_STYLE_COLOR_SCHEME");
+ 			}
+ 		}
+ 		public string VisualStyleInformationCompany {
+@@ -1130,7 +1130,7 @@
+ 		}
+ 		public string VisualStyleInformationFileName {
+ 			get {
+-				return null;
++				return VisualStyleInformationColorScheme;
+ 			}
+ 		}
+ 		public bool VisualStyleInformationIsSupportedByOS
