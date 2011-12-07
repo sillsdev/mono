@@ -1825,6 +1825,26 @@ namespace MonoTests.System.Windows.Forms
 			DataGridView gdv = new DataGridView ();
 			Assert.IsNull (gdv.RowTemplate.DataGridView, "#1");
 		}
+
+		[Test]
+		public void RowHeightInVirtualMode ()
+		{
+			using (var dgv = new DataGridView ()) {
+				dgv.RowHeightInfoNeeded += HandleRowHeightInfoNeeded;
+				dgv.VirtualMode = true;
+				dgv.RowCount = 2;
+				Assert.AreEqual (50, dgv.Rows [0].Height);
+				Assert.AreEqual (30, dgv.Rows [0].MinimumHeight);
+				Assert.AreEqual (50, dgv.Rows [1].Height);
+				Assert.AreEqual (30, dgv.Rows [1].MinimumHeight);
+			}
+		}
+
+		private void HandleRowHeightInfoNeeded (object sender, DataGridViewRowHeightInfoNeededEventArgs e)
+		{
+			e.Height = 50;
+			e.MinimumHeight = 30;
+		}
 	}
 	
 	[TestFixture]

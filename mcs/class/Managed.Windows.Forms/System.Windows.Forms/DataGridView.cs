@@ -5079,6 +5079,10 @@ namespace System.Windows.Forms {
 			if (hover_cell != null && hover_cell.RowIndex >= e.RowIndex)
 				hover_cell = null;
 
+			if (VirtualMode) {
+				UpdateRowHeightInfo (e.RowIndex, true);
+			}
+
 			// Select the first row if we are not databound. 
 			// If we are databound selection is managed by the data manager.
 			if (IsHandleCreated && DataManager == null && CurrentCell == null && Rows.Count > 0 && Columns.Count > 0)
