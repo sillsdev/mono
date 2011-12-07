@@ -1830,7 +1830,10 @@ namespace MonoTests.System.Windows.Forms
 		public void RowHeightInVirtualMode ()
 		{
 			using (var dgv = new DataGridView ()) {
-				dgv.RowHeightInfoNeeded += HandleRowHeightInfoNeeded;
+				dgv.RowHeightInfoNeeded += (sender, e) => {
+					e.Height = 50;
+					e.MinimumHeight = 30;
+				};
 				dgv.VirtualMode = true;
 				dgv.RowCount = 2;
 				Assert.AreEqual (50, dgv.Rows [0].Height);
@@ -1840,10 +1843,19 @@ namespace MonoTests.System.Windows.Forms
 			}
 		}
 
-		private void HandleRowHeightInfoNeeded (object sender, DataGridViewRowHeightInfoNeededEventArgs e)
+		[Test]
+		public void RowHeightLessThenMinHeightVirtMode ()
 		{
-			e.Height = 50;
-			e.MinimumHeight = 30;
+			using (var dgv = new DataGridView ()) {
+				dgv.RowHeightInfoNeeded += (sender, e) => {
+					e.Height = 2;
+					e.MinimumHeight = 2;
+				};
+				dgv.VirtualMode = true;
+				dgv.RowCount = 1;
+				Assert.AreEqual (2, dgv.Rows [0].Height);
+				Assert.AreEqual (2, dgv.Rows [0].MinimumHeight);
+			}
 		}
 	}
 	
