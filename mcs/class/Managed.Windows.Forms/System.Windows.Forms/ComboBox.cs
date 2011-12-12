@@ -2498,10 +2498,11 @@ namespace System.Windows.Forms
 						vscrollbar_ctrl.Value = hli;
 					}
 				}
-				
-				Size = new Size (width, height);
+
+				var borderWidth = Hwnd.GetBorderWidth (CreateParams);
+				Size = new Size (width, height + borderWidth.top + borderWidth.bottom);
 				textarea_drawable = ClientRectangle;
-				textarea_drawable.Width = width;
+				textarea_drawable.Width = width - borderWidth.left - borderWidth.right;
 				textarea_drawable.Height = height;
 				
 				if (vscrollbar_ctrl != null && show_scrollbar)
