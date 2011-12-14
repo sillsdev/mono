@@ -1830,7 +1830,10 @@ namespace MonoTests.System.Windows.Forms
 		public void RowHeightInVirtualMode ()
 		{
 			using (var dgv = new DataGridView ()) {
-				dgv.RowHeightInfoNeeded += HandleRowHeightInfoNeeded;
+				dgv.RowHeightInfoNeeded += (sender, e) => {
+					e.Height = 50;
+					e.MinimumHeight = 30;
+				};
 				dgv.VirtualMode = true;
 				dgv.RowCount = 2;
 				Assert.AreEqual (50, dgv.Rows [0].Height);
@@ -1840,10 +1843,58 @@ namespace MonoTests.System.Windows.Forms
 			}
 		}
 
-		private void HandleRowHeightInfoNeeded (object sender, DataGridViewRowHeightInfoNeededEventArgs e)
+		[Test]
+		public void RowHeightLessThanOldMinHeightVirtMode ()
 		{
-			e.Height = 50;
-			e.MinimumHeight = 30;
+			using (var dgv = new DataGridView ()) {
+				dgv.VirtualMode = true;
+				dgv.RowCount = 1;
+				dgv.Rows [0].Height = 10;
+				dgv.Rows [0].MinimumHeight = 5;
+				dgv.RowHeightInfoNeeded += (sender, e) => {
+					e.Height = 2;
+					e.MinimumHeight = 2;
+				};
+				dgv.UpdateRowHeightInfo (0, false);
+				Assert.AreEqual (2, dgv.Rows [0].Height);
+				Assert.AreEqual (2, dgv.Rows [0].MinimumHeight);
+			}
+		}
+
+		[Test]
+		[ExpectedException (typeof (ArgumentOutOfRangeException))]
+		public void RowHeightLessThanMinHeightVirtMode ()
+		{
+			using (var dgv = new DataGridView ()) {
+				dgv.VirtualMode = true;
+				dgv.RowCount = 1;
+				dgv.Rows [0].Height = 10;
+				dgv.Rows [0].MinimumHeight = 5;
+				dgv.RowHeightInfoNeeded += (sender, e) => {
+					e.Height = 2;
+					e.MinimumHeight = 5;
+				};
+				// we expect an exception on the next line
+				dgv.UpdateRowHeightInfo (0, false);
+			}
+		}
+
+		[Test]
+		public void MinHeightGreaterThanOldRowHeightVirtMode ()
+		{
+			using (var dgv = new DataGridView ()) {
+				dgv.VirtualMode = true;
+				dgv.RowCount = 1;
+				dgv.Rows [0].Height = 10;
+				dgv.Rows [0].MinimumHeight = 5;
+				dgv.RowHeightInfoNeeded += (sender, e) => {
+					e.MinimumHeight = 30;
+					e.Height = 40;
+				};
+				dgv.UpdateRowHeightInfo (0, false);
+				Assert.AreEqual (40, dgv.Rows [0].Height);
+				Assert.AreEqual (30, dgv.Rows [0].MinimumHeight);
+			}
 		}
 	}
 	
