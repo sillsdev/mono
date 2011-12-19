@@ -515,13 +515,6 @@ namespace System.Windows.Forms {
 					display_rectangle = base.DisplayRectangle;
 				}
 
-				if (dock_padding != null) {
-					display_rectangle.X += dock_padding.Left;
-					display_rectangle.Y += dock_padding.Top;
-					display_rectangle.Width -= dock_padding.Left + dock_padding.Right;
-					display_rectangle.Height -= dock_padding.Top + dock_padding.Bottom;
-				}
-
 				return display_rectangle;
 			}
 		}
