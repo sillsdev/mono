@@ -464,22 +464,22 @@ namespace System.Windows.Forms
 		{
 			if (!Enabled) return;
 
-			base.OnMouseUp (e);
+			if (active_link != null && this.Capture && ((e.Button & MouseButtons.Left) != 0)) {
+				this.Capture = false;
+				Link clicked_link = (PointInLink (e.X, e.Y) == active_link) ? active_link : null;
 
-			if (active_link == null)
-				return;
+				active_link.Active = false;
+				active_link = null;
 
-			Link clicked_link = (PointInLink (e.X, e.Y) == active_link) ? active_link : null;
-
-			active_link.Active = false;
-			active_link = null;
-
-			if (clicked_link != null)
+				if (clicked_link != null)
 #if NET_2_0
-				OnLinkClicked (new LinkLabelLinkClickedEventArgs (clicked_link, e.Button));
+					OnLinkClicked (new LinkLabelLinkClickedEventArgs (clicked_link, e.Button));
 #else
-				OnLinkClicked (new LinkLabelLinkClickedEventArgs (clicked_link));
+					OnLinkClicked (new LinkLabelLinkClickedEventArgs (clicked_link));
 #endif
+			}
+
+			base.OnMouseUp(e);
 		}
 
 		protected override void OnPaint (PaintEventArgs e)
