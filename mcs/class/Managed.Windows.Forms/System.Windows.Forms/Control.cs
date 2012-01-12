@@ -987,9 +987,14 @@ namespace System.Windows.Forms
 
 		#region Internal Properties
 
-		internal Rectangle PaddingClientRectangle {
+		internal Rectangle PaddingClientRectangle
+		{
 			get {
-				return DisplayRectangle;
+				return new Rectangle (
+					ClientRectangle.Left   + padding.Left,
+					ClientRectangle.Top    + padding.Top, 
+					ClientRectangle.Width  - padding.Horizontal, 
+					ClientRectangle.Height - padding.Vertical);
 			}
 		}
 
@@ -2445,11 +2450,7 @@ namespace System.Windows.Forms
 		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public virtual Rectangle DisplayRectangle {
 			get {
-				return new Rectangle (
-					ClientRectangle.Left + padding.Left,
-					ClientRectangle.Top + padding.Top,
-					ClientRectangle.Width - padding.Horizontal,
-					ClientRectangle.Height - padding.Vertical);
+				return ClientRectangle;
 			}
 		}
 
