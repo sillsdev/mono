@@ -2450,6 +2450,7 @@ namespace System.Windows.Forms
 		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public virtual Rectangle DisplayRectangle {
 			get {
+				// for the control class the DisplayRectangle == ClientRectangle
 				return ClientRectangle;
 			}
 		}
