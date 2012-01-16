@@ -696,16 +696,6 @@ namespace System.Windows.Forms {
 
 			AdjustFormScrollbars(AutoScroll);	// Dunno what the logic is. Passing AutoScroll seems to match MS behaviour
 			base.OnLayout(levent);
-
-#if NET_2_0
-			// The first time through, we just set the canvas to clientsize
-			// so we could re-layout everything according to the flow.
-			// This time we want to actually calculate the canvas.
-			if (this is FlowLayoutPanel) {
-				CalculateCanvasSize (false);
-				AdjustFormScrollbars (AutoScroll);
-			}
-#endif
 		}
 
 		[EditorBrowsable(EditorBrowsableState.Advanced)]

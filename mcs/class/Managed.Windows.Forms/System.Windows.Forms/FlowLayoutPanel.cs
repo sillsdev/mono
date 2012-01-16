@@ -112,6 +112,22 @@ namespace System.Windows.Forms
 			else
 				base.CalculateCanvasSize (canOverride);
 		}
+
+		protected override void OnLayout (LayoutEventArgs levent)
+		{
+			base.OnLayout (levent);
+
+#if NET_2_0
+			// base.OnLayout() calls CalculateCanvasSize(true) in which we just set the canvas to
+			// clientsize so we could re-layout everything according to the flow.
+			// This time we want to actually calculate the canvas.
+			CalculateCanvasSize (false);
+			if (AutoSize && (canvas_size.Width > ClientSize.Width || canvas_size.Height > ClientSize.Height)) {
+				ClientSize = canvas_size;
+			}
+			AdjustFormScrollbars (AutoScroll);
+#endif
+		}
 		
 		internal override Size GetPreferredSizeCore (Size proposedSize)
 		{
