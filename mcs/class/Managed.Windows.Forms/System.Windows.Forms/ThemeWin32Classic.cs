@@ -7492,11 +7492,10 @@ namespace System.Windows.Forms
 		{
 			CPColor cpcolor = ResPool.GetCPColor (color);
 
+			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, cpcolor.Dark, flags, useDrawString);
+
 			layoutRectangle.Offset (1, 1);
 			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, cpcolor.LightLight, flags, useDrawString);
-
-			layoutRectangle.Offset (-1, -1);
-			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, cpcolor.Dark, flags, useDrawString);
 		}
 
 		public  override void CPDrawStringDisabled (Graphics dc, string s, Font font, Color color, RectangleF layoutRectangle, StringFormat format)
