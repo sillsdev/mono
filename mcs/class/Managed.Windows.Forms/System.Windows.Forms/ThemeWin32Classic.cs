@@ -7490,13 +7490,8 @@ namespace System.Windows.Forms
 
 		private void DrawStringDisabled20 (Graphics g, string s, Font font, Rectangle layoutRectangle, Color color, TextFormatFlags flags, bool useDrawString)
 		{
-			CPColor cpcolor = ResPool.GetCPColor (color);
-
-			layoutRectangle.Offset (1, 1);
-			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, cpcolor.LightLight, flags, useDrawString);
-
-			layoutRectangle.Offset (-1, -1);
-			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, cpcolor.Dark, flags, useDrawString);
+			Color colorToDraw = (color.ToArgb () == SystemColors.Control.ToArgb ()) ? SystemColors.ControlDark : ResPool.GetCPColor (color).Dark;
+			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, colorToDraw, flags, useDrawString);
 		}
 
 		public  override void CPDrawStringDisabled (Graphics dc, string s, Font font, Color color, RectangleF layoutRectangle, StringFormat format)
