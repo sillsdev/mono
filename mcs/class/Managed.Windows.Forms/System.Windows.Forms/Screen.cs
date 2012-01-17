@@ -122,7 +122,8 @@ namespace System.Windows.Forms {
 
 		#region Public Static Methods
 		public static Screen FromControl(Control control) {
-			return Screen.FromPoint(control.Location);
+			var point = control.Parent != null ? control.Parent.PointToScreen(control.Location) : control.Location;
+			return Screen.FromPoint(point);
 		}
 
 		public static Screen FromHandle(IntPtr hwnd) {
@@ -130,7 +131,8 @@ namespace System.Windows.Forms {
 
 			control = Control.FromHandle(hwnd);
 			if (control != null) {
-				return Screen.FromPoint(control.Location);
+				var point = control.Parent != null ? control.Parent.PointToScreen(control.Location) : control.Location;
+				return Screen.FromPoint(point);
 			}
 			return Screen.PrimaryScreen;
 		}
