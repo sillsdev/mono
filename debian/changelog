@@ -1,0 +1,116 @@
+fieldworks-mono (2.10.4-1) oneiric; urgency=low
+
+  * Upgrade tp 2.10.4
+  * Add and remove patches:
+    -bug-614850_Modal_614850_v6
+    -bug-621749-ListView-inserting
+    -bug-624915_TreeView2.patch
+    -bug-631810_ModalFormCancel.patch
+    -bug-638722_Remove-Werror-from-the-eglib-tests-too.patch
+    -bug-639939_xlookupstring-fix.patch
+    -bug-641756_ClipboardIdleBug.patch
+    -WinFormsComReleasePatch_FWNX-434.patch
+    -bug-654433_XPathSelectElements.patch
+    -bug-658945_ImproveVerticalPositioning_607548.patch
+    -bug-676009-DTDprohibited_inXML
+    -bug-692987_PipeException.patch
+    +bug-708856-Fix-finding-of-X11-shared-library-on-Ubun.patch
+    +bug-xamarin586_ToolStripItem-HandleClick_FWNX-728.patch
+    +bug-xamarin677_DataGridViewBugs.patch
+    +bug-xamarin867_DisabledListViewBug.patch
+    +bug-xamarin919_possible-Form.ShowDialog-crash.patch
+    +bug-xamarin1212_tristate-checkbox-display.patch
+
+ -- Sue Newland <sue_newland@sil.org>  Fri, 04 Nov 2011 10:20:20 -0600
+
+fieldworks-mono (2.8.1-5) maverick; urgency=low
+
+  * Add new patches
+     +bug-692206_umlautCharacters.patch
+     +bug-692987_PipeException.patch
+     +bug-694908_greenscreen.patch
+     +bug-702064_deadKeys.patch
+     +bug-602934_PrintingServicesUnix.patch
+     +bug-614850_Modal_614850_v6.patch
+     +bug-692206_umlautCharacters.patch
+     +bug-638722_Remove-Werror-from-the-eglib-tests-too.patch
+
+ -- Sue Newland <sue_newland@sil.org>  Fri, 15 Jul 2011 11:17:40 -0600
+
+fieldworks-mono (2.8.1-4) maverick; urgency=low
+
+  * Add new patches
+     +bug-676009-DTDprohibited_inXML
+
+ -- Sue Newland <sue_newland@sil.org>  Mon, 04 Apr 2011 11:03:17 -0600
+
+fieldworks-mono (2.8.1-3) maverick; urgency=low
+
+  * Add new patches:
+    +bug-674098_CopyPasteHangRaceCondition.patch
+
+ -- Sue Newland <sue_newland@sil.org>  Mon, 07 Mar 2011 14:22:00 -0700
+
+fieldworks-mono (2.8.1-2) unstable; urgency=low
+
+  * Add new patches:
+    +WinFormsComReleasePatch_FWNX-434.patch
+    +bug-654433_XPathSelectElements.patch
+    +bug-665233_FixToolStripNotReleasingKeyboardCapture.patch
+    +bug-672879_ComObjectRelease.patch
+
+ -- Neil Mayhew <neil_mayhew@sil.org>  Fri, 18 Feb 2011 17:37:12 -0700
+
+fieldworks-mono (2.8.1-1) unstable; urgency=low
+
+  * Upgrade to upstream 2.8.1
+  * Add new patches:
+    +bug-658945_ImproveVerticalPositioning_607548.patch
+    +bug-660986_DataGridViewDisposeColumns.patch
+    +bug-660860_DoValidationOnAcceptButton.patch
+    +bug-664695_ToolStripDisposeEventsFirst.patch
+    +bug-665233_FixToolStripNotReleasingKeyboardCapture.patch
+
+ -- Neil Mayhew <neil_mayhew@sil.org>  Tue, 18 Jan 2011 15:22:56 -0700
+
+fieldworks-mono (2.8-1) unstable; urgency=low
+
+  * Upgrade to upstream 2.8
+  * Add and remove patches:
+    -bug-574696.patch
+    -bug-616432_ListViewPatch2.patch
+    -mcs_workaroundforbug522783.patch
+    -TabTextVertCenter.patch
+    -xmlNode.patch
+    +bug-522783-mcs_workaround_for.patch
+    +bug-602934_PrintingServicesUnix.patch
+    +bug-624915_TreeView2.patch
+    +bug-631810_ModalFormCancel.patch
+    +bug-639939_xlookupstring-fix.patch
+    +bug-641756_ClipboardIdleBug.patch
+    +bug-642227_DeserializeIgnoreUnknownElement.patch
+
+ -- Neil Mayhew <neil_mayhew@sil.org>  Fri, 19 Nov 2010 12:46:12 -0700
+
+fieldworks-mono (2.7-3) unstable; urgency=low
+
+  * Add four new patches:
+    +bug-614850_Modal_614850_v6
+    +bug-616432_ListViewPatch2
+    +bug-621749-ListView-inserting
+    +Control-HACK-addedIngoreUpdates
+
+ -- Neil Mayhew <neil_mayhew@sil.org>  Mon, 16 Aug 2010 17:29:15 -0600
+
+fieldworks-mono (2.7-2) unstable; urgency=low
+
+  * Depend on libglib2.0-cil, libgtk2.0-cil
+  * Install *-sharp dlls to gac in postinst
+
+ -- Neil Mayhew <neil_mayhew@sil.org>  Fri, 28 May 2010 23:48:29 -0600
+
+fieldworks-mono (2.7-1) unstable; urgency=low
+
+  * Initial release (from svn r152577)
+
+ -- Neil Mayhew <neil_mayhew@sil.org>  Thu, 20 May 2010 17:23:40 -0600
