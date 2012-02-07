@@ -363,16 +363,9 @@ namespace System.Runtime.InteropServices
 		}
 #endif // !NET_2_1
 
+		[MonoTODO ("SetErrorInfo")]
 		public static int GetHRForException (Exception e)
 		{
-			try {
-				var errorInfo = new ManagedErrorInfo(e);
-				SetErrorInfo (0, errorInfo);
-			} catch (Exception ee) {
-				// ignore any exception - probably there's no suitable SetErrorInfo
-				// method available.
-			}
-
 			return e.hresult;
 		}
 
@@ -1250,10 +1243,6 @@ namespace System.Runtime.InteropServices
 		}
 
 		[DllImport ("oleaut32.dll", CharSet=CharSet.Unicode)]
-		internal static extern int SetErrorInfo (int dwReserved,
-			[MarshalAs(UnmanagedType.Interface)] IErrorInfo pIErrorInfo);
-
-		[DllImport ("oleaut32.dll", CharSet=CharSet.Unicode)]
 		internal static extern int GetErrorInfo (int dwReserved,
 			[MarshalAs(UnmanagedType.Interface)] out IErrorInfo ppIErrorInfo);
 
@@ -1264,8 +1253,10 @@ namespace System.Runtime.InteropServices
 
 		public static Exception GetExceptionForHR (int errorCode, IntPtr errorInfoPtr)
 		{
-			IErrorInfo errorInfo = null;
-			if (errorInfoPtr != (IntPtr)(-1)) {
+			Exception e = ConvertHrToException (errorCode);
+
+			if (errorInfoPtr != (IntPtr)(-1) && e != null) {
+				IErrorInfo errorInfo = null;
 				if (errorInfoPtr == IntPtr.Zero) {
 					try {
 						if (GetErrorInfo (0, out errorInfo) != 0) {
@@ -1279,27 +1270,22 @@ namespace System.Runtime.InteropServices
 				} else {
 					errorInfo = Marshal.GetObjectForIUnknown (errorInfoPtr) as IErrorInfo;
 				}
-			}
 
-			if (errorInfo is ManagedErrorInfo && ((ManagedErrorInfo)errorInfo).Exception.hresult == errorCode) {
-				return ((ManagedErrorInfo)errorInfo).Exception;
-			}
+				if (errorInfo != null) {
+					uint helpContext;
+					errorInfo.GetHelpContext (out helpContext);
+					string str;
+					errorInfo.GetSource (out str);
+					e.Source = str;
+					errorInfo.GetDescription (out str);
+					e.SetMessage (str);
+					errorInfo.GetHelpFile (out str);
 
-			Exception e = ConvertHrToException (errorCode);
-			if (errorInfo != null && e != null) {
-				uint helpContext;
-				errorInfo.GetHelpContext (out helpContext);
-				string str;
-				errorInfo.GetSource (out str);
-				e.Source = str;
-				errorInfo.GetDescription (out str);
-				e.SetMessage (str);
-				errorInfo.GetHelpFile (out str);
-
-				if (helpContext == 0) {
-					e.HelpLink = str;
-				} else {
-					e.HelpLink = string.Format ("{0}#{1}", str, helpContext);
+					if (helpContext == 0) {
+						e.HelpLink = str;
+					} else {
+						e.HelpLink = string.Format ("{0}#{1}", str, helpContext);
+					}
 				}
 			}
 			return e;
