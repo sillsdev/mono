@@ -1139,8 +1139,12 @@ namespace System.Windows.Forms
 		#region Protected Instance Methods
 		protected override void Dispose(bool disposing)
 		{
-			if (disposing)
-				images.DestroyHandle();
+			if (disposing) {
+				foreach (Image image in images) {
+					image.Dispose ();
+				}
+				images.DestroyHandle ();
+			}
 
 			base.Dispose(disposing);
 		}
