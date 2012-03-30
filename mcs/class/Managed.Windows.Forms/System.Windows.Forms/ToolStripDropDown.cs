@@ -399,14 +399,18 @@ namespace System.Windows.Forms
 		{
 			Show (new Point (x, y), DefaultDropDownDirection);
 		}
-		
+
+		// I don't think primary to the right of secondary (which gives us negative position
+		// for a point on the secondary monitor) can happen on Linux since it seems that
+		// primary is always the left-most monitor - at least with my testing in Ubuntu 11.10.
+		[MonoTODO ("Need to deal with multi-monitor situation where primary is to the right of secondary monitor")]
 		public void Show (Point position, ToolStripDropDownDirection direction)
 		{
 			this.PerformLayout ();
 			
 			Point show_point = position;
-			Point max_screen = new Point (SystemInformation.VirtualScreen.Width, SystemInformation.VirtualScreen.Height);
-			
+			Rectangle max_screen = Screen.GetWorkingArea (position);
+
 			if (this is ContextMenuStrip) {
 				// If we are going to go offscreen, adjust our direction so we don't...
 				// X direction
@@ -424,16 +428,16 @@ namespace System.Windows.Forms
 							direction = ToolStripDropDownDirection.Right;
 						break;
 					case ToolStripDropDownDirection.AboveRight:
-						if (show_point.X + this.Width > max_screen.X)
+						if (show_point.X + this.Width > max_screen.Right)
 							direction = ToolStripDropDownDirection.AboveLeft;
 						break;
 					case ToolStripDropDownDirection.BelowRight:
 					case ToolStripDropDownDirection.Default:
-						if (show_point.X + this.Width > max_screen.X)
+						if (show_point.X + this.Width > max_screen.Right)
 							direction = ToolStripDropDownDirection.BelowLeft;
 						break;
 					case ToolStripDropDownDirection.Right:
-						if (show_point.X + this.Width > max_screen.X)
+						if (show_point.X + this.Width > max_screen.Right)
 							direction = ToolStripDropDownDirection.Left;
 						break;
 				}
@@ -449,20 +453,20 @@ namespace System.Windows.Forms
 							direction = ToolStripDropDownDirection.BelowRight;
 						break;
 					case ToolStripDropDownDirection.BelowLeft:
-						if (show_point.Y + this.Height > max_screen.Y && show_point.Y - this.Height > 0)
+						if (show_point.Y + this.Height > max_screen.Bottom && show_point.Y - this.Height > 0)
 							direction = ToolStripDropDownDirection.AboveLeft;
 						break;
 					case ToolStripDropDownDirection.BelowRight:
 					case ToolStripDropDownDirection.Default:
-						if (show_point.Y + this.Height > max_screen.Y && show_point.Y - this.Height > 0)
+						if (show_point.Y + this.Height > max_screen.Bottom && show_point.Y - this.Height > 0)
 							direction = ToolStripDropDownDirection.AboveRight;
 						break;
 					case ToolStripDropDownDirection.Left:
-						if (show_point.Y + this.Height > max_screen.Y && show_point.Y - this.Height > 0)
+						if (show_point.Y + this.Height > max_screen.Bottom && show_point.Y - this.Height > 0)
 							direction = ToolStripDropDownDirection.AboveLeft;
 						break;
 					case ToolStripDropDownDirection.Right:
-						if (show_point.Y + this.Height > max_screen.Y && show_point.Y - this.Height > 0)
+						if (show_point.Y + this.Height > max_screen.Bottom && show_point.Y - this.Height > 0)
 							direction = ToolStripDropDownDirection.AboveRight;
 						break;
 				}
@@ -487,14 +491,14 @@ namespace System.Windows.Forms
 			}
 
 			// Fix offscreen horizontal positions
-			if ((show_point.X + this.Width) > max_screen.X)
-				show_point.X = max_screen.X - this.Width;
+			if ((show_point.X + this.Width) > max_screen.Right)
+				show_point.X = max_screen.Right - this.Width;
 			if (show_point.X < 0)
 				show_point.X = 0;
 
 			// Fix offscreen vertical positions
-			if ((show_point.Y + this.Height) > max_screen.Y)
-				show_point.Y = max_screen.Y - this.Height;
+			if ((show_point.Y + this.Height) > max_screen.Bottom)
+				show_point.Y = max_screen.Bottom - this.Height;
 			if (show_point.Y < 0)
 				show_point.Y = 0;
 
