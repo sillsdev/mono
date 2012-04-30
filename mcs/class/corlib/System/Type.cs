@@ -470,13 +470,13 @@ namespace System {
 		}
 #endif
 #if NET_4_0
-		[MonoTODO ("Implement it properly once 4.0 impl details are known.")]
+		[MonoInternalNote ("Implement it properly once 4.0 impl details are known.")]
 		public static bool operator == (Type left, Type right)
 		{
 			return Object.ReferenceEquals (left, right);
 		}
 
-		[MonoTODO ("Implement it properly once 4.0 impl details are known.")]
+		[MonoInternalNote ("Implement it properly once 4.0 impl details are known.")]
 		public static bool operator != (Type left, Type right)
 		{
 			return !Object.ReferenceEquals (left, right);
