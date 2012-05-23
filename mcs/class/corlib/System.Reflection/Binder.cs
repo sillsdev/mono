@@ -163,7 +163,7 @@ namespace System.Reflection
 							types [i] = args [i].GetType ();
 					}
 				}
-				MethodBase selected = SelectMethod (bindingAttr, match, types, modifiers, true);
+				MethodBase selected = SelectMethod (bindingAttr, match, types, modifiers, true, args);
 				state = null;
 				if (names != null)
 					ReorderParameters (names, ref args, selected);
@@ -412,10 +412,10 @@ namespace System.Reflection
 			public override MethodBase SelectMethod (BindingFlags bindingAttr, MethodBase [] match, Type [] types, ParameterModifier [] modifiers)
 			{
 				return SelectMethod (bindingAttr, match, types, modifiers,
-					false);
+					false, null);
 			}
 
-			MethodBase SelectMethod (BindingFlags bindingAttr, MethodBase[] match, Type[] types, ParameterModifier[] modifiers, bool allowByRefMatch)
+			MethodBase SelectMethod (BindingFlags bindingAttr, MethodBase[] match, Type[] types, ParameterModifier[] modifiers, bool allowByRefMatch, object[] parameters)
 			{
 				MethodBase m;
 				int i, j;
@@ -488,7 +488,32 @@ namespace System.Reflection
 						result = m;
 				}
 
-				return result;
+				if (result != null || parameters == null)
+					return result;
+
+				for (i = 0; i < match.Length; ++i) {
+					m = match [i];
+					ParameterInfo[] args = m.GetParameters ();
+					if (args.Length != types.Length || args.Length != parameters.Length)
+						continue;
+					for (j = 0; j < types.Length; ++j) {
+						if (types [j] == args [j].ParameterType)
+							continue;
+						if (types [j] == typeof (__ComObject) && args [j].ParameterType.IsInterface) {
+							var iface = Marshal.GetComInterfaceForObject (parameters [j], args [j].ParameterType);
+							if (iface != IntPtr.Zero) {
+								// the COM object implements the desired interface
+								Marshal.Release (iface);
+								continue;
+							}
+						}
+						break;
+					}
+
+					if (j == types.Length)
+						return m;
+				}
+				return null;
 			}
 
 			MethodBase GetBetterMethod (MethodBase m1, MethodBase m2, Type [] types)
