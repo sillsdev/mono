@@ -1994,7 +1994,9 @@ gboolean CopyFile (const gunichar2 *name, const gunichar2 *dest_name,
 	gchar *utf8_src, *utf8_dest;
 	int src_fd, dest_fd;
 	struct stat st, dest_st;
+	struct utimbuf dest_time;
 	gboolean ret = TRUE;
+	int ret_utime;
 	
 	if(name==NULL) {
 #ifdef DEBUG
@@ -2104,10 +2106,19 @@ gboolean CopyFile (const gunichar2 *name, const gunichar2 *dest_name,
 	if (!write_file (src_fd, dest_fd, &st, TRUE))
 		ret = FALSE;
 
-	g_free (utf8_src);
-	g_free (utf8_dest);
 	close (src_fd);
 	close (dest_fd);
+
+	dest_time.modtime = st.st_mtime;
+	dest_time.actime = st.st_atime;
+	ret_utime = utime (utf8_dest, &dest_time);
+#ifdef DEBUG
+	if (ret_utime == -1)
+	    g_message("%s: file [%s] utime failed: %s", __func__, utf8_dest, strerror(errno));
+#endif
+
+	g_free (utf8_src);
+	g_free (utf8_dest);
 
 	return ret;
 }
