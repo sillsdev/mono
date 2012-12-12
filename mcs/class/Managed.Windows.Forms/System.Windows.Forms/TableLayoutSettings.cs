@@ -164,9 +164,15 @@ namespace System.Windows.Forms
 			int row;
 
 			if (!columns.TryGetValue (control, out column))
-				column = -1;
+			{
+				if (!(control is Control) || !columns.TryGetValue ((control as Control).Name, out column))
+					column = -1;
+			}
 			if (!rows.TryGetValue (control, out row))
-				row = -1;
+			{
+				if (!(control is Control) || !rows.TryGetValue ((control as Control).Name, out row))
+					row = -1;
+			}
 
 			return new TableLayoutPanelCellPosition (column, row);
 		}
@@ -181,6 +187,8 @@ namespace System.Windows.Forms
 
 			if (columns.TryGetValue (control, out retval))
 				return retval;
+			if ((control is Control) && columns.TryGetValue ((control as Control).Name, out retval))
+				return retval;
 
 			return -1;
 		}
@@ -193,6 +201,8 @@ namespace System.Windows.Forms
 			int retval;
 
 			if (column_spans.TryGetValue (control, out retval))
+				return retval;
+			if ((control is Control) && column_spans.TryGetValue ((control as Control).Name, out retval))
 				return retval;
 
 			return 1;
@@ -208,6 +218,8 @@ namespace System.Windows.Forms
 
 			if (rows.TryGetValue (control, out retval))
 				return retval;
+			if ((control is Control) && rows.TryGetValue ((control as Control).Name, out retval))
+				return retval;
 
 			return -1;
 		}
@@ -220,6 +232,8 @@ namespace System.Windows.Forms
 			int retval;
 
 			if (row_spans.TryGetValue (control, out retval))
+				return retval;
+			if ((control is Control) && row_spans.TryGetValue ((control as Control).Name, out retval))
 				return retval;
 
 			return 1;
