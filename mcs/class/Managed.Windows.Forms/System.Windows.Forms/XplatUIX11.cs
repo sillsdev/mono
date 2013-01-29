@@ -1196,6 +1196,22 @@ namespace System.Windows.Forms {
 			}
 		}
 
+		void SetWmClass (string name, string className, IntPtr handle)
+		{
+			XClassHint hint = new XClassHint ();
+			hint.res_name = Marshal.StringToCoTaskMemAnsi (name);
+			hint.res_class = Marshal.StringToCoTaskMemAnsi (className);
+			IntPtr classHints = Marshal.AllocCoTaskMem (Marshal.SizeOf (hint));
+			Marshal.StructureToPtr (hint, classHints, true);
+
+			XSetClassHint (DisplayHandle, handle, classHints);
+
+			Marshal.FreeCoTaskMem (hint.res_name);
+			Marshal.FreeCoTaskMem (hint.res_class);
+
+			Marshal.FreeCoTaskMem (classHints);
+		}
+
 		void SetIcon(Hwnd hwnd, Icon icon)
 		{
 			if (icon == null) {
@@ -3042,6 +3058,10 @@ namespace System.Windows.Forms {
 
 			// Set caption/window title
 			Text(hwnd.Handle, cp.Caption);
+
+			// Set WM_CLASS property. This improves displaying the application icon in
+			// unity and gnome3 window managers.
+			SetWmClass (cp.ClassName, cp.ClassName, hwnd.whole_window);
 
 			SendMessage (hwnd.Handle, Msg.WM_CREATE, (IntPtr)1, IntPtr.Zero /* XXX unused */);
 			SendParentNotify (hwnd.Handle, Msg.WM_CREATE, int.MaxValue, int.MaxValue);
@@ -7259,6 +7279,14 @@ namespace System.Windows.Forms {
 			DebugHelper.TraceWriteLine ("XIfEvent");
 			_XIfEvent (display, ref xevent, event_predicate, arg);
 		}
+
+		[DllImport ("libX11", EntryPoint="XSetClassHint", CharSet=CharSet.Ansi)]
+		internal extern static int _XSetClassHint (IntPtr display, IntPtr window, IntPtr classHint);
+		internal static void XSetClassHint (IntPtr display, IntPtr window, IntPtr classHint)
+		{
+			DebugHelper.TraceWriteLine ("XSetClassHint");
+			_XSetClassHint (DisplayNameAttribute, WindowActiveFlags, XClassHint);
+		}
 #endregion
 
 #region Xinerama imports
@@ -7627,7 +7655,10 @@ namespace System.Windows.Forms {
 
 		[DllImport ("libX11", EntryPoint="XIfEvent")]
 		internal extern static void XIfEvent (IntPtr display, ref XEvent xevent, Delegate event_predicate, IntPtr arg);
-		#endregion
+
+		[DllImport ("libX11", EntryPoint="XSetClassHint", CharSet=CharSet.Ansi)]
+		internal extern static int XSetClassHint(IntPtr display, IntPtr window, IntPtr classHint);
+#endregion
 
 #region Xinerama imports
 		[DllImport ("libXinerama")]

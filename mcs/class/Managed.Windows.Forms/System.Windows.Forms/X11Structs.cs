@@ -1818,4 +1818,11 @@ namespace System.Windows.Forms {
 		public short width;
 		public short height;
 	}
+
+	[StructLayout (LayoutKind.Sequential)]
+	internal struct XClassHint
+	{
+		public IntPtr res_name;
+		public IntPtr res_class;
+	}
 }
