@@ -2571,8 +2571,13 @@ namespace System.Windows.Forms {
 
 		internal override Screen[] AllScreens {
 			get {
-				if (!XineramaIsActive (DisplayHandle))
+				try {
+					if (!XineramaIsActive (DisplayHandle))
+						return null;
+				} catch (DllNotFoundException) {
+					// Xinerama isn't installed
 					return null;
+				}
 				int nScreens;
 				IntPtr xineramaScreens = XineramaQueryScreens (DisplayHandle, out nScreens);
 				var screens = new Screen [nScreens];
