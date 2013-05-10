@@ -196,7 +196,12 @@ namespace System.Resources
 				culture = CultureInfo.CurrentUICulture;
 
 			lock (thisLock) {
-				ResourceSet set = InternalGetResourceSet(culture, true, true);
+				ResourceSet set = null;
+				try {
+					set = InternalGetResourceSet(culture, true, true);
+				} catch {
+					// Ignored
+				}
 				object obj = null;
 				
 				if (set != null) {
@@ -249,7 +254,12 @@ namespace System.Resources
 				culture = CultureInfo.CurrentUICulture;
 
 			lock (thisLock) {
-				ResourceSet set = InternalGetResourceSet (culture, true, true);
+				ResourceSet set = null;
+				try {
+					set = InternalGetResourceSet (culture, true, true);
+				} catch {
+					// Ignored
+				}
 				string str = null;
 
 				if (set != null) {
