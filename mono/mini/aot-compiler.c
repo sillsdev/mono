@@ -6,6 +6,8 @@
  *   Zoltan Varga (vargaz@gmail.com)
  *
  * (C) 2002 Ximian, Inc.
+ * Copyright 2003-2011 Novell, Inc 
+ * Copyright 2011 Xamarin Inc (http://www.xamarin.com)
  */
 
 /* Remaining AOT-only work:
@@ -185,7 +187,9 @@ typedef struct MonoAotCompile {
 	MonoClass **typespec_classes;
 	GString *llc_args;
 	GString *as_args;
+	char *assembly_name_sym;
 	gboolean thumb_mixed, need_no_dead_strip, need_pt_gnu_stack;
+	GHashTable *ginst_hash;
 } MonoAotCompile;
 
 typedef struct {
@@ -2730,7 +2734,12 @@ add_wrappers (MonoAotCompile *acfg)
 				MonoType *t;
 				MonoClass *klass;
 
-				g_assert (method->flags & METHOD_ATTRIBUTE_STATIC);
+				/* this cannot be enforced by the C# compiler so we must give the user some warning before aborting */
+				if (!(method->flags & METHOD_ATTRIBUTE_STATIC)) {
+					g_warning ("AOT restriction: Method '%s' must be static since it is decorated with [MonoPInvokeCallback]. See http://ios.xamarin.com/Documentation/Limitations#Reverse_Callbacks", 
+						mono_method_full_name (method, TRUE));
+					exit (1);
+				}
 
 				g_assert (sig->param_count == 1);
 				g_assert (sig->params [0]->type == MONO_TYPE_CLASS && !strcmp (mono_class_from_mono_type (sig->params [0])->name, "Type"));
@@ -2884,8 +2893,16 @@ add_generic_class_with_depth (MonoAotCompile *acfg, MonoClass *klass, int depth)
 	if (!klass->generic_class && !klass->rank)
 		return;
 
+	if (!acfg->ginst_hash)
+		acfg->ginst_hash = g_hash_table_new (NULL, NULL);
+
+	if (g_hash_table_lookup (acfg->ginst_hash, klass))
+		return;
+
 	if (check_type_depth (&klass->byval_arg, 0))
 		return;
+
+	g_hash_table_insert (acfg->ginst_hash, klass, klass);
 
 	iter = NULL;
 	while ((method = mono_class_get_methods (klass, &iter))) {
@@ -2911,6 +2928,10 @@ add_generic_class_with_depth (MonoAotCompile *acfg, MonoClass *klass, int depth)
 
 		add_method (acfg, method);
 	}
+
+	/* Add superclasses */
+	if (klass->parent)
+		add_generic_class_with_depth (acfg, klass->parent, depth);
 
 	/* 
 	 * For ICollection<T>, add instances of the helper methods
@@ -3226,20 +3247,20 @@ add_generic_instances (MonoAotCompile *acfg)
 			}
 		}
 
-		/* Same for CompareExchange<T> */
+		/* Same for CompareExchange<T>/Exchange<T> */
 		{
 			MonoGenericContext ctx;
 			MonoType *args [16];
-			MonoMethod *cas_method;
+			MonoMethod *m;
 			MonoClass *interlocked_klass = mono_class_from_name (mono_defaults.corlib, "System.Threading", "Interlocked");
 			gpointer iter = NULL;
 
-			while ((cas_method = mono_class_get_methods (interlocked_klass, &iter))) {
-				if (!strcmp (cas_method->name, "CompareExchange") && cas_method->is_generic) {
+			while ((m = mono_class_get_methods (interlocked_klass, &iter))) {
+				if ((!strcmp (m->name, "CompareExchange") || !strcmp (m->name, "Exchange")) && m->is_generic) {
 					memset (&ctx, 0, sizeof (ctx));
 					args [0] = &mono_defaults.object_class->byval_arg;
 					ctx.method_inst = mono_metadata_get_generic_inst (1, args);
-					add_extra_method (acfg, mono_marshal_get_native_wrapper (mono_class_inflate_generic_method (cas_method, &ctx), TRUE, TRUE));
+					add_extra_method (acfg, mono_marshal_get_native_wrapper (mono_class_inflate_generic_method (m, &ctx), TRUE, TRUE));
 				}
 			}
 		}
@@ -3835,7 +3856,7 @@ emit_exception_debug_info (MonoAotCompile *acfg, MonoCompile *cfg)
 	use_unwind_ops = cfg->unwind_ops != NULL;
 #endif
 
-	flags = (jinfo->has_generic_jit_info ? 1 : 0) | (use_unwind_ops ? 2 : 0) | (header->num_clauses ? 4 : 0) | (seq_points ? 8 : 0) | (cfg->compile_llvm ? 16 : 0) | (jinfo->has_try_block_holes ? 32 : 0) | (cfg->gc_map ? 64 : 0);
+	flags = (jinfo->has_generic_jit_info ? 1 : 0) | (use_unwind_ops ? 2 : 0) | (header->num_clauses ? 4 : 0) | (seq_points ? 8 : 0) | (cfg->compile_llvm ? 16 : 0) | (jinfo->has_try_block_holes ? 32 : 0) | (cfg->gc_map ? 64 : 0) | (jinfo->has_arch_eh_info ? 128 : 0);
 
 	encode_value (flags, p, &p);
 
@@ -3947,6 +3968,13 @@ emit_exception_debug_info (MonoAotCompile *acfg, MonoCompile *cfg)
 			encode_value (hole->length, p, &p);
 			encode_value (hole->offset, p, &p);
 		}
+	}
+
+	if (jinfo->has_arch_eh_info) {
+		MonoArchEHJitInfo *eh_info;
+
+		eh_info = mono_jit_info_get_arch_eh_info (jinfo);
+		encode_value (eh_info->stack_size, p, &p);
 	}
 
 	if (seq_points) {
@@ -4892,6 +4920,14 @@ compile_method (MonoAotCompile *acfg, MonoMethod *method)
 					add_generic_class_with_depth (acfg, klass, depth + 5);
 				break;
 			}
+			case MONO_PATCH_INFO_SFLDA: {
+				MonoClass *klass = patch_info->data.field->parent;
+
+				/* The .cctor needs to run at runtime. */
+				if (klass->generic_class && !mono_generic_context_is_sharable (&klass->generic_class->context, FALSE) && mono_class_get_cctor (klass))
+					add_extra_method_with_depth (acfg, mono_class_get_cctor (klass), depth + 1);
+				break;
+			}
 			default:
 				break;
 			}
@@ -5129,7 +5165,7 @@ mono_aot_get_method_name (MonoCompile *cfg)
 {
 	if (llvm_acfg->aot_opts.static_link)
 		/* Include the assembly name too to avoid duplicate symbol errors */
-		return g_strdup_printf ("%s_%s", llvm_acfg->image->assembly->aname.name, get_debug_sym (cfg->orig_method, "", llvm_acfg->method_label_hash));
+		return g_strdup_printf ("%s_%s", llvm_acfg->assembly_name_sym, get_debug_sym (cfg->orig_method, "", llvm_acfg->method_label_hash));
 	else
 		return get_debug_sym (cfg->orig_method, "", llvm_acfg->method_label_hash);
 }
@@ -5229,12 +5265,16 @@ emit_llvm_file (MonoAotCompile *acfg)
 	 * The following optimizations cannot be enabled:
 	 * - 'tailcallelim'
 	 * - 'jump-threading' changes our blockaddress references to int constants.
+	 * - 'basiccg' fails because it contains:
+	 * if (CS && !isa<IntrinsicInst>(II)) {
+	 * and isa<IntrinsicInst> is false for invokes to intrinsics (iltests.exe).
+	 * - 'prune-eh' and 'functionattrs' depend on 'basiccg'.
 	 * The opt list below was produced by taking the output of:
 	 * llvm-as < /dev/null | opt -O2 -disable-output -debug-pass=Arguments
 	 * then removing tailcallelim + the global opts, and adding a second gvn.
 	 */
 	opts = g_strdup ("-instcombine -simplifycfg");
-	opts = g_strdup ("-simplifycfg -domtree -domfrontier -scalarrepl -instcombine -simplifycfg -basiccg -prune-eh -inline -functionattrs -domtree -domfrontier -scalarrepl -simplify-libcalls -instcombine -simplifycfg -instcombine -simplifycfg -reassociate -domtree -loops -loopsimplify -domfrontier -loopsimplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loopsimplify -lcssa -iv-users -indvars -loop-deletion -loopsimplify -lcssa -loop-unroll -instcombine -memdep -gvn -memdep -memcpyopt -sccp -instcombine -domtree -memdep -dse -adce -simplifycfg -preverify -domtree -verify");
+	opts = g_strdup ("-simplifycfg -domtree -domfrontier -scalarrepl -instcombine -simplifycfg -domtree -domfrontier -scalarrepl -simplify-libcalls -instcombine -simplifycfg -instcombine -simplifycfg -reassociate -domtree -loops -loopsimplify -domfrontier -loopsimplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loopsimplify -lcssa -iv-users -indvars -loop-deletion -loopsimplify -lcssa -loop-unroll -instcombine -memdep -gvn -memdep -memcpyopt -sccp -instcombine -domtree -memdep -dse -adce -simplifycfg -preverify -domtree -verify");
 #if 1
 	command = g_strdup_printf ("%sopt -f %s -o temp.opt.bc temp.bc", acfg->aot_opts.llvm_path, opts);
 	printf ("Executing opt: %s\n", command);
@@ -6842,6 +6882,7 @@ mono_compile_assembly (MonoAssembly *ass, guint32 opts, const char *aot_options)
 
 	acfg->got_symbol_base = g_strdup_printf ("mono_aot_%s_got", acfg->image->assembly->aname.name);
 	acfg->plt_symbol = g_strdup_printf ("%smono_aot_%s_plt", acfg->llvm_label_prefix, acfg->image->assembly->aname.name);
+	acfg->assembly_name_sym = g_strdup (acfg->image->assembly->aname.name);
 
 	/* Get rid of characters which cannot occur in symbols */
 	for (p = acfg->got_symbol_base; *p; ++p) {
@@ -6849,6 +6890,10 @@ mono_compile_assembly (MonoAssembly *ass, guint32 opts, const char *aot_options)
 			*p = '_';
 	}
 	for (p = acfg->plt_symbol; *p; ++p) {
+		if (!(isalnum (*p) || *p == '_'))
+			*p = '_';
+	}
+	for (p = acfg->assembly_name_sym; *p; ++p) {
 		if (!(isalnum (*p) || *p == '_'))
 			*p = '_';
 	}

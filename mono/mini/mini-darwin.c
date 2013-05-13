@@ -226,21 +226,21 @@ mono_runtime_syscall_fork ()
 	return (pid_t) fork ();
 }
 
-gboolean
-mono_gdb_render_native_backtraces ()
+void
+mono_gdb_render_native_backtraces (pid_t crashed_pid)
 {
 	const char *argv [5];
 	char gdb_template [] = "/tmp/mono-gdb-commands.XXXXXX";
 
 	argv [0] = g_find_program_in_path ("gdb");
 	if (argv [0] == NULL) {
-		return FALSE;
+		return;
 	}
 
 	if (mkstemp (gdb_template) != -1) {
 		FILE *gdb_commands = fopen (gdb_template, "w");
 
-		fprintf (gdb_commands, "attach %ld\n", (long) getpid ());
+		fprintf (gdb_commands, "attach %ld\n", (long) crashed_pid);
 		fprintf (gdb_commands, "info threads\n");
 		fprintf (gdb_commands, "thread apply all bt\n");
 
@@ -256,6 +256,4 @@ mono_gdb_render_native_backtraces ()
 
 		unlink (gdb_template);
 	}
-
-	return TRUE;
 }

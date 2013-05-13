@@ -246,10 +246,10 @@ namespace System.Net
 		[MonoTODO("Needs to respect Module, Proxy.AutoDetect, and Proxy.ScriptLocation config settings")]
 		static IWebProxy GetDefaultWebProxy ()
 		{
-			WebProxy p = null;
-			
 #if CONFIGURATION_DEP
 			DefaultProxySection sec = ConfigurationManager.GetSection ("system.net/defaultProxy") as DefaultProxySection;
+			WebProxy p;
+			
 			if (sec == null)
 				return GetSystemWebProxy ();
 			
@@ -265,8 +265,14 @@ namespace System.Net
 			
 			if (pe.BypassOnLocal != ProxyElement.BypassOnLocalValues.Unspecified)
 				p.BypassProxyOnLocal = (pe.BypassOnLocal == ProxyElement.BypassOnLocalValues.True);
-#endif
+				
+			foreach(BypassElement elem in sec.BypassList)
+				p.BypassArrayList.Add(elem.Address);
+			
 			return p;
+#else
+			return GetSystemWebProxy ();
+#endif
 		}
 #endif
 
@@ -353,7 +359,19 @@ namespace System.Net
 							uri = builder.Uri;
 						}
 					}
-					return new WebProxy (uri);
+					
+					string[] bypassList=null;
+				        string bypass = Environment.GetEnvironmentVariable ("no_proxy");
+				
+				        if (bypass == null)
+				        	bypass = Environment.GetEnvironmentVariable ("NO_PROXY");
+				
+				        if (bypass != null) {
+				                bypass = bypass.Remove (bypass.IndexOf("*.local"), 7);
+				                bypassList = bypass.Split (new char[]{','}, StringSplitOptions.RemoveEmptyEntries);
+				            }
+				
+				        return new WebProxy (uri, false, bypassList);
 				} catch (UriFormatException) { }
 			}
 			

@@ -6,6 +6,7 @@
  *
  * Copyright 2002-2003 Ximian, Inc (http://www.ximian.com)
  * Copyright 2004-2009 Novell, Inc (http://www.novell.com)
+ * Copyright 2011 Xamarin, Inc (http://www.xamarin.com)
  *
  */
 
@@ -7877,10 +7878,13 @@ emit_marshal_ptr (EmitMarshalContext *m, int argnum, MonoType *t,
 
 	switch (action) {
 	case MARSHAL_ACTION_CONV_IN:
+		/* MS seems to allow this in some cases, ie. bxc #158 */
+		/*
 		if (MONO_TYPE_ISSTRUCT (t->data.type) && !mono_class_from_mono_type (t->data.type)->blittable) {
 			char *msg = g_strdup_printf ("Can not marshal 'parameter #%d': Pointers can not reference marshaled structures. Use byref instead.", argnum + 1);
 			mono_mb_emit_exception_marshal_directive (m->mb, msg);
 		}
+		*/
 		break;
 
 	case MARSHAL_ACTION_PUSH:

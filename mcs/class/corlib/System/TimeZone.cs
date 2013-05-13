@@ -8,6 +8,7 @@
 //
 // (C) Ximian, Inc.
 // Copyright (C) 2004-2006 Novell, Inc (http://www.novell.com)
+// Copyright 2011 Xamarin Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -54,6 +55,11 @@ namespace System
 		// Fields
 		static TimeZone currentTimeZone;
 
+		[NonSerialized]
+		static object tz_lock = new object ();
+		[NonSerialized]
+		static long timezone_check;
+
 		// Constructor
 		protected TimeZone ()
 		{
@@ -62,9 +68,19 @@ namespace System
 		// Properties
 		public static TimeZone CurrentTimeZone {
 			get {
-				if (currentTimeZone == null)
-					currentTimeZone = new CurrentSystemTimeZone (DateTime.GetNow ());
-				return currentTimeZone;
+				long now = DateTime.GetNow ();
+				TimeZone tz;
+				
+				lock (tz_lock) {
+					if (currentTimeZone == null || (now - timezone_check) > TimeSpan.TicksPerMinute) {
+						currentTimeZone = new CurrentSystemTimeZone (now);
+						timezone_check = now;
+					}
+					
+					tz = currentTimeZone;
+				}
+				
+				return tz;
 			}
 		}
 

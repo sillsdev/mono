@@ -5,6 +5,7 @@
  *   Dietmar Maurer (dietmar@ximian.com)
  *
  * (C) 2001 Ximian, Inc.
+ * Copyright 2011 Xamarin, Inc (http://www.xamarin.com)
  */
 
 #include <config.h>
@@ -637,12 +638,8 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 
 #ifndef MONO_AMD64_NO_PUSHES
 		/* Pop arguments off the stack */
-		{
-			MonoJitArgumentInfo *arg_info = g_newa (MonoJitArgumentInfo, mono_method_signature (ji->method)->param_count + 1);
-
-			guint32 stack_to_pop = mono_arch_get_argument_info (mono_method_signature (ji->method), mono_method_signature (ji->method)->param_count, arg_info);
-			new_ctx->rsp += stack_to_pop;
-		}
+		if (ji->has_arch_eh_info)
+			new_ctx->rsp += mono_jit_info_get_arch_eh_info (ji)->stack_size;
 #endif
 
 		return TRUE;

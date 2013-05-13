@@ -10,6 +10,8 @@
  *   Zoltan Varga (vargaz@gmail.com)
  *
  * (C) 2003 Ximian, Inc.
+ * Copyright 2003-2011 Novell, Inc (http://www.novell.com)
+ * Copyright 2011 Xamarin, Inc (http://www.xamarin.com)
  */
 #include "mini.h"
 #include <string.h>
@@ -2050,6 +2052,10 @@ mono_arch_create_vars (MonoCompile *cfg)
 	 * on a new frame which doesn't include a param area.
 	 */
 	cfg->arch.no_pushes = TRUE;
+#endif
+
+#ifndef MONO_AMD64_NO_PUSHES
+	cfg->arch_eh_jit_info = 1;
 #endif
 }
 
@@ -4546,7 +4552,7 @@ mono_arch_output_basic_block (MonoCompile *cfg, MonoBasicBlock *bb)
 
 			/* FIXME: no tracing support... */
 			if (cfg->prof_options & MONO_PROFILE_ENTER_LEAVE)
-				code = mono_arch_instrument_epilog_full (cfg, mono_profiler_method_leave, code, FALSE, FALSE);
+				code = mono_arch_instrument_epilog_full (cfg, mono_profiler_method_leave, code, FALSE, TRUE);
 
 			g_assert (!cfg->method->save_lmf);
 
@@ -7457,6 +7463,7 @@ mono_arch_instrument_epilog_full (MonoCompile *cfg, void *func, void *p, gboolea
 	int save_mode = SAVE_NONE;
 	MonoMethod *method = cfg->method;
 	MonoType *ret_type = mini_type_get_underlying_type (NULL, mono_method_signature (method)->ret);
+	int i;
 	
 	switch (ret_type->type) {
 	case MONO_TYPE_VOID:
@@ -7525,8 +7532,8 @@ mono_arch_instrument_epilog_full (MonoCompile *cfg, void *func, void *p, gboolea
 		amd64_mov_reg_imm (code, AMD64_RAX, 0);
 
 	if (preserve_argument_registers) {
-		amd64_push_reg (code, MONO_AMD64_ARG_REG1);
-		amd64_push_reg (code, MONO_AMD64_ARG_REG2);
+		for (i = 0; i < PARAM_REGS; ++i)
+			amd64_push_reg (code, param_regs [i]);
 	}
 
 	mono_add_patch_info (cfg, code-cfg->native_code, MONO_PATCH_INFO_METHODCONST, method);
@@ -7534,8 +7541,8 @@ mono_arch_instrument_epilog_full (MonoCompile *cfg, void *func, void *p, gboolea
 	code = emit_call (cfg, code, MONO_PATCH_INFO_ABS, (gpointer)func, TRUE);
 
 	if (preserve_argument_registers) {
-		amd64_pop_reg (code, MONO_AMD64_ARG_REG2);
-		amd64_pop_reg (code, MONO_AMD64_ARG_REG1);
+		for (i = PARAM_REGS - 1; i >= 0; --i)
+			amd64_pop_reg (code, param_regs [i]);
 	}
 
 	/* Restore result */
@@ -7914,7 +7921,7 @@ mono_arch_setup_jit_tls_data (MonoJitTlsData *tls)
 		 * We need to init this multiple times, since when we are first called, the key might not
 		 * be initialized yet.
 		 */
-		appdomain_tls_offset = mono_domain_get_tls_key ();
+		appdomain_tls_offset = mono_domain_get_native_tls_key ();
 		lmf_tls_offset = mono_get_jit_tls_key ();
 		lmf_addr_tls_offset = mono_get_jit_tls_key ();
 
