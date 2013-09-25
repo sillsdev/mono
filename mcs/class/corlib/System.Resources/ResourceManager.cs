@@ -46,7 +46,7 @@ namespace System.Resources
 	{
 		static readonly object thisLock = new object ();
 		static Hashtable ResourceCache = new Hashtable (); 
-		static Hashtable NonExistent = Hashtable.Synchronized (new Hashtable ());
+		Hashtable NonExistent = new Hashtable ();
 		public static readonly int HeaderVersionNumber = 1;
 		public static readonly int MagicNumber = unchecked ((int) 0xBEEFCACE);
 
