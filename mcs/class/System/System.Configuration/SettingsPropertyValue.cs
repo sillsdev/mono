@@ -108,7 +108,7 @@ namespace System.Configuration
 
 		public object SerializedValue {
 			get {
-				if (needSerializedValue) {
+				if ((!property.PropertyType.IsPrimitive && property.PropertyType != typeof(String)) || needSerializedValue) {
 					needSerializedValue = false;
 
 					switch (property.SerializeAs)
