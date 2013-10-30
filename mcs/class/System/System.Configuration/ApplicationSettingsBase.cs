@@ -82,9 +82,11 @@ namespace System.Configuration {
 		public void Reload ()
 		{
 #if (CONFIGURATION_DEP)
-			foreach (SettingsProvider provider in Providers) {
-//				IApplicationSettingsProvider iasp = provider as IApplicationSettingsProvider;
-				CacheValuesByProvider(provider);
+			/* Clear out the old property values so they will be reloaded on request */
+			PropertyValues.Clear();
+			foreach(SettingsProperty prop in Properties) {
+				/* emit PropertyChanged for every property */
+				OnPropertyChanged(this, new PropertyChangedEventArgs(prop.Name));
 			}
 #endif
 		}
@@ -92,6 +94,12 @@ namespace System.Configuration {
 		public void Reset()
 		{
 #if (CONFIGURATION_DEP)
+			foreach (SettingsProvider provider in Providers) {
+				IApplicationSettingsProvider iasp = provider as IApplicationSettingsProvider;
+				if (iasp != null)
+					iasp.Reset (Context);
+			}
+
 			Reload ();
 			foreach (SettingsPropertyValue pv in PropertyValues)
 				pv.PropertyValue = pv.Reset();
@@ -121,11 +129,28 @@ namespace System.Configuration {
 					provider.SetPropertyValues (Context, cache);
 			}
 			Context.CurrentSettings = null;
+#else
+			throw new NotImplementedException("No useful Save implemented.");
 #endif
 		}
 
 		public virtual void Upgrade()
 		{
+#if (CONFIGURATION_DEP)
+			// if there is a current property, then for each settings
+			// provider in the providers collection, upgrade(ssp)
+			if (Properties != null) {
+				foreach (SettingsProvider provider in Providers) {
+					var appSettingsProvider = provider as IApplicationSettingsProvider;
+					if(appSettingsProvider != null) {
+						appSettingsProvider.Upgrade(Context, Properties);
+					}
+				}
+				Reload();
+			}
+#else
+			throw new NotImplementedException("No useful Upgrade implemented");
+#endif
 		}
 
 		protected virtual void OnPropertyChanged (object sender, 
@@ -320,7 +345,17 @@ namespace System.Configuration {
 			foreach (Attribute a in prop.GetCustomAttributes (false)) {
 				/* the attributes we handle natively here */
 				if (a is SettingsProviderAttribute) {
-					Type provider_type = Type.GetType (((SettingsProviderAttribute)a).ProviderTypeName);
+					var providerTypeName = ((SettingsProviderAttribute)a).ProviderTypeName;
+					Type provider_type = Type.GetType (providerTypeName);
+					if(provider_type == null) { // Type failed to find the type by name
+						var typeNameParts = providerTypeName.Split('.');
+						if(typeNameParts.Length > 1) { //Load the assembly that providerTypeName claims
+							var assy = Assembly.Load(typeNameParts[0]);
+							if(assy != null) {
+								provider_type = assy.GetType(providerTypeName); //try to get the type from that Assembly
+							}
+						}
+					}
 					provider = (SettingsProvider) Activator.CreateInstance (provider_type);
 					provider.Initialize (null, null);
 				}
