@@ -37,6 +37,7 @@ using System.Xml;
 using System.Xml.XPath;
 using System.Xml.Xsl;
 using Mono.Xml.Xsl;
+using Mono.Xml.XPath;
 
 using QName = System.Xml.XmlQualifiedName;
 
@@ -673,13 +674,27 @@ namespace Mono.Xml.Xsl
 		{
 			XsltCompiledContext ctx = iter.NamespaceManager as XsltCompiledContext;
 			XPathNavigator loc = iter.Current != null ? iter.Current.Clone () : null;
-			XPathNavigator nav = arg0.EvaluateAs (iter, XPathResultType.Navigator) as XPathNavigator;
+			object val = arg0.Evaluate (iter);
+
+			var iterResult = val as XPathNodeIterator;
+			if (iterResult != null)
+				return iterResult;
+
+			XPathNavigator nav = val as XPathNavigator;
+			if (nav == null) {
+				var strResult = val as string;
+				if (strResult == string.Empty) {
+					DTMXPathDocumentWriter2 w = new DTMXPathDocumentWriter2 (ctx.Processor.Root.NameTable, 10);
+					nav = w.CreateDocument ().CreateNavigator ();
+				}
+			}
 			if (nav == null) {
 				if (loc != null)
 					return new XsltException ("Cannot convert the XPath argument to a result tree fragment.", null, loc);
 				else
 					return new XsltException ("Cannot convert the XPath argument to a result tree fragment.", null);
 			}
+
 			ArrayList al = new ArrayList ();
 			al.Add (nav);
 			return new ListIterator (al, ctx);
