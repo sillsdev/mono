@@ -11,4 +11,6 @@ LIB_MCS_FLAGS = \
 	-r:System.ServiceModel.dll \
 	-r:System.ServiceModel.Web.dll \
 
+TEST_MCS_FLAGS = -r:System.ServiceModel.dll -r:System.Core.dll
+
 include ../../build/library.make
