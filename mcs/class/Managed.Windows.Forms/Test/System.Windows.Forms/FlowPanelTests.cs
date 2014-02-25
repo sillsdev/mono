@@ -1327,8 +1327,7 @@ namespace MonoTests.System.Windows.Forms
 			Assert.AreEqual (new Rectangle (23, 79, 50, 50), b2.Bounds, "A2");
 		}
 	}
-}
-#endif
+
 	[TestFixture]
 	public class FlowPanelTests_AutoSize: TestHelper
 	{
@@ -1643,3 +1642,4 @@ namespace MonoTests.System.Windows.Forms
 		}
 	}
 }
+#endif
