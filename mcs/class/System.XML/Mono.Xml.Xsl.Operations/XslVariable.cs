@@ -92,7 +92,7 @@ namespace Mono.Xml.Xsl.Operations {
 				DTMXPathDocumentWriter2 w = new DTMXPathDocumentWriter2 (p.Root.NameTable, 200);
 				Outputter outputter = new GenericOutputter(w, p.Outputs, null, true);
 				p.PushOutput (outputter);
-				if (!IsGlobal && p.CurrentNodeset.CurrentPosition == 0)
+				if (p.CurrentNodeset.CurrentPosition == 0)
 					p.NodesetMoveNext ();
 				content.Evaluate (p);
 				p.PopOutput ();
@@ -111,8 +111,6 @@ namespace Mono.Xml.Xsl.Operations {
 		internal XslOperation Content {
 			get { return content; }
 		}
-
-		internal bool IsGlobal { get; set; }
 	}
 	
 	internal abstract class XslGeneralVariable : XslCompiledElement, IXsltContextVariable {
@@ -149,9 +147,7 @@ namespace Mono.Xml.Xsl.Operations {
 	}
 	
 	internal class XslGlobalVariable : XslGeneralVariable {
-		public XslGlobalVariable (Compiler c) : base (c) {
-			var.IsGlobal = true;
-		}
+		public XslGlobalVariable (Compiler c) : base (c) {}
 		static object busyObject = new Object ();
 		
 			
@@ -175,7 +171,10 @@ namespace Mono.Xml.Xsl.Operations {
 		
 		protected override object GetValue (XslTransformProcessor p)
 		{
+			p.PushNodeset (new SelfIterator (p.Root, p.XPathContext));
+			p.NodesetMoveNext ();
 			Evaluate (p);
+			p.PopNodeset ();
 			return p.globalVariableTable [this];
 		}
 			
