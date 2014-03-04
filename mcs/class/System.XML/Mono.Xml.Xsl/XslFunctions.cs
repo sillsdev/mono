@@ -650,13 +650,15 @@ namespace Mono.Xml.Xsl
 
 	class MSXslNodeSet : XPathFunction
 	{
+		bool strict;
 		Expression arg0;
 
-		public MSXslNodeSet (FunctionArguments args) : base (args)
+		public MSXslNodeSet (bool strict, FunctionArguments args) : base (args)
 		{
 			if (args == null || args.Tail != null)
 				throw new XPathException ("element-available takes 1 arg");
-			
+
+			this.strict = strict;
 			arg0 = args.Arg;
 		}
 
@@ -676,18 +678,19 @@ namespace Mono.Xml.Xsl
 			XPathNavigator loc = iter.Current != null ? iter.Current.Clone () : null;
 			object val = arg0.Evaluate (iter);
 
-			var iterResult = val as XPathNodeIterator;
-			if (iterResult != null)
-				return iterResult;
-
 			XPathNavigator nav = val as XPathNavigator;
-			if (nav == null) {
+			if (nav == null && !strict) {
+				var iterResult = val as XPathNodeIterator;
+				if (iterResult != null)
+					return iterResult;
+
 				var strResult = val as string;
 				if (strResult == string.Empty) {
 					DTMXPathDocumentWriter2 w = new DTMXPathDocumentWriter2 (ctx.Processor.Root.NameTable, 10);
 					nav = w.CreateDocument ().CreateNavigator ();
 				}
 			}
+
 			if (nav == null) {
 				if (loc != null)
 					return new XsltException ("Cannot convert the XPath argument to a result tree fragment.", null, loc);

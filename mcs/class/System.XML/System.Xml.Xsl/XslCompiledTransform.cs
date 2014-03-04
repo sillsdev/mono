@@ -232,7 +232,7 @@ namespace System.Xml.Xsl
 		private void Load (XPathNavigator stylesheet,
 			XsltSettings settings, XmlResolver resolver)
 		{
-			s = new Compiler (debugger).Compile (stylesheet, resolver, null);
+			s = new Compiler (debugger, false).Compile (stylesheet, resolver, null);
 		}
 
 		#endregion

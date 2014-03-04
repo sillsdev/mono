@@ -16,10 +16,10 @@
 // distribute, sublicense, and/or sell copies of the Software, and to
 // permit persons to whom the Software is furnished to do so, subject to
 // the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be
 // included in all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 // EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -120,7 +120,7 @@ namespace System.Xml.Xsl {
 				 xmlResolver = value;
 			}
 		}
-		
+
 		#region Transform
 #if NET_2_0
 #elif NET_1_1
@@ -177,7 +177,7 @@ namespace System.Xml.Xsl {
 		{
 			Transform (input.CreateNavigator (), args, output, resolver);
 		}
-		
+
 #if NET_2_0
 #elif NET_1_1
 		[Obsolete ("You should pass XmlResolver to Transform() method", false)]
@@ -194,7 +194,7 @@ namespace System.Xml.Xsl {
 		{
 			Transform (input.CreateNavigator (), args, output, resolver);
 		}
-		
+
 #if NET_2_0
 #elif NET_1_1
 		[Obsolete ("You should pass XmlResolver to Transform() method", false)]
@@ -240,7 +240,7 @@ namespace System.Xml.Xsl {
 #endif
 		public void Transform (XPathNavigator input, XsltArgumentList args, Stream output)
 		{
-			Transform (input, args, output, xmlResolver);		
+			Transform (input, args, output, xmlResolver);
 		}
 #if NET_1_1
 		public void Transform (XPathNavigator input, XsltArgumentList args, Stream output, XmlResolver resolver)
@@ -269,18 +269,18 @@ namespace System.Xml.Xsl {
 			if (s == null)
 				throw new XsltException ("No stylesheet was loaded.", null);
 
-			Outputter outputter = new GenericOutputter(output, s.Outputs, output.Encoding);			
+			Outputter outputter = new GenericOutputter(output, s.Outputs, output.Encoding);
 			new XslTransformProcessor (s, debugger).Process (input, outputter, args, resolver);
 			outputter.Done ();
 			output.Flush ();
 		}
-		
+
 #if NET_2_0
 #elif NET_1_1
 		[Obsolete ("You should pass XmlResolver to Transform() method", false)]
 #endif
 		public void Transform (string inputfile, string outputfile)
-		{ 
+		{
 			Transform (inputfile, outputfile, xmlResolver);
 		}
 
@@ -301,7 +301,7 @@ namespace System.Xml.Xsl {
 		{
 			Load (url, null);
 		}
-		
+
 		public void Load (string url, XmlResolver resolver)
 		{
 			XmlResolver res = resolver;
@@ -353,7 +353,7 @@ namespace System.Xml.Xsl {
 		{
 			Load (stylesheet, resolver, null);
 		}
-		
+
 #if NET_2_0
 #elif NET_1_1
 		[Obsolete("You should pass evidence.", false)]
@@ -388,7 +388,7 @@ namespace System.Xml.Xsl {
 		internal void Load (XPathNavigator stylesheet, XmlResolver resolver, Evidence evidence)
 #endif
 		{
-			s = new Compiler (debugger).Compile (stylesheet, resolver, evidence);
+			s = new Compiler (debugger, true).Compile (stylesheet, resolver, evidence);
 		}
 
 #if NET_1_1
