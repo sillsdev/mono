@@ -492,5 +492,37 @@ namespace MonoTests.System.Configuration {
 			Assert.AreEqual ("eclair", holder1.TestKey);
 			Assert.AreEqual ("", holder2.TestKey);
 		}
+
+		#region Bug #2315
+		class Bug2315Settings : ApplicationSettingsBase
+		{
+			public Bug2315Settings () : base ("Bug2315Settings")
+			{
+			}
+
+			[UserScopedSetting]
+			[DefaultSettingValue ("some text")]
+			public string Text {
+				get { return (string)this ["Text"]; }
+				set { this ["Text"] = value; }
+			}
+		}
+
+		[Test]
+		public void SettingSavingEventFired_Bug2315 ()
+		{
+			bool settingsSavingCalled = false;
+			var settings = new Bug2315Settings ();
+			settings.SettingsSaving += (object sender, CancelEventArgs e) => {
+				settingsSavingCalled = true;
+			};
+
+			settings.Text = DateTime.Now.ToString ();
+			settings.Save ();
+
+			Assert.IsTrue (settingsSavingCalled);
+		}
+		#endregion
+
 	}
 }
