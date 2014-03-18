@@ -401,19 +401,19 @@ namespace MonoTests.System.Configuration {
 			var holder = new Bug8592ConfHolder ();
 			holder.Reset ();
 			holder.Save ();
-			Assert.AreEqual ("", holder.TestKey1OnHolder);
+			Assert.AreEqual ("", holder.TestKey1OnHolder, "A1");
 			holder.TestKey1OnHolder = "candy";
-			Assert.AreEqual ("candy", holder.TestKey1OnHolder);
+			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "A2");
 			holder.Reload ();
-			Assert.AreEqual ("", holder.TestKey1OnHolder);
+			Assert.AreEqual ("", holder.TestKey1OnHolder, "A3");
 			holder.TestKey1OnHolder = "candy";
-			Assert.AreEqual ("candy", holder.TestKey1OnHolder);
+			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "A4");
 			holder.Save ();
-			Assert.AreEqual ("candy", holder.TestKey1OnHolder);
+			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "A5");
 			holder.Reload ();
-			Assert.AreEqual ("candy", holder.TestKey1OnHolder);
+			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "A6");
 			holder.Reset ();
-			Assert.AreEqual ("", holder.TestKey1OnHolder);
+			Assert.AreEqual ("", holder.TestKey1OnHolder, "A7");
 		}
 
 		class Bug8533ConfHolder1 : ApplicationSettingsBase {
