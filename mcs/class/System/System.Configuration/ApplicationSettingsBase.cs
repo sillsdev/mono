@@ -98,10 +98,9 @@ namespace System.Configuration {
 				if (iasp != null)
 					iasp.Reset (Context);
 			}
+			InternalSave ();
 
 			Reload ();
-			foreach (SettingsPropertyValue pv in PropertyValues)
-				pv.PropertyValue = pv.Reset();
 #endif
 		}
 
@@ -113,6 +112,11 @@ namespace System.Configuration {
 			if (e.Cancel)
 				return;
 
+			InternalSave ();
+		}
+
+		void InternalSave ()
+		{
 #if (CONFIGURATION_DEP)
 			Context.CurrentSettings = this;
 			/* ew.. this needs to be more efficient */
