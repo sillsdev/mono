@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 #AC_PREREQ([2.62])
 
-AC_INIT(mono, [5.4.0],
+AC_INIT(mono, [5.4.0.1],
         [http://bugzilla.xamarin.com/enter_bug.cgi?classification=Mono])
 
 AC_CONFIG_SRCDIR([README.md])
@@ -3544,7 +3544,7 @@ dnl
 dnl Simple Generational checks (sgen)
 dnl
 SGEN_DEFINES=
-AC_ARG_WITH(sgen,                    [  --with-sgen=yes,no             Extra Generational GC, default=yes],[buildsgen=$with_sgen],[buildsgen=yes])
+AC_ARG_WITH(sgen, [  --with-sgen=yes,no             Extra Generational GC, default=yes],[buildsgen=$with_sgen],[buildsgen=yes])
 AC_ARG_WITH(sgen-default-concurrent, [  --with-sgen-default-concurrent=yes,no             Use Concurrent GC, default=no],[],[with_sgen_default_concurrent=no])
 if test x$buildsgen = xyes; then
    AC_DEFINE(HAVE_MOVING_COLLECTOR, 1, [Moving collector])
@@ -3554,7 +3554,7 @@ if test x$buildsgen = xyes; then
    if test x$with_sgen_default_concurrent != xno; then
        AC_DEFINE(HAVE_CONC_GC_AS_DEFAULT, 1, [Defaults to concurrent GC])
 	   conc_gc_msg=" (concurrent by default)"
-   fi
+fi
 
    if test "x$gc_msg" = "x"; then
       gc_msg="sgen$conc_gc_msg"
