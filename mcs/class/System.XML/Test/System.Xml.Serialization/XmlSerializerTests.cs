@@ -2860,7 +2860,27 @@ namespace MonoTests.System.XmlSerialization
 #endif
 
 		#endregion //GenericsSeralizationTests
+		#region XmlInclude on abstract class tests (Bug #18558)
+		[Test]
+		public void TestSerializeIntermediateType()
+		{
+			string expectedXml = "<ContainerTypeForTest xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><XmlIntermediateType intermediate=\"false\"/></ContainerTypeForTest>";
+			var obj = new ContainerTypeForTest();
+			obj.MemberToUseInclude = new IntermediateTypeForTest();
+			Serialize (obj);
+			Assert.AreEqual (Infoset (expectedXml), WriterText, "Serialized Output : " + WriterText);
+		}
 
+		[Test]
+		public void TestSerializeSecondType()
+		{
+			string expectedXml = "<ContainerTypeForTest xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><XmlSecondType intermediate=\"false\"/></ContainerTypeForTest>";
+			var obj = new ContainerTypeForTest();
+			obj.MemberToUseInclude = new SecondDerivedTypeForTest();
+			Serialize (obj);
+			Assert.AreEqual (Infoset (expectedXml), WriterText, "Serialized Output : " + WriterText);
+		}
+#endregion
 		public class XmlArrayOnInt
 		{
 			[XmlArray]
@@ -3119,5 +3139,41 @@ namespace MonoTests.System.XmlSerialization
 			SoapReflectionImporter importer = new SoapReflectionImporter (ao, defaultNamespace);
 			return importer.ImportTypeMapping (type);
 		}
+
+#region XmlInclude on abstract class test classes
+
+		[XmlType]
+		public class ContainerTypeForTest
+		{
+			[XmlElement ("XmlFirstType", typeof (FirstDerivedTypeForTest))]
+			[XmlElement ("XmlIntermediateType", typeof (IntermediateTypeForTest))]
+			[XmlElement ("XmlSecondType", typeof (SecondDerivedTypeForTest))]
+			public AbstractTypeForTest MemberToUseInclude { get; set; }
+		}
+
+		[XmlInclude (typeof (FirstDerivedTypeForTest))]
+		[XmlInclude (typeof (IntermediateTypeForTest))]
+		[XmlInclude (typeof (SecondDerivedTypeForTest))]
+		public abstract class AbstractTypeForTest
+		{
+		}
+
+		public class IntermediateTypeForTest : AbstractTypeForTest
+		{
+			[XmlAttribute (AttributeName = "intermediate")]
+			public bool IntermediateMember { get; set; }
+		}
+
+		public class FirstDerivedTypeForTest : AbstractTypeForTest
+		{
+			public string FirstMember { get; set; }
+		}
+
+		public class SecondDerivedTypeForTest : IntermediateTypeForTest
+		{
+			public string SecondMember { get; set; }
+		}
+#endregion
+
 	}
 }
