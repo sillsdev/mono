@@ -50,6 +50,7 @@ namespace System.Windows.Forms {
 		internal Size			canvas_size;
 		private Rectangle		display_rectangle;
 		private Control			old_parent;
+		private bool			child_autosized;
 
 #if NET_2_0
 		private HScrollProperties	horizontalScroll;
@@ -696,6 +697,14 @@ namespace System.Windows.Forms {
 
 			AdjustFormScrollbars(AutoScroll);	// Dunno what the logic is. Passing AutoScroll seems to match MS behaviour
 			base.OnLayout(levent);
+
+			// The first time through, we just set the canvas to clientsize
+			// so we could re-layout everything.
+			// This time we want to actually calculate the canvas.
+			if (child_autosized && AutoScroll && !(this is FlowLayoutPanel)) {
+				CalculateCanvasSize (false);
+				AdjustFormScrollbars (AutoScroll);
+			}
 		}
 
 		[EditorBrowsable(EditorBrowsableState.Advanced)]
@@ -841,8 +850,11 @@ namespace System.Windows.Forms {
 				extra_height += dock_padding.Bottom;
 			}
 
+			child_autosized = false;
 			for (int i = 0; i < num_of_children; i++) {
 				child = Controls[i];
+				if (child.AutoSize)
+					child_autosized = true;
 				if (child.Dock == DockStyle.Right) {
 					extra_width += child.Width;
 				} else if (child.Dock == DockStyle.Bottom) {
