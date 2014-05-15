@@ -177,7 +177,7 @@ namespace System.IO.MemoryMappedFiles
 			// the filename (with one exception), we could move this API to use
 			// file descriptors instead of the FileStream plus its Handle.
 			//
-			map_addr = Syscall.mmap (IntPtr.Zero, (ulong) size,
+			map_addr = Syscall.mmap (IntPtr.Zero, (ulong) (size + offset_diff),
 						 ToUnixProts (access),
 						 access == MemoryMappedFileAccess.CopyOnWrite ? MmapFlags.MAP_PRIVATE : MmapFlags.MAP_SHARED,
 						 file_handle, real_offset);
@@ -403,7 +403,7 @@ namespace System.IO.MemoryMappedFiles
 
 			offset_diff = (int)(offset - real_offset);
 
-			map_addr = mmap (IntPtr.Zero, (IntPtr) size,
+			map_addr = mmap (IntPtr.Zero, (IntPtr) (size + offset_diff),
 						 ToUnixProts (access),
 						 access == MemoryMappedFileAccess.CopyOnWrite ? MAP_PRIVATE : MAP_SHARED,
 						 file_handle, real_offset);

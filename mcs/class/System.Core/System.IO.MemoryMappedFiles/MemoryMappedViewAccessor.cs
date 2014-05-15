@@ -70,7 +70,7 @@ namespace System.IO.MemoryMappedFiles
 
 			MemoryMapImpl.Map (file_handle, offset, ref size, access, out mmap_addr, out offset_diff);
 
-			handle = new SafeMemoryMappedViewHandle ((IntPtr)((long)mmap_addr + offset_diff), size);
+			handle = new SafeMemoryMappedViewHandle ((IntPtr)((long)mmap_addr + offset_diff), size, mmap_addr, size + offset_diff);
 			Initialize (handle, 0, size, ToFileAccess (access));
 		}
 

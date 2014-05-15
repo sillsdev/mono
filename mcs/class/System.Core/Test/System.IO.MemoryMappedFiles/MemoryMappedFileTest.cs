@@ -51,6 +51,8 @@ namespace MonoTests.System.IO.MemoryMappedFiles {
 		}
 
 		static string tempDir = Path.Combine (Path.GetTempPath (), typeof (MemoryMappedFileTest).FullName);
+		// there is no way to get the actual system page size, so it is hard-coded here to the typical 4KB
+		private const int PageSize = 4096;
 
 		string fname;
 
@@ -64,6 +66,13 @@ namespace MonoTests.System.IO.MemoryMappedFiles {
 			fname = Path.Combine (tempDir, "basic.txt");
 
 			using (StreamWriter sw = new StreamWriter (fname)) {
+				sw.WriteLine ("Hello!");
+				int len = "Hello!".Length + Environment.NewLine.Length;
+				sw.WriteLine ("World!");
+				len += "World!".Length + Environment.NewLine.Length;
+				for (int i = 0; i < (PageSize - 3) - len; i++) {
+					sw.Write ('\0');
+				}
 				sw.WriteLine ("Hello!");
 				sw.WriteLine ("World!");
 			}
@@ -103,6 +112,23 @@ namespace MonoTests.System.IO.MemoryMappedFiles {
 			var file = MemoryMappedFile.CreateFromFile (fname, FileMode.Open);
 
 			using (var stream = file.CreateViewStream (2, 3)) {
+				byte[] arr = new byte [128];
+
+				int len = stream.Read (arr, 0, 128);
+
+				Assert.AreEqual (3, len);
+
+				Assert.AreEqual ('l', (char)arr [0]);
+				Assert.AreEqual ('l', (char)arr [1]);
+				Assert.AreEqual ('o', (char)arr [2]);
+			}
+		}
+
+		[Test]
+		public void CreateViewStream_PageBoundary () {
+			var file = MemoryMappedFile.CreateFromFile (fname, FileMode.Open);
+
+			using (var stream = file.CreateViewStream (PageSize - 1, 3)) {
 				byte[] arr = new byte [128];
 
 				int len = stream.Read (arr, 0, 128);
