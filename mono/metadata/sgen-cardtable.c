@@ -4,41 +4,72 @@
  * Author:
  * 	Rodrigo Kumpera (rkumpera@novell.com)
  *
- * SGen is licensed under the terms of the MIT X11 license
- *
  * Copyright 2001-2003 Ximian, Inc
  * Copyright 2003-2010 Novell, Inc.
  * Copyright 2011 Xamarin Inc (http://www.xamarin.com)
- * 
- * Permission is hereby granted, free of charge, to any person obtaining
- * a copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- * 
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
- * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
- * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
- * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * Copyright (C) 2012 Xamarin Inc
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Library General Public
+ * License 2.0 as published by the Free Software Foundation;
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Library General Public
+ * License 2.0 along with this library; if not, write to the Free
+ * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifdef SGEN_HAVE_CARDTABLE
+#include "config.h"
+#ifdef HAVE_SGEN_GC
+
+#include "metadata/sgen-gc.h"
+#include "metadata/sgen-cardtable.h"
+#include "metadata/sgen-memory-governor.h"
+#include "metadata/sgen-protocol.h"
+#include "metadata/sgen-layout-stats.h"
+#include "utils/mono-counters.h"
+#include "utils/mono-time.h"
+#include "utils/mono-memory-model.h"
 
 //#define CARDTABLE_STATS
 
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+#ifdef HAVE_SYS_MMAN_H
 #include <sys/mman.h>
+#endif
 #include <sys/types.h>
 
 guint8 *sgen_cardtable;
+
+static gboolean need_mod_union;
+
+#ifdef HEAVY_STATISTICS
+long long marked_cards;
+long long scanned_cards;
+long long scanned_objects;
+long long remarked_cards;
+
+static long long los_marked_cards;
+static long long large_objects;
+static long long bloby_objects;
+static long long los_array_cards;
+static long long los_array_remsets;
+
+#endif
+static long long major_card_scan_time;
+static long long los_card_scan_time;
+
+static long long last_major_scan_time;
+static long long last_los_scan_time;
+
+static void sgen_card_tables_collect_stats (gboolean begin);
+
 
 /*WARNING: This function returns the number of cards regardless of overflow in case of overlapping cards.*/
 static mword
@@ -46,6 +77,103 @@ cards_in_range (mword address, mword size)
 {
 	mword end = address + MAX (1, size) - 1;
 	return (end >> CARD_BITS) - (address >> CARD_BITS) + 1;
+}
+
+static void
+sgen_card_table_wbarrier_set_field (MonoObject *obj, gpointer field_ptr, MonoObject* value)
+{
+	*(void**)field_ptr = value;
+	if (need_mod_union || sgen_ptr_in_nursery (value))
+		sgen_card_table_mark_address ((mword)field_ptr);
+	sgen_dummy_use (value);
+}
+
+static void
+sgen_card_table_wbarrier_set_arrayref (MonoArray *arr, gpointer slot_ptr, MonoObject* value)
+{
+	*(void**)slot_ptr = value;
+	if (need_mod_union || sgen_ptr_in_nursery (value))
+		sgen_card_table_mark_address ((mword)slot_ptr);
+	sgen_dummy_use (value);	
+}
+
+static void
+sgen_card_table_wbarrier_arrayref_copy (gpointer dest_ptr, gpointer src_ptr, int count)
+{
+	gpointer *dest = dest_ptr;
+	gpointer *src = src_ptr;
+
+	/*overlapping that required backward copying*/
+	if (src < dest && (src + count) > dest) {
+		gpointer *start = dest;
+		dest += count - 1;
+		src += count - 1;
+
+		for (; dest >= start; --src, --dest) {
+			gpointer value = *src;
+			*dest = value;
+			if (need_mod_union || sgen_ptr_in_nursery (value))
+				sgen_card_table_mark_address ((mword)dest);
+			sgen_dummy_use (value);
+		}
+	} else {
+		gpointer *end = dest + count;
+		for (; dest < end; ++src, ++dest) {
+			gpointer value = *src;
+			*dest = value;
+			if (need_mod_union || sgen_ptr_in_nursery (value))
+				sgen_card_table_mark_address ((mword)dest);
+			sgen_dummy_use (value);
+		}
+	}	
+}
+
+static void
+sgen_card_table_wbarrier_value_copy (gpointer dest, gpointer src, int count, MonoClass *klass)
+{
+	size_t element_size = mono_class_value_size (klass, NULL);
+	size_t size = count * element_size;
+
+#ifdef DISABLE_CRITICAL_REGION
+	LOCK_GC;
+#else
+	TLAB_ACCESS_INIT;
+	ENTER_CRITICAL_REGION;
+#endif
+	mono_gc_memmove_atomic (dest, src, size);
+	sgen_card_table_mark_range ((mword)dest, size);
+#ifdef DISABLE_CRITICAL_REGION
+	UNLOCK_GC;
+#else
+	EXIT_CRITICAL_REGION;
+#endif
+}
+
+static void
+sgen_card_table_wbarrier_object_copy (MonoObject* obj, MonoObject *src)
+{
+	int size = mono_object_class (obj)->instance_size;
+
+#ifdef DISABLE_CRITICAL_REGION
+	LOCK_GC;
+#else
+	TLAB_ACCESS_INIT;
+	ENTER_CRITICAL_REGION;
+#endif
+	mono_gc_memmove_aligned ((char*)obj + sizeof (MonoObject), (char*)src + sizeof (MonoObject),
+			size - sizeof (MonoObject));
+	sgen_card_table_mark_range ((mword)obj, size);
+#ifdef DISABLE_CRITICAL_REGION
+	UNLOCK_GC;
+#else
+	EXIT_CRITICAL_REGION;
+#endif	
+}
+
+static void
+sgen_card_table_wbarrier_generic_nostore (gpointer ptr)
+{
+	sgen_card_table_mark_address ((mword)ptr);	
 }
 
 #ifdef SGEN_HAVE_OVERLAPPING_CARDS
@@ -113,18 +241,6 @@ sgen_card_table_get_card_data (guint8 *data_dest, mword address, mword cards)
 	return mask;
 }
 
-static gboolean
-sgen_card_table_address_is_marked (mword address)
-{
-	return *sgen_card_table_get_card_address (address) != 0;
-}
-
-void
-sgen_card_table_mark_address (mword address)
-{
-	*sgen_card_table_get_card_address (address) = 1;
-}
-
 void*
 sgen_card_table_align_pointer (void *ptr)
 {
@@ -152,13 +268,79 @@ sgen_card_table_is_range_marked (guint8 *cards, mword address, mword size)
 }
 
 static void
-card_table_init (void)
+sgen_card_table_record_pointer (gpointer address)
 {
-	sgen_cardtable = mono_sgen_alloc_os_memory (CARD_COUNT_IN_BYTES, TRUE);
+	*sgen_card_table_get_card_address ((mword)address) = 1;
+}
+
+static gboolean
+sgen_card_table_find_address (char *addr)
+{
+	return sgen_card_table_address_is_marked ((mword)addr);
+}
+
+static gboolean
+sgen_card_table_find_address_with_cards (char *cards_start, guint8 *cards, char *addr)
+{
+	cards_start = sgen_card_table_align_pointer (cards_start);
+	return cards [(addr - cards_start) >> CARD_BITS];
+}
+
+static void
+update_mod_union (guint8 *dest, gboolean init, guint8 *start_card, guint8 *end_card)
+{
+	size_t num_cards = end_card - start_card;
+	if (init) {
+		memcpy (dest, start_card, num_cards);
+	} else {
+		int i;
+		for (i = 0; i < num_cards; ++i)
+			dest [i] |= start_card [i];
+	}
+}
+
+static guint8*
+alloc_mod_union (size_t num_cards)
+{
+	return sgen_alloc_internal_dynamic (num_cards, INTERNAL_MEM_CARDTABLE_MOD_UNION, TRUE);
+}
+
+guint8*
+sgen_card_table_update_mod_union (guint8 *dest, char *obj, mword obj_size, size_t *out_num_cards)
+{
+	guint8 *result = dest;
+	guint8 *start_card = sgen_card_table_get_card_address ((mword)obj);
+	guint8 *end_card = sgen_card_table_get_card_address ((mword)obj + obj_size - 1) + 1;
+	gboolean init = dest == NULL;
+	size_t num_cards;
 
 #ifdef SGEN_HAVE_OVERLAPPING_CARDS
-	sgen_shadow_cardtable = mono_sgen_alloc_os_memory (CARD_COUNT_IN_BYTES, TRUE);
+	size_t rest;
+
+	rest = num_cards = cards_in_range ((mword) obj, obj_size);
+
+	if (init)
+		result = dest = alloc_mod_union (num_cards);
+
+	while (start_card + rest > SGEN_CARDTABLE_END) {
+		size_t count = SGEN_CARDTABLE_END - start_card;
+		update_mod_union (dest, init, start_card, SGEN_CARDTABLE_END);
+		dest += count;
+		rest -= count;
+		start_card = sgen_cardtable;
+	}
+#else
+	num_cards = end_card - start_card;
+	if (init)
+		result = dest = alloc_mod_union (num_cards);
 #endif
+
+	update_mod_union (dest, init, start_card, end_card);
+
+	if (out_num_cards)
+		*out_num_cards = num_cards;
+
+	return result;
 }
 
 #ifdef SGEN_HAVE_OVERLAPPING_CARDS
@@ -170,7 +352,9 @@ move_cards_to_shadow_table (mword start, mword size)
 	guint8 *to = sgen_card_table_get_shadow_card_address (start);
 	size_t bytes = cards_in_range (start, size);
 
-	if (to + bytes > SGEN_SHADOW_CARDTABLE_END) {
+	if (bytes >= CARD_COUNT_IN_BYTES) {
+		memcpy (sgen_shadow_cardtable, sgen_cardtable, CARD_COUNT_IN_BYTES);
+	} else if (to + bytes > SGEN_SHADOW_CARDTABLE_END) {
 		size_t first_chunk = SGEN_SHADOW_CARDTABLE_END - to;
 		size_t second_chunk = MIN (CARD_COUNT_IN_BYTES, bytes) - first_chunk;
 
@@ -187,7 +371,9 @@ clear_cards (mword start, mword size)
 	guint8 *addr = sgen_card_table_get_card_address (start);
 	size_t bytes = cards_in_range (start, size);
 
-	if (addr + bytes > SGEN_CARDTABLE_END) {
+	if (bytes >= CARD_COUNT_IN_BYTES) {
+		memset (sgen_cardtable, 0, CARD_COUNT_IN_BYTES);
+	} else if (addr + bytes > SGEN_CARDTABLE_END) {
 		size_t first_chunk = SGEN_CARDTABLE_END - addr;
 
 		memset (addr, 0, first_chunk);
@@ -210,39 +396,53 @@ clear_cards (mword start, mword size)
 #endif
 
 static void
-card_table_clear (void)
+sgen_card_table_prepare_for_major_collection (void)
 {
 	/*XXX we could do this in 2 ways. using mincore or iterating over all sections/los objects */
-	if (use_cardtable) {
-		major_collector.iterate_live_block_ranges (clear_cards);
-		mono_sgen_los_iterate_live_block_ranges (clear_cards);
-	}
+	sgen_major_collector_iterate_live_block_ranges (clear_cards);
+	sgen_los_iterate_live_block_ranges (clear_cards);
 }
+
 static void
-scan_from_card_tables (void *start_nursery, void *end_nursery, GrayQueue *queue)
+sgen_card_table_finish_minor_collection (void)
 {
-	if (use_cardtable) {
+	sgen_card_tables_collect_stats (FALSE);
+}
+
+static void
+sgen_card_table_finish_scan_remsets (void *start_nursery, void *end_nursery, SgenGrayQueue *queue)
+{
+	SGEN_TV_DECLARE (atv);
+	SGEN_TV_DECLARE (btv);
+
+	sgen_card_tables_collect_stats (TRUE);
+
 #ifdef SGEN_HAVE_OVERLAPPING_CARDS
 	/*FIXME we should have a bit on each block/los object telling if the object have marked cards.*/
 	/*First we copy*/
-	major_collector.iterate_live_block_ranges (move_cards_to_shadow_table);
-	mono_sgen_los_iterate_live_block_ranges (move_cards_to_shadow_table);
+	sgen_major_collector_iterate_live_block_ranges (move_cards_to_shadow_table);
+	sgen_los_iterate_live_block_ranges (move_cards_to_shadow_table);
 
 	/*Then we clear*/
-	card_table_clear ();
+	sgen_card_table_prepare_for_major_collection ();
 #endif
-		major_collector.scan_card_table (queue);
-		mono_sgen_los_scan_card_table (queue);
-	}
+	SGEN_TV_GETTIME (atv);
+	sgen_major_collector_scan_card_table (queue);
+	SGEN_TV_GETTIME (btv);
+	last_major_scan_time = SGEN_TV_ELAPSED (atv, btv); 
+	major_card_scan_time += last_major_scan_time;
+	sgen_los_scan_card_table (FALSE, queue);
+	SGEN_TV_GETTIME (atv);
+	last_los_scan_time = SGEN_TV_ELAPSED (btv, atv);
+	los_card_scan_time += last_los_scan_time;
 }
 
 guint8*
 mono_gc_get_card_table (int *shift_bits, gpointer *mask)
 {
-	if (!use_cardtable)
+	if (!sgen_cardtable)
 		return NULL;
 
-	g_assert (sgen_cardtable);
 	*shift_bits = CARD_BITS;
 #ifdef SGEN_HAVE_OVERLAPPING_CARDS
 	*mask = (gpointer)CARD_MASK;
@@ -251,6 +451,12 @@ mono_gc_get_card_table (int *shift_bits, gpointer *mask)
 #endif
 
 	return sgen_cardtable;
+}
+
+gboolean
+mono_gc_card_table_nursery_check (void)
+{
+	return !major_collector.is_concurrent;
 }
 
 #if 0
@@ -289,20 +495,81 @@ sgen_card_table_dump_obj_card (char *object, size_t size, void *dummy)
 }
 #endif
 
-void
-sgen_cardtable_scan_object (char *obj, mword block_obj_size, guint8 *cards, SgenGrayQueue *queue)
+#define MWORD_MASK (sizeof (mword) - 1)
+
+static inline int
+find_card_offset (mword card)
 {
-	MonoVTable *vt = (MonoVTable*)LOAD_VTABLE (obj);
+/*XXX Use assembly as this generates some pretty bad code */
+#if defined(__i386__) && defined(__GNUC__)
+	return  (__builtin_ffs (card) - 1) / 8;
+#elif defined(__x86_64__) && defined(__GNUC__)
+	return (__builtin_ffsll (card) - 1) / 8;
+#elif defined(__s390x__)
+	return (__builtin_ffsll (GUINT64_TO_LE(card)) - 1) / 8;
+#else
+	int i;
+	guint8 *ptr = (guint8 *) &card;
+	for (i = 0; i < sizeof (mword); ++i) {
+		if (ptr[i])
+			return i;
+	}
+	return 0;
+#endif
+}
+
+static guint8*
+find_next_card (guint8 *card_data, guint8 *end)
+{
+	mword *cards, *cards_end;
+	mword card;
+
+	while ((((mword)card_data) & MWORD_MASK) && card_data < end) {
+		if (*card_data)
+			return card_data;
+		++card_data;
+	}
+
+	if (card_data == end)
+		return end;
+
+	cards = (mword*)card_data;
+	cards_end = (mword*)((mword)end & ~MWORD_MASK);
+	while (cards < cards_end) {
+		card = *cards;
+		if (card)
+			return (guint8*)cards + find_card_offset (card);
+		++cards;
+	}
+
+	card_data = (guint8*)cards_end;
+	while (card_data < end) {
+		if (*card_data)
+			return card_data;
+		++card_data;
+	}
+
+	return end;
+}
+
+void
+sgen_cardtable_scan_object (char *obj, mword block_obj_size, guint8 *cards, gboolean mod_union, SgenGrayQueue *queue)
+{
+	MonoVTable *vt = (MonoVTable*)SGEN_LOAD_VTABLE (obj);
 	MonoClass *klass = vt->klass;
 
-	if (!SGEN_VTABLE_HAS_REFERENCES (vt))
+	HEAVY_STAT (++large_objects);
+
+	if (!SGEN_VTABLE_HAS_REFERENCES (vt)) {
+		sgen_object_layout_scanned_bitmap (0);
 		return;
+	}
 
 	if (vt->rank) {
 		guint8 *card_data, *card_base;
 		guint8 *card_data_end;
 		char *obj_start = sgen_card_table_align_pointer (obj);
-		mword obj_size = mono_sgen_par_object_get_size (vt, (MonoObject*)obj);
+		mword obj_size = sgen_par_object_get_size (vt, (MonoObject*)obj);
 		char *obj_end = obj + obj_size;
 		size_t card_count;
 		int extra_idx = 0;
@@ -313,6 +580,13 @@ sgen_cardtable_scan_object (char *obj, mword block_obj_size, guint8 *cards, Sgen
 
 #ifdef SGEN_HAVE_OVERLAPPING_CARDS
 		guint8 *overflow_scan_end = NULL;
+#endif
+
+#ifdef SGEN_OBJECT_LAYOUT_STATISTICS
+		if (klass->element_class->valuetype)
+			sgen_object_layout_scanned_vtype_array ();
+		else
+			sgen_object_layout_scanned_ref_array ();
 #endif
 
 		if (cards)
@@ -334,16 +608,16 @@ sgen_cardtable_scan_object (char *obj, mword block_obj_size, guint8 *cards, Sgen
 
 LOOP_HEAD:
 #endif
-		/*FIXME use card skipping code*/
-		for (; card_data < card_data_end; ++card_data) {
+
+		card_data = find_next_card (card_data, card_data_end);
+		for (; card_data < card_data_end; card_data = find_next_card (card_data + 1, card_data_end)) {
 			int index;
 			int idx = (card_data - card_base) + extra_idx;
 			char *start = (char*)(obj_start + idx * CARD_SIZE_IN_BYTES);
 			char *card_end = start + CARD_SIZE_IN_BYTES;
-			char *elem;
+			char *first_elem, *elem;
 
-			if (!*card_data)
-				continue;
+			HEAVY_STAT (++los_marked_cards);
 
 			if (!cards)
 				sgen_card_table_prepare_card_for_scanning (card_data);
@@ -355,22 +629,29 @@ LOOP_HEAD:
 			else
 				index = ARRAY_OBJ_INDEX (start, obj, elem_size);
 
-			elem = (char*)mono_array_addr_with_size ((MonoArray*)obj, elem_size, index);
+			elem = first_elem = (char*)mono_array_addr_with_size_fast ((MonoArray*)obj, elem_size, index);
 			if (klass->element_class->valuetype) {
+				ScanVTypeFunc scan_vtype_func = sgen_get_current_object_ops ()->scan_vtype;
+
 				for (; elem < card_end; elem += elem_size)
-					major_collector.minor_scan_vtype (elem, klass->element_class, nursery_start, nursery_next, queue);
+					scan_vtype_func (elem, desc, queue BINARY_PROTOCOL_ARG (elem_size));
 			} else {
+				CopyOrMarkObjectFunc copy_func = sgen_get_current_object_ops ()->copy_or_mark_object;
+
+				HEAVY_STAT (++los_array_cards);
 				for (; elem < card_end; elem += SIZEOF_VOID_P) {
 					gpointer new, old = *(gpointer*)elem;
-					/*XXX it might be faster to do a nursery check here instead as it avoid a call*/
-					if (old) {
-						major_collector.copy_object ((void**)elem, queue);
+					if ((mod_union && old) || G_UNLIKELY (sgen_ptr_in_nursery (old))) {
+						HEAVY_STAT (++los_array_remsets);
+						copy_func ((void**)elem, queue);
 						new = *(gpointer*)elem;
-						if (G_UNLIKELY (ptr_in_nursery (new)))
-							mono_sgen_add_to_global_remset (elem);
+						if (G_UNLIKELY (sgen_ptr_in_nursery (new)))
+							sgen_add_to_global_remset (elem, new);
 					}
 				}
 			}
+
+			binary_protocol_card_scan (first_elem, elem - first_elem);
 		}
 
 #ifdef SGEN_HAVE_OVERLAPPING_CARDS
@@ -384,27 +665,38 @@ LOOP_HEAD:
 #endif
 
 	} else {
+		HEAVY_STAT (++bloby_objects);
 		if (cards) {
 			if (sgen_card_table_is_range_marked (cards, (mword)obj, block_obj_size))
-				major_collector.minor_scan_object (obj, queue);
+				sgen_get_current_object_ops ()->scan_object (obj, queue);
 		} else if (sgen_card_table_region_begin_scanning ((mword)obj, block_obj_size)) {
-			major_collector.minor_scan_object (obj, queue);
+			sgen_get_current_object_ops ()->scan_object (obj, queue);
 		}
+
+		binary_protocol_card_scan (obj, sgen_safe_object_get_size ((MonoObject*)obj));
 	}
 }
 
 #ifdef CARDTABLE_STATS
 
-static int total_cards, marked_cards, remarked_cards;
+typedef struct {
+	int total, marked, remarked, gc_marked;	
+} card_stats;
+
+static card_stats major_stats, los_stats;
+static card_stats *cur_stats;
 
 static void
 count_marked_cards (mword start, mword size)
 {
 	mword end = start + size;
 	while (start <= end) {
-		++total_cards;
-		if (sgen_card_table_address_is_marked (start))
-			++marked_cards;
+		guint8 card = *sgen_card_table_get_card_address (start);
+		++cur_stats->total;
+		if (card)
+			++cur_stats->marked;
+		if (card == 2)
+			++cur_stats->gc_marked;
 		start += CARD_SIZE_IN_BYTES;
 	}
 }
@@ -414,8 +706,10 @@ count_remarked_cards (mword start, mword size)
 {
 	mword end = start + size;
 	while (start <= end) {
-		if (sgen_card_table_address_is_marked (start))
-			++remarked_cards;
+		if (sgen_card_table_address_is_marked (start)) {
+			++cur_stats->remarked;
+			*sgen_card_table_get_card_address (start) = 2;
+		}
 		start += CARD_SIZE_IN_BYTES;
 	}
 }
@@ -423,45 +717,71 @@ count_remarked_cards (mword start, mword size)
 #endif
 
 static void
-card_tables_collect_stats (gboolean begin)
+sgen_card_tables_collect_stats (gboolean begin)
 {
 #ifdef CARDTABLE_STATS
 	if (begin) {
-		total_cards = marked_cards = remarked_cards = 0;
-		major_collector.iterate_live_block_ranges (count_marked_cards);
-		los_iterate_live_block_ranges (count_marked_cards);
+		memset (&major_stats, 0, sizeof (card_stats));
+		memset (&los_stats, 0, sizeof (card_stats));
+		cur_stats = &major_stats;
+		sgen_major_collector_iterate_live_block_ranges (count_marked_cards);
+		cur_stats = &los_stats;
+		sgen_los_iterate_live_block_ranges (count_marked_cards);
 	} else {
-		major_collector.iterate_live_block_ranges (count_marked_cards);
-		los_iterate_live_block_ranges (count_remarked_cards);
-		printf ("cards total %d marked %d remarked %d\n", total_cards, marked_cards, remarked_cards);
+		cur_stats = &major_stats;
+		sgen_major_collector_iterate_live_block_ranges (count_remarked_cards);
+		cur_stats = &los_stats;
+		sgen_los_iterate_live_block_ranges (count_remarked_cards);
+		printf ("cards major (t %d m %d g %d r %d)  los (t %d m %d g %d r %d) major_scan %.2fms los_scan %.2fms\n", 
+			major_stats.total, major_stats.marked, major_stats.gc_marked, major_stats.remarked,
+			los_stats.total, los_stats.marked, los_stats.gc_marked, los_stats.remarked,
+			last_major_scan_time / 1000.0, last_los_scan_time / 1000.0);
 	}
 #endif
 }
 
-#else
-
 void
-sgen_card_table_mark_address (mword address)
+sgen_card_table_init (SgenRemeberedSet *remset)
 {
-	g_assert_not_reached ();
-}
+	sgen_cardtable = sgen_alloc_os_memory (CARD_COUNT_IN_BYTES, SGEN_ALLOC_INTERNAL | SGEN_ALLOC_ACTIVATE, "card table");
 
-void
-sgen_card_table_mark_range (mword address, mword size)
-{
-	g_assert_not_reached ();
-}
-
-#define sgen_card_table_address_is_marked(p)	FALSE
-#define scan_from_card_tables(start,end,queue)
-#define card_table_clear()
-#define card_table_init()
-#define card_tables_collect_stats(begin)
-
-guint8*
-mono_gc_get_card_table (int *shift_bits, gpointer *mask)
-{
-	return NULL;
-}
-
+#ifdef SGEN_HAVE_OVERLAPPING_CARDS
+	sgen_shadow_cardtable = sgen_alloc_os_memory (CARD_COUNT_IN_BYTES, SGEN_ALLOC_INTERNAL | SGEN_ALLOC_ACTIVATE, "shadow card table");
 #endif
+
+#ifdef HEAVY_STATISTICS
+	mono_counters_register ("marked cards", MONO_COUNTER_GC | MONO_COUNTER_LONG, &marked_cards);
+	mono_counters_register ("scanned cards", MONO_COUNTER_GC | MONO_COUNTER_LONG, &scanned_cards);
+	mono_counters_register ("remarked cards", MONO_COUNTER_GC | MONO_COUNTER_LONG, &remarked_cards);
+
+	mono_counters_register ("los marked cards", MONO_COUNTER_GC | MONO_COUNTER_LONG, &los_marked_cards);
+	mono_counters_register ("los array cards scanned ", MONO_COUNTER_GC | MONO_COUNTER_LONG, &los_array_cards);
+	mono_counters_register ("los array remsets", MONO_COUNTER_GC | MONO_COUNTER_LONG, &los_array_remsets);
+	mono_counters_register ("cardtable scanned objects", MONO_COUNTER_GC | MONO_COUNTER_LONG, &scanned_objects);
+	mono_counters_register ("cardtable large objects", MONO_COUNTER_GC | MONO_COUNTER_LONG, &large_objects);
+	mono_counters_register ("cardtable bloby objects", MONO_COUNTER_GC | MONO_COUNTER_LONG, &bloby_objects);
+#endif
+	mono_counters_register ("cardtable major scan time", MONO_COUNTER_GC | MONO_COUNTER_TIME_INTERVAL, &major_card_scan_time);
+	mono_counters_register ("cardtable los scan time", MONO_COUNTER_GC | MONO_COUNTER_TIME_INTERVAL, &los_card_scan_time);
+
+
+	remset->wbarrier_set_field = sgen_card_table_wbarrier_set_field;
+	remset->wbarrier_set_arrayref = sgen_card_table_wbarrier_set_arrayref;
+	remset->wbarrier_arrayref_copy = sgen_card_table_wbarrier_arrayref_copy;
+	remset->wbarrier_value_copy = sgen_card_table_wbarrier_value_copy;
+	remset->wbarrier_object_copy = sgen_card_table_wbarrier_object_copy;
+	remset->wbarrier_generic_nostore = sgen_card_table_wbarrier_generic_nostore;
+	remset->record_pointer = sgen_card_table_record_pointer;
+
+	remset->finish_scan_remsets = sgen_card_table_finish_scan_remsets;
+
+	remset->finish_minor_collection = sgen_card_table_finish_minor_collection;
+	remset->prepare_for_major_collection = sgen_card_table_prepare_for_major_collection;
+
+	remset->find_address = sgen_card_table_find_address;
+	remset->find_address_with_cards = sgen_card_table_find_address_with_cards;
+
+	need_mod_union = sgen_get_major_collector ()->is_concurrent;
+}
+
+#endif /*HAVE_SGEN_GC*/

@@ -1639,18 +1639,19 @@ namespace MonoTests.System.XmlSerialization
 		[Test]
 		public void Bug708178Type()
 		{
+			string file = Path.Combine (Path.GetTempPath (), "Bug708178Type.xml");
 			XmlSerializer xmlSerializer = new XmlSerializer (typeof(Bug708178Type));
 			Bug708178Type bugType = new Bug708178Type ();
 			bugType.Foo.Add ("test");
 			Assert.AreEqual (1, bugType.Foo.Count);
 		 
 			//xml Serialize
-			TextWriter WriteFileStream = new StreamWriter (@"Bug708178Type.xml", false);
+			TextWriter WriteFileStream = new StreamWriter (file, false);
 			xmlSerializer.Serialize (WriteFileStream, bugType);
 			WriteFileStream.Close ();
 		 
 			//xml Deserialize
-			FileStream ReadFileStream = new FileStream (@"Bug708178Type.xml", FileMode.Open, FileAccess.Read, FileShare.Read);
+			FileStream ReadFileStream = new FileStream (file, FileMode.Open, FileAccess.Read, FileShare.Read);
 			Bug708178Type bugTypeReload = (Bug708178Type)xmlSerializer.Deserialize (ReadFileStream);
 		 
 			//should have deserialized the relationship
@@ -2276,6 +2277,32 @@ namespace MonoTests.System.XmlSerialization
 			}
 		}
 #endif
+
+		public class Bug594490Class
+		{
+			[XmlAttribute ("xml:lang")]
+			public string GroupName;
+		}
+
+		[Test]
+		public void Bug594490_SerializationOfXmlLangAttribute ()
+		{
+			var serializer = new XmlSerializer (typeof(Bug594490Class));
+
+			using (var writer = new StringWriter ()) {
+				var obj = new Bug594490Class ();
+
+				obj.GroupName = "hello world";
+
+				serializer.Serialize (writer, obj);
+				writer.Close ();
+
+				Assert.AreEqual (@"<?xml version=""1.0"" encoding=""utf-16""?>
+<Bug594490Class xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"" xml:lang=""hello world"" />",
+					writer.ToString (),
+					"Novell bug #594490 (https://bugzilla.novell.com/show_bug.cgi?id=594490) not fixed.");
+			}
+		}
 	}
 }
 

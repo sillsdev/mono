@@ -1,17 +1,14 @@
 //
 // System.IO.StreamReader.cs
 //
-// Author:
+// Authors:
 //   Dietmar Maurer (dietmar@ximian.com)
 //   Miguel de Icaza (miguel@ximian.com) 
 //   Marek Safar (marek.safar@gmail.com)
 //
 // (C) Ximian, Inc.  http://www.ximian.com
 // Copyright (C) 2004 Novell (http://www.novell.com)
-//
-
-//
-// Copyright (C) 2004 Novell, Inc (http://www.novell.com)
+// Copyright 2011, 2013 Xamarin Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -36,56 +33,22 @@
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
+#if NET_4_5
+using System.Threading.Tasks;
+#endif
 
 namespace System.IO {
 	[Serializable]
 	[ComVisible (true)]
-	public class StreamReader : TextReader {
+	public class StreamReader : TextReader
+	{
+		sealed class NullStreamReader : StreamReader
+		{
+			internal NullStreamReader ()
+			{
+				base_stream = Stream.Null;
+			}
 
-		const int DefaultBufferSize = 1024;
-		const int DefaultFileBufferSize = 4096;
-		const int MinimumBufferSize = 128;
-
-		//
-		// The input buffer
-		//
-		byte [] input_buffer;
-		
-		// Input buffer ready for recycling
-		static byte [] input_buffer_recycle;
-		static object input_buffer_recycle_lock = new object ();
-
-		//
-		// The decoded buffer from the above input buffer
-		//
-		char [] decoded_buffer;
-		static char[] decoded_buffer_recycle;
-
-		//
-		// Decoded bytes in decoded_buffer.
-		//
-		int decoded_count;
-
-		//
-		// Current position in the decoded_buffer
-		//
-		int pos;
-
-		//
-		// The buffer size that we are using
-		//
-		int buffer_size;
-
-		int do_checks;
-		
-		Encoding encoding;
-		Decoder decoder;
-
-		Stream base_stream;
-		bool mayBlock;
-		StringBuilder line_builder;
-
-		private class NullStreamReader : StreamReader {
 			public override int Peek ()
 			{
 				return -1;
@@ -111,43 +74,103 @@ namespace System.IO {
 				return String.Empty;
 			}
 
-			public override Stream BaseStream
-			{
+			public override Stream BaseStream {
 				get { return Stream.Null; }
 			}
 
-			public override Encoding CurrentEncoding
-			{
+			public override Encoding CurrentEncoding {
 				get { return Encoding.Unicode; }
 			}
 		}
 
+		const int DefaultBufferSize = 1024;
+		const int DefaultFileBufferSize = 4096;
+		const int MinimumBufferSize = 128;
+
+		//
+		// The input buffer
+		//
+		byte [] input_buffer;
+		
+		// Input buffer ready for recycling
+		static byte [] input_buffer_recycle;
+		static object input_buffer_recycle_lock = new object ();
+
+		//
+		// The decoded buffer from the above input buffer
+		//
+		char [] decoded_buffer;
+		static char[] decoded_buffer_recycle;
+
+		Encoding encoding;
+		Decoder decoder;
+		StringBuilder line_builder;
+		Stream base_stream;
+
+		//
+		// Decoded bytes in decoded_buffer.
+		//
+		int decoded_count;
+
+		//
+		// Current position in the decoded_buffer
+		//
+		int pos;
+
+		//
+		// The buffer size that we are using
+		//
+		int buffer_size;
+
+		int do_checks;
+		
+		bool mayBlock;
+
+#if NET_4_5
+		IDecoupledTask async_task;
+		readonly bool leave_open;
+#endif
+
 		public new static readonly StreamReader Null =  new NullStreamReader ();
 		
-		internal StreamReader() {}
+		private StreamReader() {}
 
 		public StreamReader(Stream stream)
-			: this (stream, Encoding.UTF8Unmarked, true, DefaultBufferSize) { }
+			: this (stream, Encoding.UTF8, true, DefaultBufferSize) { }
 
 		public StreamReader(Stream stream, bool detectEncodingFromByteOrderMarks)
-			: this (stream, Encoding.UTF8Unmarked, detectEncodingFromByteOrderMarks, DefaultBufferSize) { }
+			: this (stream, Encoding.UTF8, detectEncodingFromByteOrderMarks, DefaultBufferSize) { }
 
 		public StreamReader(Stream stream, Encoding encoding)
 			: this (stream, encoding, true, DefaultBufferSize) { }
 
 		public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks)
 			: this (stream, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize) { }
-		
+
+#if NET_4_5
 		public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
+			: this (stream, encoding, detectEncodingFromByteOrderMarks, bufferSize, false)
 		{
+		}
+
+		public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize, bool leaveOpen)
+#else
+		const bool leave_open = false;
+
+		public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
+#endif
+		{
+#if NET_4_5
+			leave_open = leaveOpen;
+#endif
 			Initialize (stream, encoding, detectEncodingFromByteOrderMarks, bufferSize);
 		}
 
 		public StreamReader(string path)
-			: this (path, Encoding.UTF8Unmarked, true, DefaultFileBufferSize) { }
+			: this (path, Encoding.UTF8, true, DefaultFileBufferSize) { }
 
 		public StreamReader(string path, bool detectEncodingFromByteOrderMarks)
-			: this (path, Encoding.UTF8Unmarked, detectEncodingFromByteOrderMarks, DefaultFileBufferSize) { }
+			: this (path, Encoding.UTF8, detectEncodingFromByteOrderMarks, DefaultFileBufferSize) { }
 
 		public StreamReader(string path, Encoding encoding)
 			: this (path, encoding, true, DefaultFileBufferSize) { }
@@ -232,18 +255,14 @@ namespace System.IO {
 			pos = 0;
 		}
 
-		public virtual Stream BaseStream
-		{
+		public virtual Stream BaseStream {
 			get {
 				return base_stream;
 			}
 		}
 
-		public virtual Encoding CurrentEncoding
-		{
+		public virtual Encoding CurrentEncoding {
 			get {
-				if (encoding == null)
-					throw new Exception ();
 				return encoding;
 			}
 		}
@@ -259,7 +278,7 @@ namespace System.IO {
 
 		protected override void Dispose (bool disposing)
 		{
-			if (disposing && base_stream != null)
+			if (disposing && base_stream != null && !leave_open)
 				base_stream.Close ();
 			
 			if (input_buffer != null && input_buffer.Length == DefaultBufferSize && input_buffer_recycle == null) {
@@ -356,6 +375,8 @@ namespace System.IO {
 
 		public void DiscardBufferedData ()
 		{
+			CheckState ();
+
 			pos = decoded_count = 0;
 			mayBlock = false;
 			// Discard internal state of the decoder too.
@@ -363,41 +384,46 @@ namespace System.IO {
 		}
 		
 		// the buffer is empty, fill it again
-		private int ReadBuffer ()
+		// Keep in sync with ReadBufferAsync
+		int ReadBuffer ()
 		{
 			pos = 0;
-			int cbEncoded = 0;
 
 			// keep looping until the decoder gives us some chars
 			decoded_count = 0;
-			int parse_start = 0;
-			do	
-			{
-				cbEncoded = base_stream.Read (input_buffer, 0, buffer_size);
-				
+			do {
+				var cbEncoded = base_stream.Read (input_buffer, 0, buffer_size);
 				if (cbEncoded <= 0)
 					return 0;
 
-				mayBlock = (cbEncoded < buffer_size);
-				if (do_checks > 0){
-					Encoding old = encoding;
-					parse_start = DoChecks (cbEncoded);
-					if (old != encoding){
-						int old_decoded_size = old.GetMaxCharCount (buffer_size) + 1;
-						int new_decoded_size = encoding.GetMaxCharCount (buffer_size) + 1;
-						if (old_decoded_size != new_decoded_size)
-							decoded_buffer = new char [new_decoded_size];
-						decoder = encoding.GetDecoder ();
-					}
-					do_checks = 0;
-					cbEncoded -= parse_start;
-				}
-				
-				decoded_count += decoder.GetChars (input_buffer, parse_start, cbEncoded, decoded_buffer, 0);
-				parse_start = 0;
+				decoded_count = ReadBufferCore (cbEncoded);
 			} while (decoded_count == 0);
 
 			return decoded_count;
+		}
+
+		int ReadBufferCore (int cbEncoded)
+		{
+			int parse_start;
+
+			mayBlock = cbEncoded < buffer_size;
+			if (do_checks > 0){
+				Encoding old = encoding;
+				parse_start = DoChecks (cbEncoded);
+				if (old != encoding){
+					int old_decoded_size = old.GetMaxCharCount (buffer_size) + 1;
+					int new_decoded_size = encoding.GetMaxCharCount (buffer_size) + 1;
+					if (old_decoded_size != new_decoded_size)
+						decoded_buffer = new char [new_decoded_size];
+					decoder = encoding.GetDecoder ();
+				}
+				do_checks = 0;
+				cbEncoded -= parse_start;
+			} else {
+				parse_start = 0;
+			}
+				
+			return decoder.GetChars (input_buffer, parse_start, cbEncoded, decoded_buffer, 0);
 		}
 
 		//
@@ -406,8 +432,8 @@ namespace System.IO {
 		//
 		public override int Peek ()
 		{
-			if (base_stream == null)
-				throw new ObjectDisposedException ("StreamReader", "Cannot read from a closed StreamReader");
+			CheckState ();
+
 			if (pos >= decoded_count && ReadBuffer () == 0)
 				return -1;
 
@@ -425,18 +451,17 @@ namespace System.IO {
 		
 		public override int Read ()
 		{
-			if (base_stream == null)
-				throw new ObjectDisposedException ("StreamReader", "Cannot read from a closed StreamReader");
+			CheckState ();
+
 			if (pos >= decoded_count && ReadBuffer () == 0)
 				return -1;
 
 			return decoded_buffer [pos++];
 		}
 
+		// Keep in sync with ReadAsync
 		public override int Read ([In, Out] char[] buffer, int index, int count)
 		{
-			if (base_stream == null)
-				throw new ObjectDisposedException ("StreamReader", "Cannot read from a closed StreamReader");
 			if (buffer == null)
 				throw new ArgumentNullException ("buffer");
 			if (index < 0)
@@ -447,9 +472,10 @@ namespace System.IO {
 			if (index > buffer.Length - count)
 				throw new ArgumentException ("index + count > buffer.Length");
 
+			CheckState ();
+
 			int chars_read = 0;
-			while (count > 0)
-			{
+			while (count > 0) {
 				if (pos >= decoded_count && ReadBuffer () == 0)
 					return chars_read > 0 ? chars_read : 0;
 
@@ -494,10 +520,10 @@ namespace System.IO {
 			return -1;
 		}
 
+		// Keep in sync with ReadLineAsync
 		public override string ReadLine()
 		{
-			if (base_stream == null)
-				throw new ObjectDisposedException ("StreamReader", "Cannot read from a closed StreamReader");
+			CheckState ();
 
 			if (pos >= decoded_count && ReadBuffer () == 0)
 				return null;
@@ -506,7 +532,7 @@ namespace System.IO {
 			int end = FindNextEOL ();
 			if (end < decoded_count && end >= begin)
 				return new string (decoded_buffer, begin, end - begin);
-			else if (end == -2)
+			if (end == -2)
 				return line_builder.ToString (0, line_builder.Length);
 
 			if (line_builder == null)
@@ -538,26 +564,208 @@ namespace System.IO {
 						return sb.ToString (0, sb.Length);
 					}
 					return line_builder.ToString (0, line_builder.Length);
-				} else if (end == -2)
+				}
+
+				if (end == -2)
 					return line_builder.ToString (0, line_builder.Length);
 			}
 		}
 
+		// Keep in sync with ReadToEndAsync
 		public override string ReadToEnd()
+		{
+			CheckState ();
+
+			StringBuilder text = new StringBuilder ();
+
+			do {
+				text.Append (decoded_buffer, pos, decoded_count - pos);
+			} while (ReadBuffer () != 0);
+
+			return text.ToString ();
+		}
+
+		void CheckState ()
 		{
 			if (base_stream == null)
 				throw new ObjectDisposedException ("StreamReader", "Cannot read from a closed StreamReader");
 
+#if NET_4_5
+			if (async_task != null && !async_task.IsCompleted)
+				throw new InvalidOperationException ();
+#endif
+		}
+
+#if NET_4_5
+		public override int ReadBlock ([In, Out] char[] buffer, int index, int count)
+		{
+			if (buffer == null)
+				throw new ArgumentNullException ("buffer");
+			if (index < 0)
+				throw new ArgumentOutOfRangeException ("index", "< 0");
+			if (count < 0)
+				throw new ArgumentOutOfRangeException ("count", "< 0");
+			// re-ordered to avoid possible integer overflow
+			if (index > buffer.Length - count)
+				throw new ArgumentException ("index + count > buffer.Length");
+
+			CheckState ();
+
+			return base.ReadBlock (buffer, index, count);
+		}
+
+		public override Task<int> ReadAsync (char[] buffer, int index, int count)
+		{
+			if (buffer == null)
+				throw new ArgumentNullException ("buffer");
+			if (index < 0)
+				throw new ArgumentOutOfRangeException ("index", "< 0");
+			if (count < 0)
+				throw new ArgumentOutOfRangeException ("count", "< 0");
+			// re-ordered to avoid possible integer overflow
+			if (index > buffer.Length - count)
+				throw new ArgumentException ("index + count > buffer.Length");
+
+			CheckState ();
+
+			DecoupledTask<int> res;
+			async_task = res = new DecoupledTask<int> (ReadAsyncCore (buffer, index, count));
+			return res.Task;
+		}
+
+		async Task<int> ReadAsyncCore (char[] buffer, int index, int count)
+		{
+			int chars_read = 0;
+
+			while (count > 0) {
+				if (pos >= decoded_count && await ReadBufferAsync ().ConfigureAwait (false) == 0)
+					return chars_read > 0 ? chars_read : 0;
+
+				int cch = Math.Min (decoded_count - pos, count);
+				Array.Copy (decoded_buffer, pos, buffer, index, cch);
+				pos += cch;
+				index += cch;
+				count -= cch;
+				chars_read += cch;
+				if (mayBlock)
+					break;
+			}
+
+			return chars_read;
+		}
+
+		public override Task<int> ReadBlockAsync (char[] buffer, int index, int count)
+		{
+			if (buffer == null)
+				throw new ArgumentNullException ("buffer");
+			if (index < 0)
+				throw new ArgumentOutOfRangeException ("index", "< 0");
+			if (count < 0)
+				throw new ArgumentOutOfRangeException ("count", "< 0");
+			// re-ordered to avoid possible integer overflow
+			if (index > buffer.Length - count)
+				throw new ArgumentException ("index + count > buffer.Length");
+
+			CheckState ();
+
+			DecoupledTask<int> res;
+			async_task = res = new DecoupledTask<int> (ReadAsyncCore (buffer, index, count));
+			return res.Task;
+		}
+
+		public override Task<string> ReadLineAsync ()
+		{
+			CheckState ();
+
+			DecoupledTask<string> res;
+			async_task = res = new DecoupledTask<string> (ReadLineAsyncCore ());
+			return res.Task;
+		}
+
+		async Task<string> ReadLineAsyncCore ()
+		{
+			if (pos >= decoded_count && await ReadBufferAsync ().ConfigureAwait (false) == 0)
+				return null;
+
+			int begin = pos;
+			int end = FindNextEOL ();
+			if (end < decoded_count && end >= begin)
+				return new string (decoded_buffer, begin, end - begin);
+			if (end == -2)
+				return line_builder.ToString (0, line_builder.Length);
+
+			if (line_builder == null)
+				line_builder = new StringBuilder ();
+			else
+				line_builder.Length = 0;
+
+			while (true) {
+				if (foundCR) // don't include the trailing CR if present
+					decoded_count--;
+
+				line_builder.Append (decoded_buffer, begin, decoded_count - begin);
+				if (await ReadBufferAsync ().ConfigureAwait (false) == 0) {
+					if (line_builder.Capacity > 32768) {
+						StringBuilder sb = line_builder;
+						line_builder = null;
+						return sb.ToString (0, sb.Length);
+					}
+					return line_builder.ToString (0, line_builder.Length);
+				}
+
+				begin = pos;
+				end = FindNextEOL ();
+				if (end < decoded_count && end >= begin) {
+					line_builder.Append (decoded_buffer, begin, end - begin);
+					if (line_builder.Capacity > 32768) {
+						StringBuilder sb = line_builder;
+						line_builder = null;
+						return sb.ToString (0, sb.Length);
+					}
+					return line_builder.ToString (0, line_builder.Length);
+				}
+
+				if (end == -2)
+					return line_builder.ToString (0, line_builder.Length);
+			}
+		}
+
+		public override Task<string> ReadToEndAsync ()
+		{
+			CheckState ();
+
+			DecoupledTask<string> res;
+			async_task = res = new DecoupledTask<string> (ReadToEndAsyncCore ());
+			return res.Task;
+		}
+
+		async Task<string> ReadToEndAsyncCore ()
+		{
 			StringBuilder text = new StringBuilder ();
 
-			int size = decoded_buffer.Length;
-			char [] buffer = new char [size];
-			int len;
-			
-			while ((len = Read (buffer, 0, size)) > 0)
-				text.Append (buffer, 0, len);
+			do {
+				text.Append (decoded_buffer, pos, decoded_count - pos);
+			} while (await ReadBufferAsync () != 0);
 
 			return text.ToString ();
 		}
+
+		async Task<int> ReadBufferAsync ()
+		{
+			pos = 0;
+
+			// keep looping until the decoder gives us some chars
+			decoded_count = 0;
+			do {
+				var cbEncoded = await base_stream.ReadAsync (input_buffer, 0, buffer_size).ConfigureAwait (false);
+				if (cbEncoded <= 0)
+					return 0;
+
+				decoded_count = ReadBufferCore (cbEncoded);
+			} while (decoded_count == 0);
+
+			return decoded_count;
+		}
+#endif
 	}
 }

@@ -66,9 +66,8 @@ namespace System.Data.OracleClient.Oci {
 				if (h == null)
 					throw new Exception ("Internal driver error: handle is null.");
 	
-				ulong errbufSize = 4096;
-				UIntPtr errbufSizep = new UIntPtr (errbufSize);
-				IntPtr errbuf = OciCalls.AllocateClear ((int)errbufSize);
+				int errbufSize = 4096;
+				IntPtr errbuf = OciCalls.AllocateClear (errbufSize);
 
 				OciCalls.OCIErrorGet (hwnd,
 					1,
@@ -79,16 +78,15 @@ namespace System.Data.OracleClient.Oci {
 					OciHandleType.Error);
 
 				byte[] bytea = new byte[errbufSize];
-				Marshal.Copy (errbuf, bytea, 0, (int)errbufSize);
+				Marshal.Copy (errbuf, bytea, 0, errbufSize);
 				errbufSize = 0;
 
 				// first call to OCICharSetToUnicode gets the size
-				OciCalls.OCICharSetToUnicode (h, null, bytea, ref errbufSizep);
-				errbufSize = errbufSizep.ToUInt64 ();
-				StringBuilder str = new StringBuilder ((int)errbufSize);
+				OciCalls.OCICharSetToUnicode (h, null, bytea, out errbufSize);
+				StringBuilder str = new StringBuilder (errbufSize);
 
 				// second call to OCICharSetToUnicode gets the string
-				OciCalls.OCICharSetToUnicode (h, str, bytea, ref errbufSizep);
+				OciCalls.OCICharSetToUnicode (h, str, bytea, out errbufSize);
 
 				string errmsg = String.Empty;
 				if (errbufSize > 0) {
@@ -106,9 +104,8 @@ namespace System.Data.OracleClient.Oci {
 			info.ErrorCode = 0;
 			info.ErrorMessage = String.Empty;
 
-			ulong errbufSize = 4096;
-			UIntPtr errbufSizep = new UIntPtr (errbufSize);
-			IntPtr errbuf = OciCalls.AllocateClear ((int)errbufSize);
+			int errbufSize = 4096;
+			IntPtr errbuf = OciCalls.AllocateClear (errbufSize);
 
 			OciCalls.OCIErrorGet (hand,
 				1,
@@ -119,7 +116,7 @@ namespace System.Data.OracleClient.Oci {
 				OciHandleType.Error);
 
 			byte[] bytea = new byte[errbufSize];
-			Marshal.Copy (errbuf, bytea, 0, (int)errbufSize);
+			Marshal.Copy (errbuf, bytea, 0, errbufSize);
 			errbufSize = 0;
 
 			OciHandle h = hand.Parent;
@@ -129,12 +126,11 @@ namespace System.Data.OracleClient.Oci {
 				throw new Exception ("Internal driver error: handle is null.");
 
 			// first call to OCICharSetToUnicode gets the size
-			OciCalls.OCICharSetToUnicode (h, null, bytea, ref errbufSizep);
-			errbufSize = errbufSizep.ToUInt64 ();
-			StringBuilder str = new StringBuilder ((int)errbufSize);
+			OciCalls.OCICharSetToUnicode (h, null, bytea, out errbufSize);
+			StringBuilder str = new StringBuilder (errbufSize);
 
 			// second call to OCICharSetToUnicode gets the string
-			OciCalls.OCICharSetToUnicode (h, str, bytea, ref errbufSizep);
+			OciCalls.OCICharSetToUnicode (h, str, bytea, out errbufSize);
 
 			string errmsg = String.Empty;
 			if (errbufSize > 0)

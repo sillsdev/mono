@@ -12,7 +12,7 @@ struct _tp_kqueue_data {
 };
 
 typedef struct _tp_kqueue_data tp_kqueue_data;
-static void tp_kqueue_modify (gpointer event_data, int fd, int operation, int events, gboolean is_new);
+static void tp_kqueue_modify (gpointer p, int fd, int operation, int events, gboolean is_new);
 static void tp_kqueue_shutdown (gpointer event_data);
 static void tp_kqueue_wait (gpointer event_data);
 
@@ -36,17 +36,20 @@ static void
 kevent_change (int kfd, struct kevent *evt, const char *error_str)
 {
 	if (kevent (kfd, evt, 1, NULL, 0, NULL) == -1) {
-		int err = errno;	
+		int err = errno;
 		g_message ("kqueue(%s): %d %s", error_str, err, g_strerror (err));
 	}
 }
 
 static void
-tp_kqueue_modify (gpointer event_data, int fd, int operation, int events, gboolean is_new)
+tp_kqueue_modify (gpointer p, int fd, int operation, int events, gboolean is_new)
 {
-	tp_kqueue_data *data = event_data;
+	SocketIOData *socket_io_data;
+	socket_io_data = p;
+	tp_kqueue_data *data = socket_io_data->event_data;
 	struct kevent evt;
 
+	memset (&evt, 0, sizeof (evt));
 	if ((events & MONO_POLLIN) != 0) {
 		EV_SET (&evt, fd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, 0);
 		kevent_change (data->fd, &evt, "ADD read");
@@ -56,6 +59,7 @@ tp_kqueue_modify (gpointer event_data, int fd, int operation, int events, gboole
 		EV_SET (&evt, fd, EVFILT_WRITE, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, 0);
 		kevent_change (data->fd, &evt, "ADD write");
 	}
+	LeaveCriticalSection (&socket_io_data->io_lock);
 }
 
 static void
@@ -73,7 +77,6 @@ tp_kqueue_wait (gpointer p)
 {
 	SocketIOData *socket_io_data;
 	int kfd;
-	MonoInternalThread *thread;
 	struct kevent *events, *evt;
 	int ready = 0, i;
 	gpointer async_results [KQUEUE_NEVENTS * 2]; // * 2 because each loop can add up to 2 results here
@@ -83,17 +86,20 @@ tp_kqueue_wait (gpointer p)
 	socket_io_data = p;
 	data = socket_io_data->event_data;
 	kfd = data->fd;
-	thread = mono_thread_internal_current ();
 	events = g_new0 (struct kevent, KQUEUE_NEVENTS);
 
 	while (1) {
+	
+		mono_gc_set_skip_thread (TRUE);
+
 		do {
 			if (ready == -1) {
-				if (THREAD_WANTS_A_BREAK (thread))
-					mono_thread_interruption_checkpoint ();
+				check_for_interruption_critical ();
 			}
 			ready = kevent (kfd, NULL, 0, events, KQUEUE_NEVENTS, NULL);
 		} while (ready == -1 && errno == EINTR);
+
+		mono_gc_set_skip_thread (FALSE);
 
 		if (ready == -1) {
 			int err = errno;
@@ -151,7 +157,7 @@ tp_kqueue_wait (gpointer p)
 		}
 		LeaveCriticalSection (&socket_io_data->io_lock);
 		threadpool_append_jobs (&async_io_tp, (MonoObject **) async_results, nresults);
-		memset (async_results, 0, sizeof (gpointer) * nresults);
+		mono_gc_bzero_aligned (async_results, sizeof (gpointer) * nresults);
 	}
 }
 #undef KQUEUE_NEVENTS

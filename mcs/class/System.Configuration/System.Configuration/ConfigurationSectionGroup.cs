@@ -27,14 +27,13 @@
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
 //
 
-#if NET_2_0
 using System;
 
 namespace System.Configuration
 {
 	public class ConfigurationSectionGroup
 	{
-		bool require_declaration, declared;
+		bool require_declaration;
 		string name, type_name;
 
 		ConfigurationSectionCollection sections;
@@ -81,8 +80,9 @@ namespace System.Configuration
 			ForceDeclaration (true);
 		}
 		
+		[MonoTODO]
 		public bool IsDeclared {
-			get { return declared; }
+			get { return false; }
 		}
 
 		[MonoTODO]
@@ -119,4 +119,4 @@ namespace System.Configuration
 		}
 	}
 }
-#endif
+

@@ -38,18 +38,16 @@ using System.Diagnostics;
 
 namespace System.Collections {
 
+	[Serializable]
+#if INSIDE_CORLIB
 	[ComVisible(true)]
 	[DebuggerDisplay ("Count={Count}")]
 	[DebuggerTypeProxy (typeof (CollectionDebuggerView))]
-	[Serializable]
-#if INSIDE_CORLIB
-	public
+	public class Hashtable : IDictionary, ICollection, 
+		IEnumerable, ICloneable, ISerializable, IDeserializationCallback {
 #else
-	internal
+	internal class Hashtable : IDictionary, ICollection, IEnumerable {
 #endif
-	class Hashtable : IDictionary, ICollection, 
-		IEnumerable, ICloneable, ISerializable, IDeserializationCallback
-	{
 
 		[Serializable]
 		internal struct Slot {
@@ -80,61 +78,21 @@ namespace System.Collections {
 		const int CHAIN_MARKER  = ~Int32.MaxValue;
 
 
-		private int inUse;
-		private int modificationCount;
-		private float loadFactor;
 		private Slot [] table;
 		// Hashcodes of the corresponding entries in the slot table. Kept separate to
 		// help the GC
 		private int [] hashes;
-
-		private int threshold;
-	
 		private HashKeys hashKeys;
 		private HashValues hashValues;
-
 		private IHashCodeProvider hcpRef;
 		private IComparer comparerRef;
 		private SerializationInfo serializationInfo;
-
 		private IEqualityComparer equalityComparer;
 
-		private static readonly int [] primeTbl = {
-			11,
-			19,
-			37,
-			73,
-			109,
-			163,
-			251,
-			367,
-			557,
-			823,
-			1237,
-			1861,
-			2777,
-			4177,
-			6247,
-			9371,
-			14057,
-			21089,
-			31627,
-			47431,
-			71143,
-			106721,
-			160073,
-			240101,
-			360163,
-			540217,
-			810343,
-			1215497,
-			1823231,
-			2734867,
-			4102283,
-			6153409,
-			9230113,
-			13845163
-		};
+		private int inUse;
+		private int modificationCount;
+		private float loadFactor;
+		private int threshold;
 
 		//
 		// Constructors
@@ -158,7 +116,7 @@ namespace System.Collections {
                                 throw new ArgumentException ("Size is too big");
 
                         int size = (int) tableSize;
-			size = ToPrime (size);
+			size = HashPrimeNumbers.ToPrime (size);
 			this.SetTable (new Slot [size], new int [size]);
 
 			this.hcp = hcp;
@@ -574,7 +532,7 @@ namespace System.Collections {
 			if (keys.Length != values.Length) 
 			  throw new SerializationException("Keys and values of uneven size");
 			 
-			size = ToPrime (size);
+			size = HashPrimeNumbers.ToPrime (size);
 			this.SetTable (new Slot [size], new int [size]);
 			
 			for(int i=0;i<keys.Length;i++)
@@ -697,7 +655,7 @@ namespace System.Collections {
 			//   Hashtable is automatically increased
 			//   to the smallest prime number that is larger
 			//   than twice the current number of Hashtable buckets
-			uint newSize = (uint)ToPrime ((oldSize<<1)|1);
+			uint newSize = (uint)HashPrimeNumbers.ToPrime ((oldSize<<1)|1);
 
 
 			Slot [] newTable = new Slot [newSize];
@@ -812,45 +770,6 @@ namespace System.Collections {
 		}
 
 
-
-		//
-		// Private static methods
-		//
-		internal static bool TestPrime (int x)
-		{
-			if ((x & 1) != 0) {
-				int top = (int)Math.Sqrt (x);
-				
-				for (int n = 3; n < top; n += 2) {
-					if ((x % n) == 0)
-						return false;
-				}
-				return true;
-			}
-			// There is only one even prime - 2.
-			return (x == 2);
-		}
-
-		internal static int CalcPrime (int x)
-		{
-			for (int i = (x & (~1))-1; i< Int32.MaxValue; i += 2) {
-				if (TestPrime (i)) return i;
-			}
-			return x;
-		}
-
-		internal static int ToPrime (int x)
-		{
-			for (int i = 0; i < primeTbl.Length; i++) {
-				if (x <= primeTbl [i])
-					return primeTbl [i];
-			}
-			return CalcPrime (x);
-		}
-
-
-
-
 		//
 		// Inner classes
 		//
@@ -861,15 +780,15 @@ namespace System.Collections {
 		private sealed class Enumerator : IDictionaryEnumerator, IEnumerator {
 
 			private Hashtable host;
+			private Object currentKey;
+			private Object currentValue;
+
 			private int stamp;
 			private int pos;
 			private int size;
 			private EnumeratorMode mode;
 
-			private Object currentKey;
-			private Object currentValue;
-
-			private readonly static string xstr = "Hashtable.Enumerator: snapshot out of sync.";
+			const string xstr = "Hashtable.Enumerator: snapshot out of sync.";
 
 			public Enumerator (Hashtable host, EnumeratorMode mode) {
 				this.host = host;
@@ -878,10 +797,6 @@ namespace System.Collections {
 				this.mode = mode;
 				Reset ();
 			}
-
-			public Enumerator (Hashtable host)
-			           : this (host, EnumeratorMode.KEY_MODE) {}
-
 
 			private void FailFast ()
 			{
@@ -963,8 +878,10 @@ namespace System.Collections {
 		}
 
 		[Serializable]
+#if INSIDE_CORLIB
 		[DebuggerDisplay ("Count={Count}")]
 		[DebuggerTypeProxy (typeof (CollectionDebuggerView))]
+#endif
 		private class HashKeys : ICollection, IEnumerable {
 
 			private Hashtable host;
@@ -1017,8 +934,10 @@ namespace System.Collections {
 		}
 
 		[Serializable]
+#if INSIDE_CORLIB
 		[DebuggerDisplay ("Count={Count}")]
 		[DebuggerTypeProxy (typeof (CollectionDebuggerView))]
+#endif
 		private class HashValues : ICollection, IEnumerable {
 
 			private Hashtable host;

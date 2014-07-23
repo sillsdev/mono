@@ -37,20 +37,21 @@ namespace Mono.CSharp
 		EXTERN    = 0x0800,
 		VOLATILE  = 0x1000,
 		UNSAFE    = 0x2000,
-		TOP       = 0x4000,
+		ASYNC     = 0x4000,
+		TOP       = 0x8000,
 
 		//
 		// Compiler specific flags
 		//
-		PROPERTY_CUSTOM 		= 0x4000,
+		PROPERTY_CUSTOM 		= 0x10000,
 
-		ASYNC					= 0x10000,
 		PARTIAL					= 0x20000,
 		DEFAULT_ACCESS_MODIFER	= 0x40000,
 		METHOD_EXTENSION		= 0x80000,
 		COMPILER_GENERATED		= 0x100000,
 		BACKING_FIELD			= 0x200000,
 		DEBUGGER_HIDDEN			= 0x400000,
+		DEBUGGER_STEP_THROUGH	= 0x800000,
 
 		AccessibilityMask = PUBLIC | PROTECTED | INTERNAL | PRIVATE,
 		AllowedExplicitImplFlags = UNSAFE | EXTERN,
@@ -109,6 +110,8 @@ namespace Mono.CSharp
 				s = "volatile"; break;
 			case Modifiers.UNSAFE:
 				s = "unsafe"; break;
+			case Modifiers.ASYNC:
+				s = "async"; break;
 			}
 
 			return s;
@@ -260,7 +263,7 @@ namespace Mono.CSharp
 				return mod;
 			}
 
-			for (i = 1; i <= (int) Modifiers.TOP; i <<= 1) {
+			for (i = 1; i < (int) Modifiers.TOP; i <<= 1) {
 				if ((i & invalid_flags) == 0)
 					continue;
 

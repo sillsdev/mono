@@ -37,7 +37,7 @@ using System.Reflection;
 using System.Xml;
 using System.Xml.Schema;
 using System.Text;
-#if !TARGET_JVM && !MOBILE
+#if !TARGET_JVM && !NET_2_1
 using System.CodeDom;
 using System.CodeDom.Compiler;
 using Microsoft.CSharp;
@@ -120,7 +120,7 @@ namespace System.Xml.Serialization
 			//       debugging pourposes by adding the "nofallback" option.
 			//       For example: MONO_XMLSERIALIZER_THS=0,nofallback
 			
-#if TARGET_JVM || MOBILE
+#if TARGET_JVM || NET_2_1
 			string db = null;
 			string th = null;
 			generationThreshold = -1;
@@ -150,7 +150,7 @@ namespace System.Xml.Serialization
 			}
 #endif
 			deleteTempFiles = (db == null || db == "no");
-#if !MOBILE
+#if !NET_2_1
 			IDictionary table = (IDictionary) ConfigurationSettings.GetConfig("system.diagnostics");
 			if (table != null) 
 			{
@@ -249,11 +249,10 @@ namespace System.Xml.Serialization
 #endregion // Constructors
 
 #region Events
-
+		private UnreferencedObjectEventHandler onUnreferencedObject;
 		private XmlAttributeEventHandler onUnknownAttribute;
 		private XmlElementEventHandler onUnknownElement;
 		private XmlNodeEventHandler onUnknownNode;
-		private UnreferencedObjectEventHandler onUnreferencedObject;
 
 		public event XmlAttributeEventHandler UnknownAttribute 
 		{
@@ -268,11 +267,6 @@ namespace System.Xml.Serialization
 		public event XmlNodeEventHandler UnknownNode 
 		{
 			add { onUnknownNode += value; } remove { onUnknownNode -= value; }
-		}
-
-		public event UnreferencedObjectEventHandler UnreferencedObject 
-		{
-			add { onUnreferencedObject += value; } remove { onUnreferencedObject -= value; }
 		}
 
 
@@ -296,6 +290,10 @@ namespace System.Xml.Serialization
 			if (onUnreferencedObject != null) onUnreferencedObject(this, e);
 		}
 
+		public event UnreferencedObjectEventHandler UnreferencedObject 
+		{
+			add { onUnreferencedObject += value; } remove { onUnreferencedObject -= value; }
+		}
 
 #endregion // Events
 
@@ -396,11 +394,11 @@ namespace System.Xml.Serialization
 			return sers;
 		}
 
-		public static XmlSerializer [] FromTypes (Type [] mappings)
+		public static XmlSerializer [] FromTypes (Type [] types)
 		{
-			XmlSerializer [] sers = new XmlSerializer [mappings.Length];
-			for (int n=0; n<mappings.Length; n++)
-				sers[n] = new XmlSerializer (mappings[n]);
+			XmlSerializer [] sers = new XmlSerializer [types.Length];
+			for (int n=0; n<types.Length; n++)
+				sers[n] = new XmlSerializer (types[n]);
 			return sers;
 		}
 
@@ -421,9 +419,11 @@ namespace System.Xml.Serialization
 			}
 		}
 
+		static Encoding DefaultEncoding = Encoding.Default;
+
 		public void Serialize (Stream stream, object o)
 		{
-			XmlTextWriter xmlWriter = new XmlTextWriter (stream, System.Text.Encoding.Default);
+			XmlTextWriter xmlWriter = new XmlTextWriter (stream, DefaultEncoding);
 			xmlWriter.Formatting = Formatting.Indented;
 			Serialize (xmlWriter, o, null);
 		}
@@ -442,7 +442,7 @@ namespace System.Xml.Serialization
 
 		public void Serialize (Stream stream, object o, XmlSerializerNamespaces	namespaces)
 		{
-			XmlTextWriter xmlWriter	= new XmlTextWriter (stream, System.Text.Encoding.Default);
+			XmlTextWriter xmlWriter	= new XmlTextWriter (stream, DefaultEncoding);
 			xmlWriter.Formatting = Formatting.Indented;
 			Serialize (xmlWriter, o, namespaces);
 		}
@@ -455,7 +455,7 @@ namespace System.Xml.Serialization
 			xmlWriter.Flush();
 		}
 
-		public void Serialize (XmlWriter writer, object o, XmlSerializerNamespaces namespaces)
+		public void Serialize (XmlWriter xmlWriter, object o, XmlSerializerNamespaces namespaces)
 		{
 			XmlSerializationWriter xsWriter;
 
@@ -476,9 +476,9 @@ namespace System.Xml.Serialization
 #endif
 				}
 
-				xsWriter.Initialize (writer, namespaces);
+				xsWriter.Initialize (xmlWriter, namespaces);
 				Serialize (o, xsWriter);
-				writer.Flush ();
+				xmlWriter.Flush ();
 			} catch (Exception ex) {
 				if (ex is TargetInvocationException)
 					ex = ex.InnerException;
@@ -490,8 +490,6 @@ namespace System.Xml.Serialization
 				throw;
 			}
 		}
-		
-#if NET_2_0
 		
 		[MonoTODO]
 		public object Deserialize (XmlReader xmlReader, string encodingStyle, XmlDeserializationEvents events)
@@ -567,7 +565,6 @@ namespace System.Xml.Serialization
 		{
 			throw new NotImplementedException ();
 		}
-#endif
 		
 		XmlSerializationWriter CreateWriter (XmlMapping typeMapping)
 		{
@@ -582,6 +579,7 @@ namespace System.Xml.Serialization
 				}
 			}
 			
+#if !NET_2_1
 			if (!typeMapping.Source.CanBeGenerated || generationThreshold == -1)
 				return new XmlSerializationWriterInterpreter (typeMapping);
 
@@ -596,11 +594,13 @@ namespace System.Xml.Serialization
 					throw new InvalidOperationException ("Error while generating serializer");
 			}
 			
+#endif
 			return new XmlSerializationWriterInterpreter (typeMapping);
 		}
 		
 		XmlSerializationReader CreateReader (XmlMapping typeMapping)
 		{
+#if !NET_2_1
 			XmlSerializationReader reader;
 			
 			lock (this) {
@@ -625,11 +625,12 @@ namespace System.Xml.Serialization
 				if (!generatorFallback)
 					throw new InvalidOperationException ("Error while generating serializer");
 			}
-			
+
+#endif
 			return new XmlSerializationReaderInterpreter (typeMapping);
 		}
 		
-#if TARGET_JVM || MOBILE
+#if TARGET_JVM || NET_2_1
  		void CheckGeneratedTypes (XmlMapping typeMapping)
  		{
 			throw new NotImplementedException();

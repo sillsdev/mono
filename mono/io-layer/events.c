@@ -17,11 +17,14 @@
 #include <mono/io-layer/handles-private.h>
 #include <mono/io-layer/misc-private.h>
 
-#include <mono/io-layer/mono-mutex.h>
-
 #include <mono/io-layer/event-private.h>
 
-#undef DEBUG
+#include <mono/utils/mono-mutex.h>
+#if 0
+#define DEBUG(...) g_message(__VA_ARGS__)
+#else
+#define DEBUG(...)
+#endif
 
 static void event_signal(gpointer handle);
 static gboolean event_own (gpointer handle);
@@ -112,9 +115,7 @@ static gboolean event_own (gpointer handle)
 		return (FALSE);
 	}
 	
-#ifdef DEBUG
-	g_message("%s: owning event handle %p", __func__, handle);
-#endif
+	DEBUG("%s: owning event handle %p", __func__, handle);
 
 	if(event_handle->manual==FALSE) {
 		g_assert (event_handle->set_count > 0);
@@ -138,9 +139,7 @@ static gboolean namedevent_own (gpointer handle)
 	struct _WapiHandle_namedevent *namedevent_handle;
 	gboolean ok;
 	
-#ifdef DEBUG
-	g_message ("%s: owning named event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: owning named event handle %p", __func__, handle);
 
 	ok = _wapi_lookup_handle (handle, WAPI_HANDLE_NAMEDEVENT,
 				  (gpointer *)&namedevent_handle);
@@ -173,9 +172,7 @@ static gpointer event_create (WapiSecurityAttributes *security G_GNUC_UNUSED,
 	 */
 	SetLastError (ERROR_SUCCESS);
 
-#ifdef DEBUG
-	g_message ("%s: Creating unnamed event", __func__);
-#endif
+	DEBUG ("%s: Creating unnamed event", __func__);
 	
 	event_handle.manual = manual;
 	event_handle.set_count = 0;
@@ -193,8 +190,6 @@ static gpointer event_create (WapiSecurityAttributes *security G_GNUC_UNUSED,
 		return(NULL);
 	}
 
-	pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle,
-			      handle);
 	thr_ret = _wapi_handle_lock_handle (handle);
 	g_assert (thr_ret == 0);
 	
@@ -202,13 +197,10 @@ static gpointer event_create (WapiSecurityAttributes *security G_GNUC_UNUSED,
 		_wapi_handle_set_signal_state (handle, TRUE, FALSE);
 	}
 	
-#ifdef DEBUG
-	g_message("%s: created new event handle %p", __func__, handle);
-#endif
+	DEBUG("%s: created new event handle %p", __func__, handle);
 
 	thr_ret = _wapi_handle_unlock_handle (handle);
 	g_assert (thr_ret == 0);
-	pthread_cleanup_pop (0);
 
 	return(handle);
 }
@@ -239,9 +231,7 @@ static gpointer namedevent_create (WapiSecurityAttributes *security G_GNUC_UNUSE
 	
 	utf8_name = g_utf16_to_utf8 (name, -1, NULL, NULL, NULL);
 	
-#ifdef DEBUG
-	g_message ("%s: Creating named event [%s]", __func__, utf8_name);
-#endif
+	DEBUG ("%s: Creating named event [%s]", __func__, utf8_name);
 	
 	offset = _wapi_search_handle_namespace (WAPI_HANDLE_NAMEDEVENT,
 						utf8_name);
@@ -312,9 +302,7 @@ static gpointer namedevent_create (WapiSecurityAttributes *security G_GNUC_UNUSE
 		_wapi_handle_unlock_shared_handles ();
 	}
 	
-#ifdef DEBUG
-	g_message ("%s: returning event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: returning event handle %p", __func__, handle);
 
 cleanup:
 	g_free (utf8_name);
@@ -373,14 +361,10 @@ static gboolean event_pulse (gpointer handle)
 		return(FALSE);
 	}
 	
-	pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle,
-			      handle);
 	thr_ret = _wapi_handle_lock_handle (handle);
 	g_assert (thr_ret == 0);
 
-#ifdef DEBUG
-	g_message ("%s: Pulsing event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: Pulsing event handle %p", __func__, handle);
 
 	if (event_handle->manual == TRUE) {
 		_wapi_handle_set_signal_state (handle, TRUE, TRUE);
@@ -391,8 +375,6 @@ static gboolean event_pulse (gpointer handle)
 
 	thr_ret = _wapi_handle_unlock_handle (handle);
 	g_assert (thr_ret == 0);
-	
-	pthread_cleanup_pop (0);
 	
 	if (event_handle->manual == TRUE) {
 		/* For a manual-reset event, we're about to try and
@@ -407,12 +389,9 @@ static gboolean event_pulse (gpointer handle)
 		 * have proceeded.  Currently we rely on broadcasting
 		 * a condition.
 		 */
-#ifdef DEBUG
-		g_message ("%s: Obtained write lock on event handle %p",
+		DEBUG ("%s: Obtained write lock on event handle %p",
 			   __func__, handle);
-#endif
 
-		pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle, handle);
 		thr_ret = _wapi_handle_lock_handle (handle);
 		g_assert (thr_ret == 0);
 		
@@ -420,7 +399,6 @@ static gboolean event_pulse (gpointer handle)
 
 		thr_ret = _wapi_handle_unlock_handle (handle);
 		g_assert (thr_ret == 0);
-		pthread_cleanup_pop (0);
 	}
 
 	return(TRUE);
@@ -443,9 +421,7 @@ static gboolean namedevent_pulse (gpointer handle)
 	thr_ret = _wapi_handle_lock_shared_handles ();
 	g_assert (thr_ret == 0);
 
-#ifdef DEBUG
-	g_message ("%s: Pulsing named event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: Pulsing named event handle %p", __func__, handle);
 
 	if (namedevent_handle->manual == TRUE) {
 		_wapi_shared_handle_set_signal_state (handle, TRUE);
@@ -469,10 +445,8 @@ static gboolean namedevent_pulse (gpointer handle)
 		 * have proceeded.  Currently we rely on waiting for
 		 * twice the shared handle poll interval.
 		 */
-#ifdef DEBUG
-		g_message ("%s: Obtained write lock on event handle %p",
+		DEBUG ("%s: Obtained write lock on event handle %p",
 			   __func__, handle);
-#endif
 
 		thr_ret = _wapi_handle_lock_shared_handles ();
 		g_assert (thr_ret == 0);
@@ -533,25 +507,17 @@ static gboolean event_reset (gpointer handle)
 		return(FALSE);
 	}
 
-#ifdef DEBUG
-	g_message ("%s: Resetting event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: Resetting event handle %p", __func__, handle);
 
-	pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle,
-			      handle);
 	thr_ret = _wapi_handle_lock_handle (handle);
 	g_assert (thr_ret == 0);
 	
 	if (_wapi_handle_issignalled (handle) == FALSE) {
-#ifdef DEBUG
-		g_message ("%s: No need to reset event handle %p", __func__,
+		DEBUG ("%s: No need to reset event handle %p", __func__,
 			   handle);
-#endif
 	} else {
-#ifdef DEBUG
-		g_message ("%s: Obtained write lock on event handle %p",
+		DEBUG ("%s: Obtained write lock on event handle %p",
 			   __func__, handle);
-#endif
 
 		_wapi_handle_set_signal_state (handle, FALSE, FALSE);
 	}
@@ -560,8 +526,6 @@ static gboolean event_reset (gpointer handle)
 	
 	thr_ret = _wapi_handle_unlock_handle (handle);
 	g_assert (thr_ret == 0);
-	
-	pthread_cleanup_pop (0);
 	
 	return(TRUE);
 }
@@ -580,23 +544,17 @@ static gboolean namedevent_reset (gpointer handle)
 		return(FALSE);
 	}
 
-#ifdef DEBUG
-	g_message ("%s: Resetting named event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: Resetting named event handle %p", __func__, handle);
 
 	thr_ret = _wapi_handle_lock_shared_handles ();
 	g_assert (thr_ret == 0);
 	
 	if (_wapi_handle_issignalled (handle) == FALSE) {
-#ifdef DEBUG
-		g_message ("%s: No need to reset named event handle %p",
+		DEBUG ("%s: No need to reset named event handle %p",
 			   __func__, handle);
-#endif
 	} else {
-#ifdef DEBUG
-		g_message ("%s: Obtained write lock on named event handle %p",
+		DEBUG ("%s: Obtained write lock on named event handle %p",
 			   __func__, handle);
-#endif
 
 		_wapi_shared_handle_set_signal_state (handle, FALSE);
 	}
@@ -650,14 +608,10 @@ static gboolean event_set (gpointer handle)
 		return(FALSE);
 	}
 	
-	pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle,
-			      handle);
 	thr_ret = _wapi_handle_lock_handle (handle);
 	g_assert (thr_ret == 0);
 
-#ifdef DEBUG
-	g_message ("%s: Setting event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: Setting event handle %p", __func__, handle);
 
 	if (event_handle->manual == TRUE) {
 		_wapi_handle_set_signal_state (handle, TRUE, TRUE);
@@ -669,8 +623,6 @@ static gboolean event_set (gpointer handle)
 	thr_ret = _wapi_handle_unlock_handle (handle);
 	g_assert (thr_ret == 0);
 	
-	pthread_cleanup_pop (0);
-
 	return(TRUE);
 }
 
@@ -691,9 +643,7 @@ static gboolean namedevent_set (gpointer handle)
 	thr_ret = _wapi_handle_lock_shared_handles ();
 	g_assert (thr_ret == 0);
 
-#ifdef DEBUG
-	g_message ("%s: Setting named event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: Setting named event handle %p", __func__, handle);
 
 	if (namedevent_handle->manual == TRUE) {
 		_wapi_shared_handle_set_signal_state (handle, TRUE);
@@ -758,9 +708,7 @@ gpointer OpenEvent (guint32 access G_GNUC_UNUSED, gboolean inherit G_GNUC_UNUSED
 
 	utf8_name = g_utf16_to_utf8 (name, -1, NULL, NULL, NULL);
 	
-#ifdef DEBUG
-	g_message ("%s: Opening named event [%s]", __func__, utf8_name);
-#endif
+	DEBUG ("%s: Opening named event [%s]", __func__, utf8_name);
 	
 	offset = _wapi_search_handle_namespace (WAPI_HANDLE_NAMEDEVENT,
 						utf8_name);
@@ -789,9 +737,7 @@ gpointer OpenEvent (guint32 access G_GNUC_UNUSED, gboolean inherit G_GNUC_UNUSED
 	}
 	ret = handle;
 
-#ifdef DEBUG
-	g_message ("%s: returning named event handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: returning named event handle %p", __func__, handle);
 
 cleanup:
 	g_free (utf8_name);

@@ -8,6 +8,8 @@
 // Copyright (C) 2004-2005 Novell, Inc (http://www.novell.com)
 //
 
+#if !MOBILE
+
 using System;
 using System.Collections;
 using System.IO;
@@ -111,6 +113,25 @@ namespace MonoTestsXml
 			Assert.IsTrue (zone, "Zone-2");
 			Assert.IsTrue (site, "Site-2");
 		}
+
+#if NET_4_5
+		[Test]
+		[Category("Async")]
+		public void TestAsync ()
+		{
+			var loc = Assembly.GetExecutingAssembly ().Location;
+			Evidence e = XmlSecureResolver.CreateEvidenceForUrl (loc);
+			var ur = new XmlUrlResolver ();
+			var sr = new XmlSecureResolver (ur, e);
+			Uri resolved = sr.ResolveUri (null, loc);
+			Assert.AreEqual ("file", resolved.Scheme);
+			var task = sr.GetEntityAsync (resolved, null, typeof (Stream));
+			Assert.That (task.Wait (3000));
+			Assert.IsInstanceOfType (typeof (Stream), task.Result);
+		}
+#endif
+
 	}
 }
 
+#endif

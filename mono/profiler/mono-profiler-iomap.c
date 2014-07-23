@@ -23,7 +23,7 @@
 #include <mono/metadata/threads.h>
 #include <mono/metadata/profiler.h>
 #include <mono/metadata/loader.h>
-#include <mono/io-layer/mono-mutex.h>
+#include <mono/utils/mono-mutex.h>
 
 #define LOCATION_INDENT "        "
 #define BACKTRACE_SIZE 64
@@ -208,7 +208,7 @@ static inline void print_report (const gchar *format, ...)
 
 static inline void append_report (GString **report, const gchar *format, ...)
 {
-#if GLIB_CHECK_VERSION(2,14,0)
+#if defined (_EGLIB_MAJOR) || GLIB_CHECK_VERSION(2,14,0)
 	va_list ap;
 	if (!*report)
 		*report = g_string_new ("");
@@ -532,7 +532,7 @@ void mono_profiler_startup (const char *desc)
 {
 	MonoProfiler *prof = g_new0 (MonoProfiler, 1);
 
-	mono_mutex_init (&mismatched_files_section, NULL);
+	mono_mutex_init (&mismatched_files_section);
 	prof->mismatched_files_hash = g_hash_table_new (mismatched_files_guint32_hash, mismatched_files_guint32_equal);
 	prof->saved_strings_hash = g_hash_table_new (NULL, NULL);
 	prof->string_locations_hash = g_hash_table_new (mismatched_files_guint32_hash, mismatched_files_guint32_equal);

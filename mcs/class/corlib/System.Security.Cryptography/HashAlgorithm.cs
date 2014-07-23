@@ -112,7 +112,11 @@ namespace System.Security.Cryptography {
 	
 		public static HashAlgorithm Create () 
 		{
+#if FULL_AOT_RUNTIME
+			return new System.Security.Cryptography.SHA1CryptoServiceProvider ();
+#else
 			return Create ("System.Security.Cryptography.HashAlgorithm");
+#endif
 		}
 	
 		public static HashAlgorithm Create (string hashName)
@@ -153,7 +157,11 @@ namespace System.Security.Cryptography {
 			get { return 1; }
 		}
 
+#if NET_4_0
+		public void Dispose ()
+#else
 		void IDisposable.Dispose () 
+#endif
 		{
 			Dispose (true);
 			GC.SuppressFinalize (this);  // Finalization is now unnecessary

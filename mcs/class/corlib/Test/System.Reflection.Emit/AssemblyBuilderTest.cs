@@ -2,8 +2,10 @@
 // AssemblyBuilderTest.cs - NUnit Test Cases for the AssemblyBuilder class
 //
 // Zoltan Varga (vargaz@freemail.hu)
+// Andres G. Aragoneses (andres@7digital.com)
 //
 // (C) Ximian, Inc.  http://www.ximian.com
+// (C) 7digital Media, Ltd. http://www.7digital.com
 //
 //
 
@@ -76,11 +78,15 @@ public class AssemblyBuilderTest
 		return assemblyName;
 	}
 
-	private AssemblyBuilder genAssembly ()
+	private AssemblyBuilder genAssembly (AssemblyBuilderAccess access)
 	{
 		return domain.DefineDynamicAssembly (genAssemblyName (),
-						     AssemblyBuilderAccess.RunAndSave,
+						     access,
 						     tempDir);
+	}
+	private AssemblyBuilder genAssembly ()
+	{
+		return genAssembly (AssemblyBuilderAccess.RunAndSave);
 	}
 
 	private MethodInfo genEntryFunction (AssemblyBuilder assembly)
@@ -276,14 +282,12 @@ public class AssemblyBuilderTest
 		Assert.IsNull (ab.GetDynamicModule ("FOO4"));
 	}
 
-#if NET_1_1
 	[Test]
 	public void TestImageRuntimeVersion ()
 	{
 		string version = ab.ImageRuntimeVersion;
 		Assert.IsTrue (version.Length > 0);
 	}
-#endif
 
 	[Test]
 	public void TestAddResourceFile_Name_Null ()
@@ -779,6 +783,10 @@ public class AssemblyBuilderTest
 		try {
 			ab.Save ("lib.dll");
 			Assert.Fail ("#A1");
+#if NET_4_0
+		} catch (CultureNotFoundException ex) {
+		}
+#else
 		} catch (ArgumentException ex) {
 			// Culture name doesnotexist is not supported
 			Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#A2");
@@ -787,6 +795,7 @@ public class AssemblyBuilderTest
 			Assert.IsTrue (ex.Message.IndexOf ("doesnotexist") != -1, "#A5");
 			Assert.AreEqual ("name", ex.ParamName, "#A6");
 		}
+#endif
 
 		ab = AppDomain.CurrentDomain.DefineDynamicAssembly (aname,
 			AssemblyBuilderAccess.RunAndSave, tempDir);
@@ -802,6 +811,10 @@ public class AssemblyBuilderTest
 		try {
 			ab.Save ("lib.dll");
 			Assert.Fail ("#B1");
+#if NET_4_0
+		} catch (CultureNotFoundException ex) {
+		}
+#else
 		} catch (ArgumentException ex) {
 			// Culture name neutral is not supported
 			Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#B2");
@@ -810,6 +823,7 @@ public class AssemblyBuilderTest
 			Assert.IsTrue (ex.Message.IndexOf ("neutral") != -1, "#B5");
 			Assert.AreEqual ("name", ex.ParamName, "#B6");
 		}
+#endif
 	}
 
 	[Test] // DefineVersionInfoResource ()
@@ -891,6 +905,10 @@ public class AssemblyBuilderTest
 		try {
 			ab.Save ("lib.dll");
 			Assert.Fail ("#A1");
+#if NET_4_0
+		} catch (CultureNotFoundException ex) {
+		}
+#else
 		} catch (ArgumentException ex) {
 			// Culture name doesnotexist is not supported
 			Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#A2");
@@ -899,6 +917,7 @@ public class AssemblyBuilderTest
 			Assert.IsTrue (ex.Message.IndexOf ("doesnotexist") != -1, "#A5");
 			Assert.AreEqual ("name", ex.ParamName, "#A6");
 		}
+#endif
 
 		ab = AppDomain.CurrentDomain.DefineDynamicAssembly (aname,
 			AssemblyBuilderAccess.RunAndSave, tempDir);
@@ -914,6 +933,10 @@ public class AssemblyBuilderTest
 		try {
 			ab.Save ("lib.dll");
 			Assert.Fail ("#B1");
+#if NET_4_0
+		} catch (CultureNotFoundException ex) {
+		}
+#else
 		} catch (ArgumentException ex) {
 			// Culture name neutral is not supported
 			Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#B2");
@@ -922,6 +945,7 @@ public class AssemblyBuilderTest
 			Assert.IsTrue (ex.Message.IndexOf ("neutral") != -1, "#B5");
 			Assert.AreEqual ("name", ex.ParamName, "#B6");
 		}
+#endif
 	}
 
 	[Test] // DefineVersionInfoResource (String, String, String, String, String)
@@ -1440,14 +1464,23 @@ public class AssemblyBuilderTest
 			Assert.IsNotNull (refs [0].CultureInfo, "#D2:CultureInfo");
 			Assert.IsNull (refs [0].EscapedCodeBase, "#D2:EscapedCodeBase");
 			Assert.AreEqual (AssemblyNameFlags.None, refs [0].Flags, "#D2:Flags");
-			Assert.AreEqual (Consts.AssemblyCorlib, refs [0].FullName, "#D2:FullName");
+			Assert.AreEqual (typeof (object).FullName, refs [0].FullName, "#D2:FullName");
 			Assert.AreEqual (AssemblyHashAlgorithm.SHA1, refs [0].HashAlgorithm, "#D2:HashAlgorithm");
 			Assert.IsNull (refs [0].KeyPair, "#D2:KeyPair");
 			Assert.AreEqual ("mscorlib", refs [0].Name, "#D2:Name");
 #if NET_2_0
 			Assert.AreEqual (ProcessorArchitecture.None, refs [0].ProcessorArchitecture, "#D2:PA");
 #endif
-			Assert.AreEqual (new Version (Consts.FxVersion), refs [0].Version, "#D2:Version");
+
+			string FxVersion;
+#if MOBILE
+			FxVersion = "2.0.5.0;";
+#elif NET_4_0
+			FxVersion = "4.0.0.0;";
+#else
+			FxVersion = "2.0.0.0;";
+#endif
+			Assert.AreEqual (new Version (FxVersion), refs [0].Version, "#D2:Version");
 			Assert.AreEqual (AssemblyVersionCompatibility.SameMachine,
 				refs [0].VersionCompatibility, "#D2:VersionCompatibility");
 			Assert.IsNull (refs [0].GetPublicKey (), "#D2:GetPublicKey");
@@ -1802,6 +1835,41 @@ public class AssemblyBuilderTest
 			Assert.IsFalse (t is TypeBuilder, "#6_" + t.Name);
 	}
 
+	[Test]
+	public void DynamicAssemblyGenerationInCurrentDomainShouldNotChangeTheOrderOfCurrentDomainGetAssemblies ()
+	{
+		var initialPosition = GetAssemblyPositionForType (GetType ());
+		DefineDynamicAssembly (AppDomain.CurrentDomain);
+
+		var currentPosition = GetAssemblyPositionForType (GetType ());
+		Assert.AreEqual (initialPosition, currentPosition);
+	}
+
+	static void DefineDynamicAssembly (AppDomain domain)
+	{
+		AssemblyName assemblyName = new AssemblyName ();
+		assemblyName.Name = "MyDynamicAssembly";
+
+		AssemblyBuilder assemblyBuilder = domain.DefineDynamicAssembly (assemblyName, AssemblyBuilderAccess.Run);
+		ModuleBuilder moduleBuilder = assemblyBuilder.DefineDynamicModule ("MyDynamicModule");
+		TypeBuilder typeBuilder = moduleBuilder.DefineType ("MyDynamicType", TypeAttributes.Public);
+		ConstructorBuilder constructorBuilder = typeBuilder.DefineConstructor (MethodAttributes.Public, CallingConventions.Standard, null);
+		ILGenerator ilGenerator = constructorBuilder.GetILGenerator ();
+		ilGenerator.EmitWriteLine ("MyDynamicType instantiated!");
+		ilGenerator.Emit (OpCodes.Ret);
+		typeBuilder.CreateType ();
+	}
+
+	static int GetAssemblyPositionForType (Type type)
+	{
+		var assemblies = AppDomain.CurrentDomain.GetAssemblies ();
+		for (int i = 0; i < assemblies.Length; i++)
+			if (type.Assembly == assemblies [i])
+				return i;
+		return -1;
+	}
+
+
 	private static void AssertAssemblyName (string tempDir, AssemblyName assemblyName, string abName, string fullName)
 	{
 		AppDomain currentDomain = AppDomain.CurrentDomain;
@@ -1865,5 +1933,25 @@ public class AssemblyBuilderTest
 			Assert.AreEqual (_assemblyName, assemblyName.ToString ());
 		}
 	}
+
+
+	[Test]//Bug #7126
+	public void CannotCreateInstanceOfSaveOnlyAssembly ()
+	{
+		var asm_builder = genAssembly (AssemblyBuilderAccess.Save);
+        var mod_builder = asm_builder.DefineDynamicModule("Foo", "Foo.dll");
+
+        var type_builder = mod_builder.DefineType("Foo",
+                TypeAttributes.Public | TypeAttributes.Sealed |
+                TypeAttributes.Class | TypeAttributes.BeforeFieldInit);
+
+        var type = type_builder.CreateType();
+
+		try {
+			Activator.CreateInstance(type);
+			Assert.Fail ("Cannot create instance of save only type");
+		} catch (NotSupportedException e) {
+		}
+     }
 }
 }

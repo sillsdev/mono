@@ -44,7 +44,7 @@ namespace MonoTests.Microsoft.Win32
 		{
 			// this test is for Windows only
 			if (RunningOnUnix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			// this regpath always exists under windows
 			RegistryKey k = Registry.CurrentUser
@@ -301,7 +301,7 @@ namespace MonoTests.Microsoft.Win32
 		{
 			// access to registry of remote machines is not implemented on unix
 			if (RunningOnUnix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			RegistryKey hive = RegistryKey.OpenRemoteBaseKey (
 				RegistryHive.CurrentUser, Environment.MachineName);
@@ -391,7 +391,7 @@ namespace MonoTests.Microsoft.Win32
 		{
 			// access to registry of remote machines is not implemented on unix
 			if (RunningOnUnix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			RegistryKey hive = RegistryKey.OpenRemoteBaseKey (
 				RegistryHive.CurrentUser, Environment.MachineName);
@@ -1677,7 +1677,7 @@ namespace MonoTests.Microsoft.Win32
 		{
 			// Not supported on Unix
 			if (RunningOnUnix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			string subKeyName = Guid.NewGuid ().ToString ();
 			try {
@@ -1705,7 +1705,7 @@ namespace MonoTests.Microsoft.Win32
 		{
 			// Not supported on Unix
 			if (RunningOnUnix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			string subKeyName = Guid.NewGuid ().ToString ();
 			try {
@@ -1731,7 +1731,7 @@ namespace MonoTests.Microsoft.Win32
 		public void Handle ()
 		{
 			if (RunningOnUnix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			string subKeyName = Guid.NewGuid ().ToString ();
 			RegistryKey subkey = null;
@@ -2173,7 +2173,7 @@ namespace MonoTests.Microsoft.Win32
 		{
 			// access to registry of remote machines is not implemented on unix
 			if (RunningOnUnix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			RegistryKey hive = RegistryKey.OpenRemoteBaseKey (
 				RegistryHive.CurrentUser, Environment.MachineName);
@@ -2201,11 +2201,13 @@ namespace MonoTests.Microsoft.Win32
 		}
 
 		[Test]
+		// This hangs on windows
+		[Category ("NotWorking")]
 		public void OpenRemoteBaseKey_MachineName_DoesNotExist ()
 		{
 			// access to registry of remote machines is not implemented on unix
 			if (RunningOnUnix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			try {
 				RegistryKey.OpenRemoteBaseKey (RegistryHive.CurrentUser,
@@ -3191,6 +3193,122 @@ namespace MonoTests.Microsoft.Win32
 			}
 		}
 
+		// Bug Xamarin 3632
+		[Test]
+		public void TypeCastTests ()
+		{
+			string subKeyName = Guid.NewGuid ().ToString ();
+			using (RegistryKey softwareKey = Registry.CurrentUser.OpenSubKey ("software", true)) {
+				try {
+					using (RegistryKey createdKey = softwareKey.CreateSubKey (subKeyName)) {
+						createdKey.SetValue ("test-int", (int) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-uint", (uint) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-byte", (byte) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-sbyte", (sbyte) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-short", (short) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-ushort", (ushort) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-long", (long) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-ulong", (ulong) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-decimal", (decimal) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-float", (float) 1, RegistryValueKind.DWord);
+						createdKey.SetValue ("test-bool", true, RegistryValueKind.DWord);
+
+						createdKey.SetValue ("dtest-int", (int) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-uint", (uint) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-byte", (byte) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-sbyte", (sbyte) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-short", (short) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-ushort", (ushort) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-long", (long) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-ulong", (ulong) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-decimal", (decimal) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-float", (float) 1, RegistryValueKind.QWord);
+						createdKey.SetValue ("dtest-bool", true, RegistryValueKind.QWord);
+
+						object r = createdKey.GetValue ("test-int");
+						Assert.AreEqual (r is int, true);
+						Assert.AreEqual ((int) r, 1);
+						
+						r = createdKey.GetValue ("test-uint");
+						Assert.AreEqual (r is int, true);
+						Assert.AreEqual ((int) r, 1);
+						r = createdKey.GetValue ("test-byte");
+						Assert.AreEqual (r is int, true);
+						Assert.AreEqual ((int) r, 1);
+						r = createdKey.GetValue ("test-sbyte");
+						Assert.AreEqual (r is int, true);
+						Assert.AreEqual ((int) r, 1);
+						r = createdKey.GetValue ("test-short");
+						Assert.AreEqual (r is int, true);
+						Assert.AreEqual ((int) r, 1);
+						r = createdKey.GetValue ("test-ushort");
+						Assert.AreEqual (r is int, true);
+						Assert.AreEqual ((int) r, 1);
+						r = createdKey.GetValue ("test-long");
+						Assert.AreEqual (r is int, true);
+						Assert.AreEqual ((int) r, 1);
+						r = createdKey.GetValue ("test-ulong");
+						Assert.AreEqual (r is int, true);
+						Assert.AreEqual ((int) r, 1);
+
+						r = createdKey.GetValue ("dtest-int");
+						Assert.AreEqual (r is long, true);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-uint");
+						Assert.AreEqual (r is long, true);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-byte");
+						Assert.AreEqual (r is long, true);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-sbyte");
+						Assert.AreEqual (r is long, true);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-short");
+						Assert.AreEqual (r is long, true);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-ushort");
+						Assert.AreEqual (r is long, true);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-long");
+						Assert.AreEqual (r is long, true);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-ulong");
+						Assert.AreEqual (r is long, true);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-decimal");
+						Assert.IsTrue (r is long);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-float");
+						Assert.IsTrue (r is long);
+						Assert.AreEqual ((long) r, 1);
+						r = createdKey.GetValue ("dtest-bool");
+						Assert.AreEqual (typeof (long), r.GetType ());
+
+						try {
+							createdKey.SetValue ("test-int", uint.MaxValue, RegistryValueKind.DWord);
+							Assert.Fail ("#100");
+
+							createdKey.SetValue ("test-int", ulong.MaxValue, RegistryValueKind.QWord);
+							Assert.Fail ("#101");
+						} catch (ArgumentException) {
+						}
+						
+						createdKey.Close ();
+						softwareKey.DeleteSubKeyTree (subKeyName);
+					}
+				} finally {
+					try {
+						RegistryKey createdKey = softwareKey.OpenSubKey (subKeyName);
+						if (createdKey != null) {
+							createdKey.Close ();
+							softwareKey.DeleteSubKeyTree (subKeyName);
+						}
+					} catch {
+					}
+				}
+			}
+		}
+		
 		[Test]
 		public void bug79059 ()
 		{

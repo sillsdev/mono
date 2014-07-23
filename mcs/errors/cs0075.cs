@@ -1,4 +1,4 @@
-// cs0075.cs: To cast a negative value, you must enclose the value in parentheses
+// CS0075: To cast a negative value, you must enclose the value in parentheses
 // Line: 20
 class X
 {
@@ -17,7 +17,7 @@ class X
 	public static void Main ()
 	{
 		int a = 4, b = 5;
-		X x = (X) -a;
+X x = (X) -a;
 		System.Console.WriteLine (x.i);
 	}
 }

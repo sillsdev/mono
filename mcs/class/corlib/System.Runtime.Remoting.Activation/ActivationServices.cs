@@ -182,6 +182,7 @@ namespace System.Runtime.Remoting.Activation
 			identity.AttachServerObject ((MarshalByRefObject) obj, Threading.Thread.CurrentContext);
 
 			ConstructionCall call = ctorCall as ConstructionCall;
+
 			if (ctorCall.ActivationType.IsContextful && call != null && call.SourceProxy != null)
 			{
 				call.SourceProxy.AttachIdentity (identity);

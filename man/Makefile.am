@@ -4,6 +4,7 @@ man_MANS = \
 	certmgr.1             \
 	chktrust.1            \
 	cilc.1                \
+	crlupdate.1           \
 	csharp.1              \
 	disco.1               \
 	dtd2xsd.1             \
@@ -54,6 +55,7 @@ man_MANS = \
 	xbuild.1	      \
 	xsd.1		      \
 	mono-configuration-crypto.1 \
-	ccrewrite.1
+	ccrewrite.1			\
+	cccheck.1
 
 EXTRA_DIST = $(man_MANS)

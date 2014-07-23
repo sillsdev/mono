@@ -689,6 +689,100 @@ namespace MonoTests.System.Xaml
 			xw.WriteEndObject ();
 		}
 
+		[Test]
+		public void WriteAttachableProperty ()
+		{
+			Attached2 result = null;
+			
+			var rsettings = new XamlXmlReaderSettings ();
+			using (var reader = new XamlXmlReader (new StringReader (String.Format (@"<Attached2 AttachedWrapper3.Property=""Test"" xmlns=""clr-namespace:MonoTests.System.Xaml;assembly={0}""></Attached2>", typeof (AttachedWrapper3).Assembly.GetName ().Name)), rsettings)) {
+				var wsettings = new XamlObjectWriterSettings ();
+				using (var writer = new XamlObjectWriter (reader.SchemaContext, wsettings)) {
+					XamlServices.Transform (reader, writer, false);
+					result = (Attached2) writer.Result;
+				}
+			}
+
+			Assert.AreEqual ("Test", result.Property, "#1");
+		}
+		
+		[Test]
+		public void OnSetValueAndHandledFalse () // part of bug #3003
+		{
+#if NET_4_5
+			string ver = "net_4_5";
+#else
+			string ver = "net_4_0";
+#endif
+
+			/*
+			var obj = new TestClass3 ();
+			obj.Nested = new TestClass3 ();
+			var sw = new StringWriter ();
+			var xxw = new XamlXmlWriter (XmlWriter.Create (sw), new XamlSchemaContext ());
+			XamlServices.Transform (new XamlObjectReader (obj), xxw);
+			Console.Error.WriteLine (sw);
+			*/
+			var xml = "<TestClass3 xmlns='clr-namespace:MonoTests.System.Xaml;assembly=System.Xaml_test_net_4_0' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'><TestClass3.Nested><TestClass3 Nested='{x:Null}' /></TestClass3.Nested></TestClass3>".Replace ("net_4_0", ver);
+			var settings = new XamlObjectWriterSettings ();
+			bool invoked = false;
+			settings.XamlSetValueHandler = (sender, e) => {
+				invoked = true;
+				Assert.IsNotNull (sender, "#1");
+				Assert.AreEqual (typeof (TestClass3), sender.GetType (), "#2");
+				Assert.AreEqual ("Nested", e.Member.Name, "#3");
+				Assert.IsTrue (sender != e.Member.Invoker.GetValue (sender), "#4");
+				Assert.IsFalse (e.Handled, "#5");
+				// ... and leave Handled as false, to invoke the actual setter
+			};
+			var xow = new XamlObjectWriter (new XamlSchemaContext (), settings);
+			var xxr = new XamlXmlReader (XmlReader.Create (new StringReader (xml)));
+			XamlServices.Transform (xxr, xow);
+			Assert.IsTrue (invoked, "#6");
+			Assert.IsNotNull (xow.Result, "#7");
+			var ret = xow.Result as TestClass3;
+			Assert.IsNotNull (ret.Nested, "#8");
+		}
+		
+		[Test] // bug #3003 repro
+		public void EventsAndProcessingOrder ()
+		{
+			var asm = Assembly.GetExecutingAssembly ();
+			var context = new XamlSchemaContext (new Assembly [] { asm });
+			var output = XamarinBug3003.TestContext.Writer;
+			output.WriteLine ();
+
+			var reader = new XamlXmlReader (XmlReader.Create (new StringReader (XamarinBug3003.TestContext.XmlInput)), context);
+
+			var writerSettings = new XamlObjectWriterSettings ();
+			writerSettings.AfterBeginInitHandler = (sender, e) => {
+				output.WriteLine ("XamlObjectWriterSettings.AfterBeginInit: {0}", e.Instance);
+			};
+			writerSettings.AfterEndInitHandler = (sender, e) => {
+				output.WriteLine ("XamlObjectWriterSettings.AfterEndInit: {0}", e.Instance);
+			};
+
+			writerSettings.BeforePropertiesHandler = (sender, e) => {
+				output.WriteLine ("XamlObjectWriterSettings.BeforeProperties: {0}", e.Instance);
+			};
+			writerSettings.AfterPropertiesHandler = (sender, e) => {
+				output.WriteLine ("XamlObjectWriterSettings.AfterProperties: {0}", e.Instance);
+			};
+			writerSettings.XamlSetValueHandler = (sender, e) => {
+				output.WriteLine ("XamlObjectWriterSettings.XamlSetValue: {0}, Member: {1}", e.Value, e.Member.Name);
+			};
+
+			var writer = new XamlObjectWriter (context, writerSettings);
+			XamlServices.Transform (reader, writer);
+			var obj = writer.Result as XamarinBug3003.Parent;
+
+			output.WriteLine ("Loaded {0}", obj);
+
+			Assert.AreEqual (XamarinBug3003.TestContext.ExpectedResult.Replace ("\r\n", "\n"), output.ToString ().Replace ("\r\n", "\n"), "#1");
+
+			Assert.AreEqual (2, obj.Children.Count, "#2");
+		}
+
 		// extra use case based tests.
 
 		[Test]
@@ -716,12 +810,41 @@ namespace MonoTests.System.Xaml
 			ow.Close ();
 			Assert.AreEqual (typeof (int), ow.Result, "#1");
 		}
+
+		[Test]
+		public void LookupCorrectEventBoundMethod ()
+		{
+			var o = (XamarinBug2927.MyRootClass) XamlServices.Load (GetReader ("LookupCorrectEvent.xml"));
+			o.Child.Descendant.Work ();
+			Assert.IsTrue (o.Invoked, "#1");
+			Assert.IsFalse (o.Child.Invoked, "#2");
+			Assert.IsFalse (o.Child.Descendant.Invoked, "#3");
+		}
+		
+		[Test]
+		[ExpectedException (typeof (XamlObjectWriterException))]
+		public void LookupCorrectEventBoundMethod2 ()
+		{
+			XamlServices.Load (GetReader ("LookupCorrectEvent2.xml"));
+		}
+		
+		[Test]
+		public void LookupCorrectEventBoundMethod3 ()
+		{
+			XamlServices.Load (GetReader ("LookupCorrectEvent3.xml"));
+		}
 		
 		// common use case based tests (to other readers/writers).
 
 		XamlReader GetReader (string filename)
 		{
-			return new XamlXmlReader (XmlReader.Create (Path.Combine ("Test/XmlFiles", filename), new XmlReaderSettings () { CloseInput =true }));
+#if NET_4_5
+			string ver = "net_4_5";
+#else
+			string ver = "net_4_0";
+#endif
+			string xml = File.ReadAllText (Path.Combine ("Test/XmlFiles", filename)).Replace ("net_4_0", ver);
+			return new XamlXmlReader (XmlReader.Create (new StringReader (xml)));
 		}
 
 		[Test]
@@ -1223,6 +1346,173 @@ namespace MonoTests.System.Xaml
 						Attachable.SetFoo (des.Value, null);
 					}
 				}
+			}
+		}
+
+		[Test]
+		public void Write_EventStore ()
+		{
+			using (var xr = GetReader ("EventStore.xml")) {
+				var res = (EventStore) XamlServices.Load (xr);
+				Assert.AreEqual ("foo", res.Examine (), "#1");
+				Assert.IsTrue (res.Method1Invoked, "#2");
+			}
+		}
+
+		[Test]
+		[ExpectedException (typeof (XamlDuplicateMemberException))] // for two occurence of Event1 ...
+		public void Write_EventStore2 ()
+		{
+			using (var xr = GetReader ("EventStore2.xml")) {
+				XamlServices.Load (xr);
+			}
+		}
+
+		[Test]
+		[ExpectedException (typeof (XamlObjectWriterException))] // attaching nonexistent method
+		public void Write_EventStore3 ()
+		{
+			using (var xr = GetReader ("EventStore3.xml")) {
+				XamlServices.Load (xr);
+			}
+		}
+
+		[Test]
+		[Category ("NotWorking")] // type resolution failure.
+		public void Write_EventStore4 ()
+		{
+			using (var xr = GetReader ("EventStore4.xml")) {
+				var res = (EventStore2<EventArgs>) XamlServices.Load (xr);
+				Assert.AreEqual ("foo", res.Examine (), "#1");
+				Assert.IsTrue (res.Method1Invoked, "#2");
+			}
+		}
+
+		[Test]
+		public void Write_AbstractWrapper ()
+		{
+			using (var xr = GetReader ("AbstractContainer.xml")) {
+				var res = (AbstractContainer) XamlServices.Load (xr);
+				Assert.IsNull (res.Value1, "#1");
+				Assert.IsNotNull (res.Value2, "#2");
+				Assert.AreEqual ("x", res.Value2.Foo, "#3");
+			}
+		}
+
+		[Test]
+		public void Write_ReadOnlyPropertyContainer ()
+		{
+			using (var xr = GetReader ("ReadOnlyPropertyContainer.xml")) {
+				var res = (ReadOnlyPropertyContainer) XamlServices.Load (xr);
+				Assert.AreEqual ("x", res.Foo, "#1");
+				Assert.AreEqual ("x", res.Bar, "#2");
+			}
+		}
+
+		[Test]
+		public void Write_TypeConverterOnListMember ()
+		{
+			using (var xr = GetReader ("TypeConverterOnListMember.xml")) {
+				var res = (SecondTest.TypeOtherAssembly) XamlServices.Load (xr);
+				Assert.AreEqual (3, res.Values.Count, "#1");
+				Assert.AreEqual (3, res.Values [2], "#2");
+			}
+		}
+
+		[Test]
+		public void Write_EnumContainer ()
+		{
+			using (var xr = GetReader ("EnumContainer.xml")) {
+				var res = (EnumContainer) XamlServices.Load (xr);
+				Assert.AreEqual (EnumValueType.Two, res.EnumProperty, "#1");
+			}
+		}
+
+		[Test]
+		public void Write_CollectionContentProperty ()
+		{
+			using (var xr = GetReader ("CollectionContentProperty.xml")) {
+				var res = (CollectionContentProperty) XamlServices.Load (xr);
+				Assert.AreEqual (4, res.ListOfItems.Count, "#1");
+			}
+		}
+
+		[Test]
+		public void Write_CollectionContentProperty2 ()
+		{
+			using (var xr = GetReader ("CollectionContentProperty2.xml")) {
+				var res = (CollectionContentProperty) XamlServices.Load (xr);
+				Assert.AreEqual (4, res.ListOfItems.Count, "#1");
+			}
+		}
+
+		[Test]
+		public void Write_AmbientPropertyContainer ()
+		{
+			using (var xr = GetReader ("AmbientPropertyContainer.xml")) {
+				var res = (SecondTest.ResourcesDict) XamlServices.Load (xr);
+				Assert.AreEqual (2, res.Count, "#1");
+				Assert.IsTrue (res.ContainsKey ("TestDictItem"), "#2");
+				Assert.IsTrue (res.ContainsKey ("okay"), "#3");
+				var i1 = res ["TestDictItem"] as SecondTest.TestObject;
+				Assert.IsNull (i1.TestProperty, "#4");
+				var i2 = res ["okay"] as SecondTest.TestObject;
+				Assert.AreEqual (i1, i2.TestProperty, "#5");
+			}
+		}
+
+		[Test] // bug #682102
+		public void Write_AmbientPropertyContainer2 ()
+		{
+			using (var xr = GetReader ("AmbientPropertyContainer2.xml")) {
+				var res = (SecondTest.ResourcesDict) XamlServices.Load (xr);
+				Assert.AreEqual (2, res.Count, "#1");
+				Assert.IsTrue (res.ContainsKey ("TestDictItem"), "#2");
+				Assert.IsTrue (res.ContainsKey ("okay"), "#3");
+				var i1 = res ["TestDictItem"] as SecondTest.TestObject;
+				Assert.IsNull (i1.TestProperty, "#4");
+				var i2 = res ["okay"] as SecondTest.TestObject;
+				Assert.AreEqual (i1, i2.TestProperty, "#5");
+			}
+		}
+
+		[Test]
+		public void Write_NullableContainer ()
+		{
+			using (var xr = GetReader ("NullableContainer.xml")) {
+				var res = (NullableContainer) XamlServices.Load (xr);
+				Assert.AreEqual (5, res.TestProp, "#1");
+			}
+		}
+
+		[Test]
+		public void Write_DirectListContainer ()
+		{
+			using (var xr = GetReader ("DirectListContainer.xml")) {
+				var res = (DirectListContainer) XamlServices.Load (xr);
+				Assert.AreEqual (3, res.Items.Count, "#1");
+				Assert.AreEqual ("Hello3", res.Items [2].Value, "#2");
+			}
+		}
+
+		[Test]
+		public void Write_DirectDictionaryContainer ()
+		{
+			using (var xr = GetReader ("DirectDictionaryContainer.xml")) {
+				var res = (DirectDictionaryContainer) XamlServices.Load (xr);
+				Assert.AreEqual (3, res.Items.Count, "#1");
+				Assert.AreEqual (40, res.Items [EnumValueType.Three], "#2");
+			}
+		}
+
+		[Test]
+		public void Write_DirectDictionaryContainer2 ()
+		{
+			using (var xr = GetReader ("DirectDictionaryContainer2.xml")) {
+				var res = (SecondTest.ResourcesDict2) XamlServices.Load (xr);
+				Assert.AreEqual (2, res.Count, "#1");
+				Assert.AreEqual ("1", ((SecondTest.TestObject2) res ["1"]).TestProperty, "#2");
+				Assert.AreEqual ("two", ((SecondTest.TestObject2) res ["two"]).TestProperty, "#3");
 			}
 		}
 	}

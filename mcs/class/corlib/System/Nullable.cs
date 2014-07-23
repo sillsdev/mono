@@ -34,6 +34,7 @@ using System.Reflection;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace System
 {
@@ -73,14 +74,14 @@ namespace System
 		{
 			if (nullableType == null)
 				throw new ArgumentNullException ("nullableType");
-			if (nullableType.IsGenericType && nullableType.GetGenericTypeDefinition () == typeof (Nullable<>))
-				return nullableType.GetGenericArguments ()[0];
-			else
-				return null;
+
+			return nullableType.IsGenericType && !nullableType.IsGenericTypeDefinition && nullableType.GetGenericTypeDefinition () == typeof(Nullable<>) ?
+				nullableType.GetGenericArguments () [0] : null;
 		}
 	}
 
 	[Serializable]
+	[DebuggerStepThrough]
 	public struct Nullable<T> where T: struct
 	{
 		#region Sync with runtime code
@@ -138,7 +139,7 @@ namespace System
 
 		public T GetValueOrDefault ()
 		{
-			return has_value ? value : default (T);
+			return value;
 		}
 
 		public T GetValueOrDefault (T defaultValue)

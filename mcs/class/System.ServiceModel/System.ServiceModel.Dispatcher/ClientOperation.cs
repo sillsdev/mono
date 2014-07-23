@@ -59,9 +59,7 @@ namespace System.ServiceModel.Dispatcher
 		IClientMessageFormatter formatter;
 		SynchronizedCollection<IParameterInspector> inspectors
 			= new SynchronizedCollection<IParameterInspector> ();
-#if !NET_2_1
 		SynchronizedCollection<FaultContractInfo> fault_contract_infos = new SynchronizedCollection<FaultContractInfo> ();
-#endif
 
 		public ClientOperation (ClientRuntime parent,
 			string name, string action)
@@ -112,11 +110,9 @@ namespace System.ServiceModel.Dispatcher
 			}
 		}
 
-#if !NET_2_1
 		public SynchronizedCollection<FaultContractInfo> FaultContractInfos {
 			get { return fault_contract_infos; }
 		}
-#endif
 
 		public IClientMessageFormatter Formatter {
 			get { return formatter; }
@@ -189,5 +185,25 @@ namespace System.ServiceModel.Dispatcher
 			}
 			throw new InvalidOperationException ("Cannot change this property after the service host is opened");
 		}
+
+#if NET_4_5
+		[MonoTODO]
+		public ICollection<IParameterInspector> ClientParameterInspectors {
+			get { throw new NotImplementedException (); }
+		}
+
+		[MonoTODO]
+		public MethodInfo TaskMethod {
+			get { throw new NotImplementedException (); }
+			set { throw new NotImplementedException (); }
+		}
+
+		[MonoTODO]
+		public Type TaskTResult {
+			get { throw new NotImplementedException (); }
+			set { throw new NotImplementedException (); }
+		}
+#endif
+		
 	}
 }

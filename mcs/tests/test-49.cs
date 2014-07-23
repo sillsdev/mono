@@ -326,6 +326,19 @@ class X {
 
 		return 1;
 	}
+	
+	static int tests2 (string s)
+	{
+		switch (s){
+		case "one":
+			goto case null;
+		case "two":
+			goto default;
+		case null:
+		default:
+			return 3;
+		}
+	}
 
 	static int testn (string s)
 	{
@@ -560,7 +573,84 @@ class X {
 		return false;
 	}
 	
-	static int Main ()
+	static void test_1597 ()
+	{
+		var a = "";
+		switch (a) {
+		}
+	}
+
+	static int LongStringSwitch (string s)
+	{
+		switch (s)
+		{
+			case "System":
+			case "System.Core":
+			case "System.Data":
+			case "System.Data.DataSetExtensions":
+			case "System.Data.Linq":
+			case "System.Data.OracleClient":
+			case "System.Data.Services":
+			case "System.Data.Services.Client":
+			case "System.IdentityModel":
+			case "System.IdentityModel.Selectors":
+			case "System.Runtime.Remoting":
+			case "System.Runtime.Serialization":
+			case "System.ServiceModel":
+			case "System.Transactions":
+			case "System.Windows.Forms":
+			case "System.Xml":
+			case "System.Xml.Linq":
+				return 1;
+
+			case "System.Configuration":
+			case "System.Configuration.Install":
+			case "System.Design":
+			case "System.DirectoryServices":
+			case "System.Drawing":
+			case "System.Drawing.Design":
+			case "System.EnterpriseServices":
+			case "System.Management":
+			case "System.Messaging":
+			case "System.Runtime.Serialization.Formatters.Soap":
+			case "System.Security":
+			case "System.ServiceProcess":
+			case "System.Web":
+			case "System.Web.Mobile":
+			case "System.Web.Services":
+				return 2;
+
+			case "System.ComponentModel.DataAnnotations":
+			case "System.ServiceModel.Web":
+			case "System.Web.Abstractions":
+			case "System.Web.Extensions":
+			case "System.Web.Extensions.Design":
+			case "System.Web.DynamicData":
+			case "System.Web.Routing":
+				return 3;
+		}
+
+		return 10;
+	}
+
+	static bool SwitchSingleSection (string scheme)
+	{
+		switch (scheme) {
+		case "http":
+		case "https":
+		case "file":
+		case "ftp":
+		case "nntp":
+		case "gopher":
+		case "mailto":
+		case "news":
+			return true;
+		default:
+			return false;
+		}
+	}
+	
+	public static int Main ()
 	{
 		byte b;
 
@@ -692,6 +782,29 @@ class X {
 		
 		if (!bug_78860 ())
 			return 60;
+		
+		if (tests2 ("a") != 3)
+			return 71;
+		if (tests2 ("one") != 3)
+			return 72;
+		if (tests2 ("two") != 3)
+			return 73;
+
+		if (LongStringSwitch ("System.Management") != 2)
+			return 80;		
+		if (LongStringSwitch (null) != 10)
+			return 81;
+		if (LongStringSwitch (".") != 10)
+			return 82;
+
+		if (!SwitchSingleSection ("file"))
+			return 90;
+		if (SwitchSingleSection (null))
+			return 91;
+		if (SwitchSingleSection ("-=-"))
+			return 92;
+
+		test_1597 ();
 		
 		Console.WriteLine ("All tests pass");
 		return 0;

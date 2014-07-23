@@ -81,9 +81,7 @@
 /* #undef HAVE_BLKSIZE_T */
 
 /* Have Boehm GC */
-#define HAVE_BOEHM_GC 1
-
-#define DEFAULT_GC_NAME "Boehm"
+/* #define HAVE_BOEHM_GC 1 */
 
 /* Define to 1 if you have the <checklist.h> header file. */
 /* #undef HAVE_CHECKLIST_H */
@@ -93,6 +91,34 @@
 
 /* Define to 1 if you have the <curses.h> header file. */
 /* #undef HAVE_CURSES_H */
+
+/* Define to 1 if you have the declaration of `InterlockedAdd',
+   and to 0 if you don't. */
+#define HAVE_DECL_INTERLOCKEDADD 1
+
+/* Define to 1 if you have the declaration of `InterlockedAdd64',
+   and to 0 if you don't. */
+#define HAVE_DECL_INTERLOCKEDADD64 1
+
+/* Define to 1 if you have the declaration of `InterlockedCompareExchange64',
+   and to 0 if you don't. */
+#define HAVE_DECL_INTERLOCKEDCOMPAREEXCHANGE64 1
+
+/* Define to 1 if you have the declaration of `InterlockedDecrement64',
+   and to 0 if you don't. */
+#define HAVE_DECL_INTERLOCKEDDECREMENT64 1
+
+/* Define to 1 if you have the declaration of `InterlockedExchange64',
+   and to 0 if you don't. */
+#define HAVE_DECL_INTERLOCKEDEXCHANGE64 1
+
+/* Define to 1 if you have the declaration of `InterlockedIncrement64',
+   and to 0 if you don't. */
+#define HAVE_DECL_INTERLOCKEDINCREMENT64 1
+
+/* Define to 1 if you have the declaration of `__readfsdword',
+   and to 0 if you don't. */
+#define HAVE_DECL___READFSDWORD 1
 
 /* Define to 1 if you have the <dirent.h> header file. */
 /* #define HAVE_DIRENT_H 1 */
@@ -134,16 +160,16 @@
 /* #undef HAVE_FSTATVFS */
 
 /* Have GC_enable */
-#define HAVE_GC_ENABLE 1
+/* #define HAVE_GC_ENABLE 1 */
 
 /* Have GC_gcj_malloc */
-#define HAVE_GC_GCJ_MALLOC 1
+/* #define HAVE_GC_GCJ_MALLOC 1 */
 
 /* Define to 1 if you have the <gc/gc.h> header file. */
 /* #undef HAVE_GC_GC_H */
 
 /* Have gc.h */
-#define HAVE_GC_H 1
+/* #define HAVE_GC_H 1 */
 
 /* Define to 1 if you have the `getdomainname' function. */
 /* #undef HAVE_GETDOMAINNAME */
@@ -531,14 +557,11 @@
 /* Enable the allocation and indexing of arrays greater than Int32.MaxValue */
 /* #undef MONO_BIG_ARRAYS */
 
-/* The Mono Debugger is supported on this platform */
-/* #undef MONO_DEBUGGER_SUPPORTED */
-
 /* Sizeof sock_un.sun_path */
 /* #undef MONO_SIZEOF_SUNPATH */
 
 /* Xen-specific behaviour */
-#define MONO_XEN_OPT 1
+/* #define MONO_XEN_OPT 1 */
 
 /* Length of zero length arrays */
 #define MONO_ZERO_LEN_ARRAY 1
@@ -571,6 +594,12 @@
 #define HOST_WIN32 1
 #define TARGET_WIN32 1
 
+#ifdef _WIN64
+#define TARGET_AMD64 1
+#else
+#define TARGET_X86 1
+#endif
+
 /* pthread_t is a pointer */
 /* #undef PTHREAD_POINTER_ID */
 
@@ -589,11 +618,10 @@
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
-/* GC description */
-#define USED_GC_NAME "Included Boehm (with typed GC)"
-
 /* Use included libgc */
-#define USE_INCLUDED_LIBGC 1
+/* #define USE_INCLUDED_LIBGC 1 */
+
+#define DEFAULT_GC_NAME "Included Boehm (with typed GC)"
 
 /* ... */
 /* #undef USE_MACH_SEMA */
@@ -602,4 +630,4 @@
 /* #undef USE_MONO_MUTEX */
 
 /* Version number of package */
-#define VERSION "2.10"
+#define VERSION "2.11"

@@ -32,7 +32,7 @@
 //
 
 using System.Reflection;
-using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -41,7 +41,8 @@ using Mono.Globalization.Unicode;
 namespace System.Globalization
 {
 	[Serializable]
-#if !MOONLIGHT
+	[StructLayout (LayoutKind.Sequential)]
+
 	[ComVisible (true)]
 	public class CompareInfo : IDeserializationCallback {
 
@@ -61,19 +62,21 @@ namespace System.Globalization
 				/* This will build the ICU collator, and store
 				 * the pointer in ICU_collator
 				 */
+				/*
 				try {
 					this.construct_compareinfo (icu_name);
 				} catch {
 				//	ICU_collator=IntPtr.Zero;
 				}
+				*/
 			}
 		}
 
-		[MethodImplAttribute (MethodImplOptions.InternalCall)]
-		private extern void construct_compareinfo (string locale);
+		//[MethodImplAttribute (MethodImplOptions.InternalCall)]
+		//private extern void construct_compareinfo (string locale);
 
-		[MethodImplAttribute (MethodImplOptions.InternalCall)]
-		private extern void free_internal_collator ();
+		//[MethodImplAttribute (MethodImplOptions.InternalCall)]
+		//private extern void free_internal_collator ();
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		private extern int internal_compare (string str1, int offset1,
@@ -97,12 +100,6 @@ namespace System.Globalization
 						   CompareOptions options,
 						   bool first);
 
-#else
-	public class CompareInfo {
-		internal static bool UseManagedCollation {
-			get { return true; }
-		}
-#endif
 		const CompareOptions ValidCompareOptions_NoStringSort =
 			CompareOptions.None | CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace |
 			CompareOptions.IgnoreSymbols | CompareOptions.IgnoreKanaType | CompareOptions.IgnoreWidth |
@@ -112,58 +109,54 @@ namespace System.Globalization
 
 		// Keep in synch with MonoCompareInfo in the runtime. 
 		private int culture;
-		[NonSerialized]
-		private string icu_name;
+//		[NonSerialized]
+//		private string icu_name;
 //		[NonSerialized]
 //		private IntPtr ICU_collator;
 
 #pragma warning disable 169		
 		private int win32LCID;	// Unused, but MS.NET serializes this
-		private string m_name; // Unused, but MS.NET serializes this
 #pragma warning restore 169
+		
+		readonly string m_name; // MS.NET serializes this
 
 		[NonSerialized]
 		SimpleCollator collator;
 
 		// Maps culture IDs to SimpleCollator objects
-		private static Hashtable collators;
+		private static Dictionary<int, SimpleCollator> collators;
 
 		[NonSerialized]
 		// Protects access to 'collators'
 		private static object monitor = new Object ();
 		
-		/* Hide the .ctor() */
-		CompareInfo() {}
-		
 		internal CompareInfo (CultureInfo ci)
 		{
 			this.culture = ci.LCID;
+			this.m_name = ci.Name;
 			if (UseManagedCollation) {
 				lock (monitor) {
 					if (collators == null)
-						collators = new Hashtable ();
-					collator = (SimpleCollator)collators [ci.LCID];
-					if (collator == null) {
+						collators = new Dictionary<int, SimpleCollator> ();
+
+					if (!collators.TryGetValue (ci.LCID, out collator)) {
 						collator = new SimpleCollator (ci);
 						collators [ci.LCID] = collator;
 					}
 				}
 			} else {
-#if !MOONLIGHT
+/*
 				this.icu_name = ci.IcuName;
 				this.construct_compareinfo (icu_name);
-#endif
+*/
 			}
 		}
-
+/*
 		~CompareInfo ()
 		{
-#if !MOONLIGHT
 			free_internal_collator ();
-#endif
 		}
-
-#if !MOONLIGHT
+*/
 		private int internal_compare_managed (string str1, int offset1,
 						int length1, string str2,
 						int offset2, int length2,
@@ -178,22 +171,18 @@ namespace System.Globalization
 						int offset2, int length2,
 						CompareOptions options)
 		{
+			if (options == CompareOptions.Ordinal)
+				return string.CompareOrdinalUnchecked (str1, offset1, length1, str2, offset2, length2);
+			if (options == CompareOptions.OrdinalIgnoreCase)
+				return string.CompareOrdinalCaseInsensitiveUnchecked (str1, offset1, length1, str2, offset2, length2);
+
 			return UseManagedCollation ?
 				internal_compare_managed (str1, offset1, length1,
 				str2, offset2, length2, options) :
 				internal_compare (str1, offset1, length1,
 				str2, offset2, length2, options);
 		}
-#else
-		private int internal_compare_switch (string str1, int offset1,
-						int length1, string str2,
-						int offset2, int length2,
-						CompareOptions options)
-		{
-			return collator.Compare (str1, offset1, length1,
-				str2, offset2, length2, options);
-		}
-#endif
+
 		public virtual int Compare (string string1, string string2)
 		{
 			return Compare (string1, string2, CompareOptions.None);
@@ -409,7 +398,6 @@ namespace System.Globalization
 			case CompareOptions.OrdinalIgnoreCase:
 				throw new ArgumentException ("Now allowed CompareOptions.", "options");
 			}
-#if !MOONLIGHT
 			if (UseManagedCollation)
 				return collator.GetSortKey (source, options);
 			SortKey key=new SortKey (culture, source, options);
@@ -421,9 +409,6 @@ namespace System.Globalization
 			assign_sortkey (key, source, options);
 			
 			return(key);
-#else
-			return collator.GetSortKey (source, options);
-#endif
 		}
 
 		public virtual int IndexOf (string source, char value)
@@ -498,7 +483,6 @@ namespace System.Globalization
 					CompareOptions.None));
 		}
 
-#if !MOONLIGHT
 		private int internal_index_managed (string s, int sindex,
 			int count, char c, CompareOptions opt,
 			bool first)
@@ -520,16 +504,6 @@ namespace System.Globalization
 				internal_index_managed (s, sindex, count, c, opt, first) :
 				internal_index (s, sindex, count, c, opt, first);
 		}
-#else
-		private int internal_index_switch (string s, int sindex,
-			int count, char c, CompareOptions opt,
-			bool first)
-		{
-			return first ?
-				collator.IndexOf (s, c, sindex, count, opt) :
-				collator.LastIndexOf (s, c, sindex, count, opt);
-		}
-#endif
 
 		public virtual int IndexOf (string source, char value,
 					    int startIndex, int count,
@@ -567,7 +541,6 @@ namespace System.Globalization
 			}
 		}
 
-#if !MOONLIGHT
 		private int internal_index_managed (string s1, int sindex,
 			int count, string s2, CompareOptions opt,
 			bool first)
@@ -589,16 +562,6 @@ namespace System.Globalization
 				internal_index_managed (s1, sindex, count, s2, opt, first) :
 				internal_index (s1, sindex, count, s2, opt, first);
 		}
-#else
-		private int internal_index_switch (string s1, int sindex,
-			int count, string s2, CompareOptions opt,
-			bool first)
-		{
-			return first ?
-				collator.IndexOf (s1, s2, sindex, count, opt) :
-				collator.LastIndexOf (s1, s2, sindex, count, opt);
-		}
-#endif
 
 		public virtual int IndexOf (string source, string value,
 					    int startIndex, int count,
@@ -824,7 +787,7 @@ namespace System.Globalization
 
 			int valuelen=value.Length;
 			if(valuelen==0) {
-				return(0);
+				return(startIndex);
 			}
 
 			return(internal_index_switch (source, startIndex, count,
@@ -852,16 +815,15 @@ namespace System.Globalization
 		 * shows it.  Some documentation about what it does
 		 * would be nice.
 		 */
-		public int LCID
-		{
+		public int LCID {
 			get {
-				return(culture);
+				return culture;
 			}
 		}
 
 		[ComVisible (false)]
 		public virtual string Name {
-			get { return icu_name; }
+			get { return m_name; }
 		}
 	}
 }

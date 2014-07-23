@@ -132,7 +132,7 @@ namespace MonoTests.System.Diagnostics
 		{
 			if (RunningOnUnix)
 				// on unix, all characters are allowed
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			string systemDir = Environment.GetFolderPath (Environment.SpecialFolder.System);
 			string exe = "\"" + Path.Combine (systemDir, "calc.exe") + "\"";
@@ -675,11 +675,12 @@ namespace MonoTests.System.Diagnostics
 
 		[Test]
 		[NUnit.Framework.Category ("NotDotNet")]
+		[NUnit.Framework.Category ("MobileNotWorking")]
 		public void TestRedirectedOutputIsAsync ()
 		{
 			// Test requires cygwin, so we just bail out for now.
 			if (Path.DirectorySeparatorChar == '\\')
-				return;
+				Assert.Ignore ("Test requires cygwin.");
 			
 			Process p = new Process ();
 			p.StartInfo = new ProcessStartInfo ("/bin/sh", "-c \"sleep 2; echo hello\"");
@@ -727,6 +728,7 @@ namespace MonoTests.System.Diagnostics
 // Not technically a 2.0 only test, but I use lambdas, so I need gmcs
 
 		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
 		// This was for bug #459450
 		public void TestEventRaising ()
 		{
@@ -796,6 +798,7 @@ namespace MonoTests.System.Diagnostics
 		}
 		
 		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
 		public void ProcessName_AfterExit ()
 		{
 			Process p = new Process ();

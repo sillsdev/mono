@@ -30,7 +30,7 @@
 //
 
 using System;
-using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -68,29 +68,29 @@ namespace Mono.Globalization.Unicode
 	//
 	internal class Contraction
 	{
+		public int Index;
 		public readonly char [] Source;
 		// only either of them is used.
 		public readonly string Replacement;
 		public readonly byte [] SortKey;
 
-		public Contraction (char [] source,
+		public Contraction (int index, char [] source,
 			string replacement, byte [] sortkey)
 		{
+			Index = index;
 			Source = source;
 			Replacement = replacement;
 			SortKey = sortkey;
 		}
 	}
 
-	internal class ContractionComparer : IComparer
+	internal class ContractionComparer : IComparer<Contraction>
 	{
 		public static readonly ContractionComparer Instance =
 			new ContractionComparer ();
 
-		public int Compare (object o1, object o2)
+		public int Compare (Contraction c1, Contraction c2)
 		{
-			Contraction c1 = (Contraction) o1;
-			Contraction c2 = (Contraction) o2;
 			char [] a1 = c1.Source;
 			char [] a2 = c2.Source;
 			int min = a1.Length > a2.Length ?
@@ -98,7 +98,11 @@ namespace Mono.Globalization.Unicode
 			for (int i = 0; i < min; i++)
 				if (a1 [i] != a2 [i])
 					return a1 [i] - a2 [i];
-			return a1.Length - a2.Length;
+			if (a1.Length != a2.Length)
+				return a1.Length - a2.Length;
+			// This makes the sorting stable, since we are using Array.Sort () which is
+			// not stable
+			return c1.Index - c2.Index;
 		}
 	}
 
@@ -111,19 +115,6 @@ namespace Mono.Globalization.Unicode
 		{
 			Source = source;
 			Replace = replace;
-		}
-	}
-
-	internal class Level2MapComparer : IComparer
-	{
-		public static readonly Level2MapComparer Instance =
-			new Level2MapComparer ();
-
-		public int Compare (object o1, object o2)
-		{
-			Level2Map m1 = (Level2Map) o1;
-			Level2Map m2 = (Level2Map) o2;
-			return (m1.Source - m2.Source);
 		}
 	}
 
@@ -168,8 +159,9 @@ namespace Mono.Globalization.Unicode
 			ref Level2Map [] diacriticals)
 		{
 			// collect tailoring entries.
-			ArrayList cmaps = new ArrayList ();
-			ArrayList dmaps = new ArrayList ();
+			var cmaps = new List<Contraction> ();
+			var dmaps = new List<Level2Map> ();
+			int iindex = 0;
 			fixed (char* tarr = tailoringArr){
 				int idx = t.TailoringIndex;
 				int end = idx + t.TailoringCount;
@@ -187,10 +179,11 @@ namespace Mono.Globalization.Unicode
 						byte [] sortkey = new byte [4];
 						for (int i = 0; i < 4; i++)
 							sortkey [i] = (byte) tarr [ss + 1 + i];
-						cmaps.Add (new Contraction (
+						cmaps.Add (new Contraction (iindex,
 									    src, null, sortkey));
 						// it ends with 0
 						idx = ss + 6;
+						iindex ++;
 						break;
 					case '\x2': // DiacriticalMap
 						dmaps.Add (new Level2Map (
@@ -210,9 +203,10 @@ namespace Mono.Globalization.Unicode
 						while (tarr [l] != 0)
 							l++;
 						string r = new string (tarr, ss, l - ss);
-						cmaps.Add (new Contraction (
+						cmaps.Add (new Contraction (iindex,
 									    src, r, null));
 						idx = l + 1;
+						iindex ++;
 						break;
 					default:
 						throw new NotImplementedException (String.Format ("Mono INTERNAL ERROR (Should not happen): Collation tailoring table is broken for culture {0} ({1}) at 0x{2:X}", culture.LCID, culture.Name, idx));
@@ -220,11 +214,9 @@ namespace Mono.Globalization.Unicode
 				}
 			}
 			cmaps.Sort (ContractionComparer.Instance);
-			dmaps.Sort (Level2MapComparer.Instance);
-			contractions = cmaps.ToArray (typeof (Contraction))
-				as Contraction [];
-			diacriticals = dmaps.ToArray (typeof (Level2Map))
-				as Level2Map [];
+			dmaps.Sort ((a, b) => a.Source - b.Source);
+			contractions = cmaps.ToArray ();
+			diacriticals = dmaps.ToArray ();
 		}
 
 		static void SetCJKReferences (string name,
@@ -317,7 +309,7 @@ namespace Mono.Globalization.Unicode
 		public static bool IsIgnorable (int cp, byte flag)
 		{
 			if (cp == 0)
-				return false;
+				return true;
 			if ((flag & 1) != 0) {
 				UnicodeCategory uc = Char.GetUnicodeCategory ((char) cp);
 				// This check eliminates some extraneous code areas

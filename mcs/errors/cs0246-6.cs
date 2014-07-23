@@ -1,6 +1,5 @@
-// cs0246-6.cs: The type or namespace name `XmlDocument' could not be found. Are you missing a using directive or an assembly reference?
-// Line: 7
-// This is bug 55770
+// CS0246: The type or namespace name `XmlDocument' could not be found. Consider using fully qualified name `System.Xml.XmlDocument'
+// Line: 6
 
 using System;
 using System.Xml;

@@ -214,7 +214,7 @@ typedef union {
 			*(inst)++ = (unsigned char)0x83;	\
 			x86_reg_emit ((inst), (opc), (reg));	\
 			x86_imm_emit8 ((inst), (imm));	\
-		} else if ((reg) == X86_EAX) {	\
+		} else if ((reg) == AMD64_RAX) {	\
 			amd64_emit_rex(inst, size, 0, 0, 0); \
 			*(inst)++ = (((unsigned char)(opc)) << 3) + 5;	\
 			x86_imm_emit32 ((inst), (imm));	\
@@ -1053,6 +1053,10 @@ typedef union {
 #define amd64_sse_cvtsi2sd_reg_reg_size(inst,dreg,reg,size) emit_sse_reg_reg_size ((inst), (dreg), (reg), 0xf2, 0x0f, 0x2a, (size))
 
 #define amd64_sse_cvtsi2sd_reg_reg(inst,dreg,reg) amd64_sse_cvtsi2sd_reg_reg_size ((inst), (dreg), (reg), 8)
+
+#define amd64_sse_cvtsi2ss_reg_reg_size(inst,dreg,reg,size) emit_sse_reg_reg_size ((inst), (dreg), (reg), 0xf3, 0x0f, 0x2a, (size))
+
+#define amd64_sse_cvtsi2ss_reg_reg(inst,dreg,reg) amd64_sse_cvtsi2ss_reg_reg_size ((inst), (dreg), (reg), 8)
 
 #define amd64_sse_cvtsd2ss_reg_reg(inst,dreg,reg) emit_sse_reg_reg ((inst), (dreg), (reg), 0xf2, 0x0f, 0x5a)
 

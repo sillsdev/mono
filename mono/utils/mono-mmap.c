@@ -62,6 +62,14 @@ malloc_shared_area (int pid)
 	return sarea;
 }
 
+static char*
+aligned_address (char *mem, size_t size, size_t alignment)
+{
+	char *aligned = (char*)((gulong)(mem + (alignment - 1)) & ~(alignment - 1));
+	g_assert (aligned >= mem && aligned + size <= mem + size + alignment && !((gulong)aligned & (alignment - 1)));
+	return aligned;
+}
+
 #ifdef HOST_WIN32
 
 int
@@ -99,7 +107,7 @@ void*
 mono_valloc (void *addr, size_t length, int flags)
 {
 	void *ptr;
-	int mflags = MEM_COMMIT;
+	int mflags = MEM_RESERVE|MEM_COMMIT;
 	int prot = prot_from_flags (flags);
 	/* translate the flags */
 
@@ -107,10 +115,36 @@ mono_valloc (void *addr, size_t length, int flags)
 	return ptr;
 }
 
+void*
+mono_valloc_aligned (size_t length, size_t alignment, int flags)
+{
+	int prot = prot_from_flags (flags);
+	char *mem = VirtualAlloc (NULL, length + alignment, MEM_RESERVE, prot);
+	char *aligned;
+
+	if (!mem)
+		return NULL;
+
+	aligned = aligned_address (mem, length, alignment);
+
+	aligned = VirtualAlloc (aligned, length, MEM_COMMIT, prot);
+	g_assert (aligned);
+
+	return aligned;
+}
+
+#define HAVE_VALLOC_ALIGNED
+
 int
 mono_vfree (void *addr, size_t length)
 {
-	int res = VirtualFree (addr, 0, MEM_RELEASE);
+	MEMORY_BASIC_INFORMATION mbi;
+	SIZE_T query_result = VirtualQuery (addr, &mbi, sizeof (mbi));
+	BOOL res;
+
+	g_assert (query_result);
+
+	res = VirtualFree (mbi.AllocationBase, 0, MEM_RELEASE);
 
 	g_assert (res);
 
@@ -178,8 +212,10 @@ mono_mprotect (void *addr, size_t length, int flags)
 void*
 mono_shared_area (void)
 {
+	if (!malloced_shared_area)
+		malloced_shared_area = malloc_shared_area (0);
 	/* get the pid here */
-	return malloc_shared_area (0);
+	return malloced_shared_area;
 }
 
 void
@@ -187,6 +223,7 @@ mono_shared_area_remove (void)
 {
 	if (malloced_shared_area)
 		g_free (malloced_shared_area);
+	malloced_shared_area = NULL;
 }
 
 void*
@@ -368,6 +405,20 @@ mono_file_unmap (void *addr, void *handle)
  *
  * Returns: 0 on success.
  */
+#if defined(__native_client__)
+int
+mono_mprotect (void *addr, size_t length, int flags)
+{
+	int prot = prot_from_flags (flags);
+	void *new_addr;
+
+	if (flags & MONO_MMAP_DISCARD) memset (addr, 0, length);
+
+	new_addr = mmap(addr, length, prot, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+	if (new_addr == addr) return 0;
+        return -1;
+}
+#else
 int
 mono_mprotect (void *addr, size_t length, int flags)
 {
@@ -390,6 +441,7 @@ mono_mprotect (void *addr, size_t length, int flags)
 	}
 	return mprotect (addr, length, prot);
 }
+#endif // __native_client__
 
 #else
 
@@ -405,6 +457,14 @@ mono_valloc (void *addr, size_t length, int flags)
 {
 	return malloc (length);
 }
+
+void*
+mono_valloc_aligned (size_t length, size_t alignment, int flags)
+{
+	g_assert_not_reached ();
+}
+
+#define HAVE_VALLOC_ALIGNED
 
 int
 mono_vfree (void *addr, size_t length)
@@ -422,6 +482,20 @@ mono_mprotect (void *addr, size_t length, int flags)
 	return 0;
 }
 #endif // HAVE_MMAP
+
+static int use_shared_area;
+
+static gboolean
+shared_area_disabled (void)
+{
+	if (!use_shared_area) {
+		if (g_getenv ("MONO_DISABLE_SHARED_AREA"))
+			use_shared_area = -1;
+		else
+			use_shared_area = 1;
+	}
+	return use_shared_area == -1;
+}
 
 #if defined(HAVE_SHM_OPEN) && !defined (DISABLE_SHARED_PERFCOUNTERS)
 
@@ -492,6 +566,13 @@ mono_shared_area (void)
 	void *res;
 	SAreaHeader *header;
 
+	if (shared_area_disabled ()) {
+		if (!malloced_shared_area)
+			malloced_shared_area = malloc_shared_area (0);
+		/* get the pid here */
+		return malloced_shared_area;
+	}
+
 	/* perform cleanup of segments left over from dead processes */
 	mono_shared_area_instances_helper (NULL, 0, TRUE);
 
@@ -534,6 +615,13 @@ void
 mono_shared_area_remove (void)
 {
 	char buf [128];
+
+	if (shared_area_disabled ()) {
+		if (malloced_shared_area)
+			g_free (malloced_shared_area);
+		return;
+	}
+
 	g_snprintf (buf, sizeof (buf), "/mono.%d", getpid ());
 	shm_unlink (buf);
 	if (malloced_shared_area)
@@ -548,6 +636,9 @@ mono_shared_area_for_pid (void *pid)
 	int size = mono_pagesize ();
 	char buf [128];
 	void *res;
+
+	if (shared_area_disabled ())
+		return NULL;
 
 	g_snprintf (buf, sizeof (buf), "/mono.%d", GPOINTER_TO_INT (pid));
 
@@ -581,7 +672,10 @@ mono_shared_area_instances (void **array, int count)
 void*
 mono_shared_area (void)
 {
-	return malloc_shared_area (getpid ());
+	if (!malloced_shared_area)
+		malloced_shared_area = malloc_shared_area (getpid ());
+	/* get the pid here */
+	return malloced_shared_area;
 }
 
 void
@@ -612,3 +706,25 @@ mono_shared_area_instances (void **array, int count)
 #endif // HAVE_SHM_OPEN
 
 #endif // HOST_WIN32
+
+#ifndef HAVE_VALLOC_ALIGNED
+void*
+mono_valloc_aligned (size_t size, size_t alignment, int flags)
+{
+	/* Allocate twice the memory to be able to put the block on an aligned address */
+	char *mem = mono_valloc (NULL, size + alignment, flags);
+	char *aligned;
+
+	if (!mem)
+		return NULL;
+
+	aligned = aligned_address (mem, size, alignment);
+
+	if (aligned > mem)
+		mono_vfree (mem, aligned - mem);
+	if (aligned + size < mem + size + alignment)
+		mono_vfree (aligned + size, (mem + size + alignment) - (aligned + size));
+
+	return aligned;
+}
+#endif

@@ -24,8 +24,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if !MOONLIGHT
-
 using System;
 using System.IO;
 using System.Text;
@@ -414,15 +412,11 @@ namespace System.Xml.Linq
 		public override void MoveToRoot ()
 		{
 			attr = null;
-			if (node.Document != null) {
+			if (node.Document != null)
 				node = node.Document;
-			}
-			else {
+			else
 				while (node.Owner != null)
 					node = node.Owner;
-			}
 		}
 	}
 }
-
-#endif

@@ -204,7 +204,6 @@ namespace System.ServiceModel.MonoInternal
 				}
 			}
 
-#if !MOONLIGHT
 			public override bool WaitOne (int millisecondsTimeout, bool exitContext)
 			{
 				return WaitHandle.WaitAll (ResultWaitHandles, millisecondsTimeout, exitContext);
@@ -214,7 +213,6 @@ namespace System.ServiceModel.MonoInternal
 			{
 				return WaitHandle.WaitAll (ResultWaitHandles, timeout, exitContext);
 			}
-#endif
 		}
 
 		class DisplayUIAsyncResult : IAsyncResult
@@ -478,10 +476,6 @@ namespace System.ServiceModel.MonoInternal
 
 				return DoProcess (method, operationName, parameters);
 			} catch (Exception ex) {
-#if MOONLIGHT // just for debugging
-				Console.Write ("Exception in async operation: ");
-				Console.WriteLine (ex);
-#endif
 				throw;
 			} finally {
 				// Reset the context before the thread goes back into the pool
@@ -545,14 +539,12 @@ namespace System.ServiceModel.MonoInternal
 						Type detailType = typeof (ExceptionDetail);
 						var freader = fault.GetReaderAtDetailContents ();
 						DataContractSerializer ds = null;
-#if !NET_2_1
 						foreach (var fci in op.FaultContractInfos)
 							if (res.Headers.Action == fci.Action || fci.Serializer.IsStartObject (freader)) {
 								detailType = fci.Detail;
 								ds = fci.Serializer;
 								break;
 							}
-#endif
 						if (ds == null)
 							ds = new DataContractSerializer (detailType);
 						var detail = ds.ReadObject (freader);

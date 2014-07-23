@@ -1,11 +1,14 @@
 //
-// MonoTests.System.Collections.Generic.Test.DictionaryTest
+// MonoTests.System.Collections.Generic.Test.ListTest
 //
 // Authors:
 //      David Waite (mass@akuma.org)
+//      Andres G. Aragoneses (andres.aragoneses@7digital.com)
 //
 // Copyright (C) 2004-2005 Novell, Inc (http://www.novell.com)
 // Copyright (C) 2005 David Waite (mass@akuma.org)
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
+// Copyright 2012 7digital Ltd (http://www.7digital.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -26,8 +29,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-
-#if NET_2_0
 
 using System;
 using System.Collections;
@@ -283,6 +284,10 @@ namespace MonoTests.System.Collections.Generic {
 			Assert.AreEqual (l1.Count, l1.Capacity);
 			for (int i = 0; i < l1.Count; i++)
 				Assert.AreEqual (_list1 [i], l1 [i]);
+
+			var input = new [] { "a", "b", "c" };
+			var l2 = new List<string>(input);
+			Assert.AreEqual (3, l2.Capacity);
 		}
 
 		[Test, ExpectedException (typeof (ArgumentNullException))]
@@ -337,7 +342,7 @@ namespace MonoTests.System.Collections.Generic {
 			Assert.AreEqual (- (l.Count + 1), l.BinarySearch (int.MaxValue));
 		}
 
-#if !NET_4_0 && !NET_2_1 // FIXME: the blob contains the 2.0 mscorlib version
+#if !NET_4_0 // FIXME: the blob contains the 2.0 mscorlib version
 
 		[Test]
 		[Category ("TargetJvmNotWorking")]
@@ -552,12 +557,55 @@ namespace MonoTests.System.Collections.Generic {
 
 			i = _list1.FindIndex (FindMultipleOfTwelve);
 			Assert.AreEqual (-1, i);
+
+			var a = new List<int> () { 2, 2, 2, 3, 2 };
+			Assert.AreEqual (2, a.FindIndex (2, 2, l => true));
 		}
 
-		[Test, ExpectedException (typeof (ArgumentNullException))]
-		public void FindIndexNullTest ()
+		[Test]
+		public void FindIndex_Invalid ()
 		{
-			int i = _list1.FindIndex (null);
+			try {
+				_list1.FindIndex (null);
+				Assert.Fail ("#1");
+			} catch (ArgumentNullException) {
+			}
+
+			try {
+				_list1.FindIndex (-1, l => true);
+				Assert.Fail ("#2");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (-1, 0, l => true);
+				Assert.Fail ("#2b");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (0, -1, l => true);
+				Assert.Fail ("#3");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (100, l => true);
+				Assert.Fail ("#4");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (100, 0, l => true);
+				Assert.Fail ("#4b");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (7, 2, l => true);
+				Assert.Fail ("#5");
+			} catch (ArgumentOutOfRangeException) {
+			}
 		}
 
 		[Test]
@@ -576,8 +624,6 @@ namespace MonoTests.System.Collections.Generic {
 			int i = _list1.FindLast (null);
 		}
 
-		// FIXME currently generates Invalid IL Code error
-		/*
 		[Test]
 		public void ForEachTest ()
 		{
@@ -586,7 +632,7 @@ namespace MonoTests.System.Collections.Generic {
 
 			Assert.AreEqual (418, i);
 		}
-		*/
+
 		[Test]
 		public void FindLastIndexTest ()
 		{
@@ -598,12 +644,56 @@ namespace MonoTests.System.Collections.Generic {
 
 			i = _list1.FindIndex (FindMultipleOfTwelve);
 			Assert.AreEqual (-1, i);
+
+			Assert.AreEqual (2, _list1.FindLastIndex (2, 3, l => true));
+			Assert.AreEqual (2, _list1.FindLastIndex (2, 2, l => true));
+			Assert.AreEqual (1, _list1.FindLastIndex (1, 2, l => true));
 		}
 
-		[Test, ExpectedException (typeof (ArgumentNullException))]
-		public void FindLastIndexNullTest ()
+		[Test]
+		public void FindLastIndex_Invalid ()
 		{
-			int i = _list1.FindLastIndex (null);
+			try {
+				_list1.FindLastIndex (null);
+				Assert.Fail ("#1");
+			} catch (ArgumentNullException) {
+			}
+
+			try {
+				_list1.FindLastIndex (-1, l => true);
+				Assert.Fail ("#2");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (-1, 0, l => true);
+				Assert.Fail ("#2b");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (0, -1, l => true);
+				Assert.Fail ("#3");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (100, l => true);
+				Assert.Fail ("#4");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (100, 0, l => true);
+				Assert.Fail ("#4b");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (2, 4, l => true);
+				Assert.Fail ("#5");
+			} catch (ArgumentOutOfRangeException) {
+			}
 		}
 
 		[Test]
@@ -994,6 +1084,17 @@ namespace MonoTests.System.Collections.Generic {
 			enumerator.MoveNext ();
 		}
 
+		[Test, ExpectedException (typeof (InvalidOperationException))] // #699182
+		public void VersionCheck_Indexer ()
+		{
+			var list = new List<int> () { 0, 2, 3 };
+			var enumerator = list.GetEnumerator ();
+
+			list [0] = 1;
+
+			enumerator.MoveNext ();
+		}
+
 		[Test]
 		public void VersionCheck_Reverse ()
 		{
@@ -1266,6 +1367,20 @@ namespace MonoTests.System.Collections.Generic {
 			Assert.IsTrue (Throws (delegate { var x = e4.Current; }));
 		}
 
+		[Test]
+		public void Enumerator_Reset ()
+		{
+			var l = new List<int> () {
+				4
+			};
+
+			IEnumerator<int> e = l.GetEnumerator ();
+			Assert.IsTrue (e.MoveNext (), "#1");
+			Assert.AreEqual (4, e.Current, "#2");
+			e.Reset ();
+			Assert.AreEqual (0, e.Current, "#3");
+		}
+
 		[Test] //bug #672907
 		public void ICollectionCopyToExceptions ()
 		{
@@ -1313,7 +1428,141 @@ namespace MonoTests.System.Collections.Generic {
 			var l = new List<int> ();
 			Assert.AreEqual (-1, l.IndexOf (-1));
 		}
+
+
+#region Enumerator mutability
+
+		class Bar
+		{
+		}
+
+		class Foo : IEnumerable<Bar>
+		{
+			Baz enumerator;
+
+			public Foo ()
+			{
+				enumerator = new Baz ();
+			}
+
+			public IEnumerator<Bar> GetEnumerator ()
+			{
+				return enumerator;
+			}
+
+			IEnumerator IEnumerable.GetEnumerator ()
+			{
+				return enumerator;
+			}
+		}
+
+		class Baz : IEnumerator<Bar>
+		{
+			public bool DisposeWasCalled = false;
+
+			public void Dispose ()
+			{
+				DisposeWasCalled = true;
+			}
+
+			public bool MoveNext ()
+			{
+				return false; //assume empty collection
+			}
+
+			public void Reset ()
+			{
+			}
+
+			public Bar Current
+			{
+				get { return null; }
+			}
+
+			object IEnumerator.Current
+			{
+				get { return Current; }
+			}
+		}
+
+		[Test]
+		public void PremiseAboutDisposeBeingCalledWhenLooping ()
+		{
+			Foo enumerable = new Foo ();
+			Baz enumerator = enumerable.GetEnumerator () as Baz;
+			Assert.IsNotNull (enumerator);
+			Assert.AreEqual (false, enumerator.DisposeWasCalled);
+			foreach (var element in enumerable) ; //sic
+			Assert.AreEqual (true, enumerator.DisposeWasCalled);
+		}
+
+		[Test]
+		public void TwoEnumeratorsOfTwoDifferentListsAreDifferent ()
+		{
+			var twoThree = new List<int> { 2, 3 };
+			var oneTwo = new List<int> { 2, 4 };
+			Assert.IsFalse (oneTwo.GetEnumerator ().Equals (twoThree.GetEnumerator ()));
+		}
+
+		[Test]
+		public void TwoEnumeratorsOfTwoDifferentListsWithSameElementsAreDifferent ()
+		{
+			var twoThree = new List<int> { 2, 3 };
+			var anotherTwoThree = new List<int> { 2, 3 };
+			Assert.IsFalse(twoThree.GetEnumerator ().Equals (anotherTwoThree.GetEnumerator ()));
+		}
+
+		[Test]
+		public void EnumeratorIsSameInSameListAfterSubsequentCalls ()
+		{
+			var enumerable = new List<Bar> ();
+			var enumerator = enumerable.GetEnumerator ();
+			var enumerator2 = enumerable.GetEnumerator ();
+
+			Assert.IsFalse (ReferenceEquals (enumerator2, enumerator)); //because they are value-types
+
+			Assert.IsTrue (enumerator2.Equals (enumerator));
+		}
+
+
+		[Test] // was bug in Mono 2.10.9
+		public void EnumeratorIsStillSameInSubsequentCallsEvenHavingADisposalInBetween ()
+		{
+			var enumerable = new List<Bar> ();
+			var enumerator = enumerable.GetEnumerator ();
+			enumerator.Dispose ();
+			var enumerator2 = enumerable.GetEnumerator ();
+
+			Assert.IsFalse (ReferenceEquals (enumerator2, enumerator)); //because they are value-types
+
+			Assert.IsTrue (enumerator2.Equals (enumerator));
+		}
+
+		[Test]
+		public void EnumeratorIsObviouslyDifferentAfterListChanges ()
+		{
+			var enumerable = new List<Bar> ();
+			var enumerator = enumerable.GetEnumerator ();
+			enumerable.Add (new Bar ());
+			var enumerator2 = enumerable.GetEnumerator ();
+
+			Assert.IsFalse (ReferenceEquals (enumerator2, enumerator)); //because they are value-types
+
+			Assert.IsFalse (enumerator2.Equals (enumerator));
+		}
+
+		[Test] // was bug in Mono 2.10.9
+		public void DotNetDoesntThrowObjectDisposedExceptionAfterSubsequentDisposes()
+		{
+			var enumerable = new List<Bar> ();
+			var enumerator = enumerable.GetEnumerator ();
+			Assert.AreEqual (false, enumerator.MoveNext ());
+			enumerator.Dispose();
+			Assert.AreEqual (false, enumerator.MoveNext ());
+		}
+#endregion
+
+
 	}
 }
-#endif
 

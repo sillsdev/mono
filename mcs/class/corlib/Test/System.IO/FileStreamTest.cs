@@ -7,6 +7,7 @@
 // 
 // (C) Ville Palo
 // (c) 2003 Ximian, Inc. (http://www.ximian.com)
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 // 
 
 using NUnit.Framework;
@@ -14,6 +15,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 namespace MonoTests.System.IO
 {
@@ -41,12 +43,13 @@ namespace MonoTests.System.IO
 				Directory.Delete (TempFolder, true);
 
 			Directory.CreateDirectory (TempFolder);
-			
+#if !MOBILE			
 			// from XplatUI.cs
 			IntPtr buf = Marshal.AllocHGlobal (8192);
 			if (uname (buf) == 0)
 				MacOSX = Marshal.PtrToStringAnsi (buf) == "Darwin";
 			Marshal.FreeHGlobal (buf);
+#endif
 		}
 
 		public void TestCtr ()
@@ -341,14 +344,8 @@ namespace MonoTests.System.IO
 		}
 
 		[Test]
-#if NET_2_0
 		// FileShare.Inheritable is ignored, but file does not exist
 		[ExpectedException (typeof (FileNotFoundException))]
-#else
-		// share: Enum value was out of legal range.
-		// (FileShare.Inheritable is not valid)
-		[ExpectedException (typeof (ArgumentOutOfRangeException))]
-#endif
 		public void CtorArgumentOutOfRangeException3 ()
 		{
 			string path = TempFolder + DSC + "CtorArgumentOutOfRangeException1";
@@ -423,14 +420,8 @@ namespace MonoTests.System.IO
 
 
 		[Test]
-#if NET_2_0
 		// FileShare.Inheritable is ignored, but file does not exist
 		[ExpectedException (typeof (FileNotFoundException))]
-#else
-		// share: Enum value was out of legal range.
-		// (FileShare.Inheritable is not valid)
-		[ExpectedException (typeof (ArgumentOutOfRangeException))]
-#endif
 		public void CtorArgumentOutOfRangeException5 ()
 		{
 			string path = TempFolder + Path.DirectorySeparatorChar + "temp";
@@ -838,7 +829,6 @@ namespace MonoTests.System.IO
 			}
 		}
 
-#if NET_2_0
 		[Test] // bug #79250
 		public void FileShare_Delete ()
 		{
@@ -869,7 +859,6 @@ namespace MonoTests.System.IO
 				File.Delete (fn);
 			}
 		}
-#endif
 
 		[Test]
 		public void Write ()
@@ -1527,6 +1516,35 @@ namespace MonoTests.System.IO
 			stream.EndWrite (stream.BeginWrite (new byte[8], 0, 8, null, null));
 		}
 
+		static IAsyncResult DoBeginWrite(Stream stream, ManualResetEvent mre, byte[] RandomBuffer)
+		{
+			return stream.BeginWrite (RandomBuffer, 0, RandomBuffer.Length, ar => {
+				stream.EndWrite (ar);
+
+				// we don't supply an ManualResetEvent so this will throw an NRE on the second run
+				// which nunit-console will ignore (but other test runners don't like that)
+				if (mre == null)
+					return;
+
+				DoBeginWrite (stream, null, RandomBuffer).AsyncWaitHandle.WaitOne ();
+				mre.Set ();
+			}, null);
+		}
+
+		[Test]
+		public void BeginWrite_Recursive ()
+		{
+			string path = TempFolder + Path.DirectorySeparatorChar + "temp";
+			DeleteFile (path);
+	
+			using (FileStream stream = new FileStream (path, FileMode.OpenOrCreate, FileAccess.Write)) {
+				var mre = new ManualResetEvent (false);	
+				var RandomBuffer = new byte[1024];			
+				DoBeginWrite (stream, mre, RandomBuffer);
+				Assert.IsTrue (mre.WaitOne (5000), "#1");
+			}
+		}
+
 		[Test]
 		[Category("TargetJvmNotSupported")] // File locking not supported for TARGET_JVM
 		[ExpectedException (typeof (ObjectDisposedException))]
@@ -1603,7 +1621,6 @@ namespace MonoTests.System.IO
 			}
 		}
 
-#if NET_2_0
 		[Category("TargetJvmNotSupported")] // FileOptions.DeleteOnClose not supported for TARGET_JVM
 		[Test]
 		public void DeleteOnClose ()
@@ -1616,6 +1633,41 @@ namespace MonoTests.System.IO
 			fs.Close ();
 			Assert.AreEqual (false, File.Exists (path), "DOC#2");
 			
+		}
+
+#if !MOBILE
+		[Test]
+		public void WriteWithExposedHandle ()
+		{
+			string path = TempFolder + DSC + "exposed-handle.txt";
+			FileStream fs1 = null;
+			FileStream fs2 = null;
+			DeleteFile (path);
+			
+			try {
+				fs1 = new FileStream (path, FileMode.Create);
+				fs2 = new FileStream (fs1.SafeFileHandle, FileAccess.ReadWrite);
+				fs1.WriteByte (Convert.ToByte ('H'));
+				fs1.WriteByte (Convert.ToByte ('E'));
+				fs1.WriteByte (Convert.ToByte ('L'));
+				fs2.WriteByte (Convert.ToByte ('L'));
+				fs2.WriteByte (Convert.ToByte ('O'));
+				long fs1Pos = fs1.Position;
+				fs1.Flush ();
+				fs2.Flush (); 
+				fs1.Close ();
+				fs2.Close ();
+
+				var check = Encoding.ASCII.GetString (File.ReadAllBytes (path));
+				Assert.AreEqual ("HELLO", check, "EXPOSED#1");
+				Assert.AreEqual (5, fs1Pos, "EXPOSED#2");
+			} finally {
+				if (fs1 != null)
+					fs1.Close ();
+				if (fs2 != null)
+					fs2.Close ();
+				DeleteFile (path);
+			}
 		}
 #endif
 	}

@@ -1,11 +1,13 @@
 //
 // System.UInt32.cs
 //
-// Author:
+// Authors:
 //   Miguel de Icaza (miguel@ximian.com)
+//   Marek Safar (marek.safar@gmail.com)
 //
 // (C) Ximian, Inc.  http://www.ximian.com
 // Copyright (C) 2004 Novell (http://www.novell.com)
+// Copyright (C) 2012 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -181,7 +183,7 @@ namespace System
 			NumberFormatInfo nfi = null;
 			if (provider != null) {
 				Type typeNFI = typeof (NumberFormatInfo);
-				nfi = (NumberFormatInfo) provider.GetFormat (typeNFI);
+				nfi = provider.GetFormat (typeNFI) as NumberFormatInfo;
 			}
 			if (nfi == null)
 				nfi = Thread.CurrentThread.CurrentCulture.NumberFormat;
@@ -198,6 +200,7 @@ namespace System
 			bool AllowLeadingSign = (style & NumberStyles.AllowLeadingSign) != 0;
 			bool AllowTrailingWhite = (style & NumberStyles.AllowTrailingWhite) != 0;
 			bool AllowLeadingWhite = (style & NumberStyles.AllowLeadingWhite) != 0;
+			bool AllowExponent = (style & NumberStyles.AllowExponent) != 0;
 
 			int pos = 0;
 
@@ -224,6 +227,7 @@ namespace System
 						exc = Int32.GetFormatException ();
 					return false;
 				}
+				
 				if (s.Substring (pos, nfi.PositiveSign.Length) == nfi.PositiveSign) {
 					if (!tryParse)
 						exc = Int32.GetFormatException ();
@@ -238,7 +242,8 @@ namespace System
 					if (AllowLeadingWhite && !Int32.JumpOverWhite (ref pos, s, true, tryParse, ref exc))
 						return false;
 					if (AllowCurrencySymbol) {
-						Int32.FindCurrency (ref pos, s, nfi, ref foundCurrency);
+						Int32.FindCurrency (ref pos, s, nfi,
+								    ref foundCurrency);
 						if (foundCurrency && AllowLeadingWhite &&
 								!Int32.JumpOverWhite (ref pos, s, true, tryParse, ref exc))
 							return false;
@@ -254,7 +259,8 @@ namespace System
 						return false;
 					if (foundCurrency) {
 						if (!foundSign && AllowLeadingSign) {
-							Int32.FindSign (ref pos, s, nfi, ref foundSign, ref negative);
+							Int32.FindSign (ref pos, s, nfi, ref foundSign,
+									ref negative);
 							if (foundSign && AllowLeadingWhite &&
 									!Int32.JumpOverWhite (ref pos, s, true, tryParse, ref exc))
 								return false;
@@ -265,27 +271,33 @@ namespace System
 
 			uint number = 0;
 			int nDigits = 0;
-			bool decimalPointFound = false;
+			int decimalPointPos = -1;
 			uint digitValue;
 			char hexDigit;
 
 			// Number stuff
 			// Just the same as Int32, but this one adds instead of substract
-			do {
+			while (pos < s.Length) {
 
 				if (!Int32.ValidDigit (s [pos], AllowHexSpecifier)) {
-					if (AllowThousands && Int32.FindOther (ref pos, s, nfi.NumberGroupSeparator))
+					if (AllowThousands &&
+					    (Int32.FindOther (ref pos, s, nfi.NumberGroupSeparator)
+						|| Int32.FindOther (ref pos, s, nfi.CurrencyGroupSeparator)))
 						continue;
-					else
-						if (!decimalPointFound && AllowDecimalPoint &&
-						    Int32.FindOther (ref pos, s, nfi.NumberDecimalSeparator)) {
-							decimalPointFound = true;
+					
+					if (AllowDecimalPoint && decimalPointPos < 0 &&
+					    (Int32.FindOther (ref pos, s, nfi.NumberDecimalSeparator)
+						|| Int32.FindOther (ref pos, s, nfi.CurrencyDecimalSeparator))) {
+							decimalPointPos = nDigits;
 							continue;
 						}
+
 					break;
 				}
-				else if (AllowHexSpecifier) {
-					nDigits++;
+
+				nDigits++;
+
+				if (AllowHexSpecifier) {
 					hexDigit = s [pos++];
 					if (Char.IsDigit (hexDigit))
 						digitValue = (uint) (hexDigit - '0');
@@ -302,30 +314,18 @@ namespace System
 						number = (uint) l;
 					} else
 						number = checked (number * 16 + digitValue);
-				}
-				else if (decimalPointFound) {
-					nDigits++;
-					// Allows decimal point as long as it's only 
-					// followed by zeroes.
-					if (s [pos++] != '0') {
-						if (!tryParse)
-							exc = new OverflowException (Locale.GetText ("Value too large or too small."));
-						return false;
-					}
-				}
-				else {
-					nDigits++;
 
-					try {
-						number = checked (number * 10 + (uint) (s [pos++] - '0'));
-					}
-					catch (OverflowException) {
-						if (!tryParse)
-							exc = new OverflowException (Locale.GetText ("Value too large or too small."));
-						return false;
-					}
+					continue;
 				}
-			} while (pos < s.Length);
+
+				try {
+					number = checked (number * 10 + (uint) (s [pos++] - '0'));
+				} catch (OverflowException) {
+					if (!tryParse)
+						exc = new OverflowException (Locale.GetText ("Value too large or too small."));
+					return false;
+				}
+			}
 
 			// Post number stuff
 			if (nDigits == 0) {
@@ -334,25 +334,32 @@ namespace System
 				return false;
 			}
 
+			int exponent = 0;
+			if (AllowExponent)
+				if (Int32.FindExponent (ref pos, s, ref exponent, tryParse, ref exc) && exc != null)
+					return false;
+
 			if (AllowTrailingSign && !foundSign) {
 				// Sign + Currency
 				Int32.FindSign (ref pos, s, nfi, ref foundSign, ref negative);
-				if (foundSign) {
+				if (foundSign && pos < s.Length) {
 					if (AllowTrailingWhite && !Int32.JumpOverWhite (ref pos, s, true, tryParse, ref exc))
 						return false;
-					if (AllowCurrencySymbol)
-						Int32. FindCurrency (ref pos, s, nfi, ref foundCurrency);
 				}
 			}
 
 			if (AllowCurrencySymbol && !foundCurrency) {
+				if (AllowTrailingWhite && pos < s.Length && !Int32.JumpOverWhite (ref pos, s, false, tryParse, ref exc))
+					return false;
+				
 				// Currency + sign
 				Int32.FindCurrency (ref pos, s, nfi, ref foundCurrency);
-				if (foundCurrency) {
+				if (foundCurrency && pos < s.Length) {
 					if (AllowTrailingWhite && !Int32.JumpOverWhite (ref pos, s, true, tryParse, ref exc))
 						return false;
 					if (!foundSign && AllowTrailingSign)
-						Int32.FindSign (ref pos, s, nfi, ref foundSign, ref negative);
+						Int32.FindSign (ref pos, s, nfi, ref foundSign,
+								ref negative);
 				}
 			}
 
@@ -383,8 +390,37 @@ namespace System
 				return false;
 			}
 
-			result = number;
+			if (decimalPointPos >= 0)
+				exponent = exponent - nDigits + decimalPointPos;
+			
+			if (exponent < 0) {
+				//
+				// Any non-zero values after decimal point are not allowed
+				//
+				long remainder;
+				number = (uint) Math.DivRem (number, (int) Math.Pow (10, -exponent), out remainder);
+				if (remainder != 0) {
+					if (!tryParse)
+						exc = new OverflowException ("Value too large or too small.");
+					return false;
+				}
+			} else if (exponent > 0) {
+				//
+				// result *= 10^exponent
+				//
+				// Reduce the risk of throwing an overflow exc
+				//
+				double res = checked (Math.Pow (10, exponent) * number);
+				if (res < MinValue || res > MaxValue) {
+					if (!tryParse)
+						exc = new OverflowException ("Value too large or too small.");
+					return false;
+				}
 
+				number = (uint)res;
+			}
+
+			result = number;
 			return true;
 		}
 
@@ -533,7 +569,6 @@ namespace System
 		{
 			if (targetType == null)
 				throw new ArgumentNullException ("targetType");
-			
 			return System.Convert.ToType (m_value, targetType, provider, false);
 		}
 

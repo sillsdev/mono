@@ -26,8 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
-
 using System;
 using System.Net;
 using System.Security;
@@ -44,12 +42,10 @@ namespace Microsoft.Win32 {
 		}
 
 		public virtual bool ShouldSendCredential (Uri challengeUri, WebRequest request,
-			NetworkCredential credential, IAuthenticationModule authenticationModule)
+			NetworkCredential credential, IAuthenticationModule authModule)
 		{
 			Zone z = Zone.CreateFromUrl (challengeUri.AbsoluteUri);
 			return (z.SecurityZone == SecurityZone.Intranet);
 		}
 	}
 }
-
-#endif

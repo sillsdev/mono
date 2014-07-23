@@ -1,14 +1,10 @@
-// CS0119: Expression denotes a `type', where a `variable' or `value' was expected
-// Line: 12
+// CS0119: Expression denotes a `namespace', where a `variable', `value' or `method group' was expected
+// Line: 8
 
-class A
+class X
 {
-}
-
-class B
-{
-	public B ()
+	public static void Main ()
 	{
-		A = 2;
+		System.Collections.Generic ("");
 	}
 }

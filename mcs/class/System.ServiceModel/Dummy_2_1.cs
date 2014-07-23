@@ -1,7 +1,12 @@
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Runtime.CompilerServices;
+using System.ServiceModel.Channels;
+using System.ServiceModel.Dispatcher;
+using System.Text;
+using System.Xml;
 
-#if !MOBILE
 namespace System.Runtime.CompilerServices
 {
 	// introduced for silverlight sdk compatibility
@@ -12,7 +17,6 @@ namespace System.Runtime.CompilerServices
 		}
 	}
 }
-#endif
 
 namespace System.ServiceModel
 {
@@ -34,10 +38,30 @@ namespace System.ServiceModel
 			return false;
 		}
 	}
+	
+	[FriendAccessAllowed]
+	internal interface IDispatchOperation
+	{
+		bool DeserializeRequest { get; set; }
+		IDispatchMessageFormatter Formatter { get; set; }
+		string Name { get; }
+		bool SerializeReply { get; set; }
+	}
 }
 namespace System.ServiceModel.Channels
 {
 	public interface ITransportTokenAssertionProvider {}
+	public static class UrlUtility {
+		public static string UrlEncode (string s, Encoding e)
+		{
+			return s;
+		}
+
+		public static string UrlDecode (string s, Encoding e)
+		{
+			return s;
+		}
+	}
 }
 namespace System.ServiceModel.Channels.Http
 {
@@ -75,29 +99,70 @@ namespace System.ServiceModel.Description
 		}
 	}
 }
-namespace System.ServiceModel.DiagnosticUtility
+namespace System.ServiceModel
 {
 	// introduced for silverlight sdk compatibility
-	internal class ExceptionUtility
-	{
-		public static Exception ThrowHelperError (Exception error)
-		{
-			return error;
-		}
+	internal interface IDuplexHelper { }
 
-		public static Exception ThrowHelperArgumentNull (string arg)
+	[FriendAccessAllowed ()]
+	internal class DiagnosticUtility
+	{
+		[FriendAccessAllowed ()]
+		internal class ExceptionUtility
 		{
-			return new ArgumentNullException (arg);
+			public static Exception ThrowHelperArgument (string message) { throw new NotImplementedException (); }
+			
+			public static Exception ThrowHelperArgument (string paramName, string message) { throw new NotImplementedException (); }
+			
+			public static Exception ThrowHelperArgumentNull (string arg)
+			{
+				return new ArgumentNullException (arg);
+			}
+
+			[FriendAccessAllowed]
+			internal static Exception ThrowHelperCallback (Exception e) { throw new NotImplementedException (); }
+			
+			[FriendAccessAllowed]
+			internal static Exception ThrowHelperCallback (string message, Exception innerException) { throw new NotImplementedException (); }
+			
+			public static Exception ThrowHelperError (Exception error)
+			{
+				return error;
+			}
+			
+			[FriendAccessAllowed]
+			internal static Exception ThrowHelperFatal (string message, Exception innerException) { throw new NotImplementedException (); }
+			
+			[FriendAccessAllowed]
+			internal static Exception ThrowHelperInternal (bool fatal) { throw new NotImplementedException (); }
+			
+			public static Exception ThrowHelperWarning (Exception e) { throw new NotImplementedException (); }
 		}
 	}
 }
+
 namespace System.ServiceModel.Dispatcher
 {
-	public class EndpointDispatcher
+	public sealed class EndpointDispatcher
 	{
 		internal EndpointDispatcher ()
 		{
 		}
+	}
+
+	internal class FaultFormatter : IClientFaultFormatter
+	{
+		internal FaultFormatter (Type[] detailTypes) { throw new NotImplementedException (); }
+		internal FaultFormatter (SynchronizedCollection<FaultContractInfo> faultContractInfoCollection) { throw new NotImplementedException (); }
+		protected virtual FaultException CreateFaultException (MessageFault messageFault, string action) { throw new NotImplementedException (); }
+		protected FaultException CreateFaultException (MessageFault messageFault, string action, object detailObj, Type detailType, XmlDictionaryReader detailReader) { throw new NotImplementedException (); }
+		public FaultException Deserialize (MessageFault messageFault, string action) { throw new NotImplementedException (); }
+		protected virtual XmlObjectSerializer GetSerializer (Type detailType, string faultExceptionAction, out string action) { throw new NotImplementedException (); }
+	}
+
+	internal interface IClientFaultFormatter
+	{
+		FaultException Deserialize (MessageFault messageFault, string action);
 	}
 }
 namespace System.ServiceModel.Security

@@ -1,4 +1,4 @@
-//
+﻿//
 // OciDateTimeDescriptor.cs - used for an Oracle TIMESTAMP
 //
 // Part of managed C#/.NET library System.Data.OracleClient.dll
@@ -64,15 +64,13 @@ namespace System.Data.OracleClient.Oci {
 					byte hour, byte min, byte sec, uint fsec, string timezone)
 		{
 			// Get size of buffer
-			ulong rsize = 0;
-			UIntPtr rsizep = new UIntPtr (rsize);
-			int status = OciCalls.OCIUnicodeToCharSet (handle, null, timezone, ref rsizep);
+			int rsize = 0;
+			int status = OciCalls.OCIUnicodeToCharSet (handle, null, timezone, out rsize);
 
 			// Fill buffer
-			rsize = rsizep.ToUInt64 ();
 			byte[] bytes = new byte[rsize];
 			if (status == 0 && rsize > 0)
-				OciCalls.OCIUnicodeToCharSet (handle, bytes, timezone, ref rsizep);
+				OciCalls.OCIUnicodeToCharSet (handle, bytes, timezone, out rsize);
 
 			if (fsec > 0)
 				fsec = fsec * 1000000;

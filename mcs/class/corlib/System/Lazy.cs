@@ -27,7 +27,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 
 using System;
 using System.Runtime.Serialization;
@@ -41,14 +41,15 @@ namespace System
 	[SerializableAttribute]
 	[ComVisibleAttribute(false)]
 	[HostProtectionAttribute(SecurityAction.LinkDemand, Synchronization = true, ExternalThreading = true)]
+	[DebuggerDisplay ("ThreadSafetyMode={Mode}, IsValueCreated={IsValueCreated}, IsValueFaulted={IsValueFaulted}, Value={ValueForDebugDisplay}")]
 	public class Lazy<T> 
 	{
 		T value;
-		bool inited;
-		LazyThreadSafetyMode mode;
 		Func<T> factory;
 		object monitor;
 		Exception exception;
+		LazyThreadSafetyMode mode;
+		bool inited;
 
 		public Lazy ()
 			: this (LazyThreadSafetyMode.ExecutionAndPublication)
@@ -61,7 +62,7 @@ namespace System
 		}
 
 		public Lazy (bool isThreadSafe)
-			: this (() => Activator.CreateInstance<T> (), isThreadSafe ? LazyThreadSafetyMode.ExecutionAndPublication : LazyThreadSafetyMode.None)
+			: this (Activator.CreateInstance<T>, isThreadSafe ? LazyThreadSafetyMode.ExecutionAndPublication : LazyThreadSafetyMode.None)
 		{
 		}
 		
@@ -71,7 +72,7 @@ namespace System
 		}
 
 		public Lazy (LazyThreadSafetyMode mode)
-			: this (() => Activator.CreateInstance<T> (), mode)
+			: this (Activator.CreateInstance<T>, mode)
 		{
 		}
 

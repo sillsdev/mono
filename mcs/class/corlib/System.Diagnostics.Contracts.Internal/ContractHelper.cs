@@ -26,17 +26,21 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0 
+#if NET_4_0
 
 using System;
 using System.Text;
+using System.Reflection;
 using System.Runtime.ConstrainedExecution;
 
 namespace System.Diagnostics.Contracts.Internal
 {
+#if NET_4_5
+	[Obsolete ("Type has been moved to System.Runtime.CompilerServices")]
+#endif
 	public static class ContractHelper
 	{
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		[DebuggerNonUserCode]
 		public static string RaiseContractFailedEvent (ContractFailureKind failureKind, string userMessage, string conditionText, Exception innerException)
 		{
@@ -120,7 +124,6 @@ namespace System.Diagnostics.Contracts.Internal
 			if (displayMessage != null) {
 				msg.Append (displayMessage);
 			}
-
 			if (Environment.UserInteractive) {
 				// FIXME: This should trigger an assertion.
 				// But code will never get here at the moment, as Environment.UserInteractive currently
@@ -130,7 +133,6 @@ namespace System.Diagnostics.Contracts.Internal
 				// Note that FailFast() currently throws a NotImplementedException()
 				Environment.FailFast(msg.ToString()/*, new ExecutionEngineException()*/);
 			}
-
 		}
 
 	}

@@ -55,6 +55,17 @@ static void* marshal_alloc (gsize size)
 #endif
 }
 
+static void* marshal_alloc0 (gsize size)
+{
+#ifdef WIN32
+	void* ptr = CoTaskMemAlloc (size);
+	memset(ptr, 0, size);
+	return ptr;
+#else
+	return g_malloc0 (size);
+#endif
+}
+
 static char* marshal_strdup (const char *str)
 {
 #ifdef WIN32
@@ -98,6 +109,8 @@ static gunichar2* marshal_bstr_alloc(const gchar* str)
 	return (gunichar2*)(ret + 4);
 #endif
 }
+
+#define marshal_new0(type,size)       ((type *) marshal_alloc0 (sizeof (type)* (size)))
 
 LIBTEST_API int STDCALL
 mono_cominterop_is_supported (void)
@@ -568,6 +581,29 @@ mono_test_marshal_out_struct (int a, simplestruct *ss, int b, OutVTypeDelegate f
 		return 1;
 }
 
+typedef int (STDCALL *InVTypeDelegate) (int a, simplestruct *ss, int b);
+
+LIBTEST_API int STDCALL 
+mono_test_marshal_in_struct (int a, simplestruct *ss, int b, InVTypeDelegate func)
+{
+	simplestruct ss2;
+	int res;
+
+	memcpy (&ss2, ss, sizeof (simplestruct));
+
+	res = func (a, ss, b);
+	if (res) {
+		printf ("mono_test_marshal_in_struct () failed: %d\n", res);
+		return 1;
+	}
+
+	/* Check that no modifications is made to the struct */
+	if (ss2.a == ss->a && ss2.b == ss->b && ss2.c == ss->c && ss2.d == ss->d)
+		return 0;
+	else
+		return 1;
+}
+
 typedef struct {
 	int a;
 	SimpleDelegate func, func2, func3;
@@ -709,7 +745,7 @@ mono_test_marshal_class (int i, int j, int k, simplestruct2 *ss, int l)
 		   ss->e == 99 && ss->f == 1.5 && ss->g == 42 && ss->h == (guint64)123))
 		return NULL;
 
-	res = g_new0 (simplestruct2, 1);
+	res = marshal_new0 (simplestruct2, 1);
 	memcpy (res, ss, sizeof (simplestruct2));
 	res->d = marshal_strdup ("TEST");
 	return res;
@@ -726,7 +762,7 @@ mono_test_marshal_byref_class (simplestruct2 **ssp)
 		   ss->e == 99 && ss->f == 1.5 && ss->g == 42 && ss->h == (guint64)123))
 		return 1;
 
-	res = g_new0 (simplestruct2, 1);
+	res = marshal_new0 (simplestruct2, 1);
 	memcpy (res, ss, sizeof (simplestruct2));
 	res->d = marshal_strdup ("TEST-RES");
 
@@ -1025,6 +1061,16 @@ mono_test_marshal_stringbuilder (char *s, int n)
 }
 
 LIBTEST_API int STDCALL  
+mono_test_marshal_stringbuilder2 (char *s, int n)
+{
+	const char m[] = "EFGH";
+
+	strncpy(s, m, n);
+	s [n] = '\0';
+	return 0;
+}
+
+LIBTEST_API int STDCALL  
 mono_test_marshal_stringbuilder_default (char *s, int n)
 {
 	const char m[] = "This is my message.  Isn't it nice?";
@@ -1080,6 +1126,22 @@ mono_test_marshal_stringbuilder_out_unicode (gunichar2 **s)
 
 	g_free (s2);
 
+	return 0;
+}
+
+LIBTEST_API int STDCALL
+mono_test_marshal_stringbuilder_ref (char **s)
+{
+	const char m[] = "This is my message.  Isn't it nice?";
+	char *str;
+
+	if (strcmp (*s, "ABC"))
+		return 1;
+
+	str = marshal_alloc (strlen (m) + 1);
+	memcpy (str, m, strlen (m) + 1);
+	
+	*s = str;
 	return 0;
 }
 
@@ -1395,6 +1457,8 @@ string_marshal_test2 (char **str)
 	if (strcmp (*str, "TEST1"))
 		return -1;
 
+	*str = marshal_strdup ("TEST2");
+
 	return 0;
 }
 
@@ -1423,10 +1487,10 @@ TestBlittableClass (BlittableClass *vl)
 		vl->a++;
 		vl->b++;
 
-		res = g_new0 (BlittableClass, 1);
+		res = marshal_new0 (BlittableClass, 1);
 		memcpy (res, vl, sizeof (BlittableClass));
 	} else {
-		res = g_new0 (BlittableClass, 1);
+		res = marshal_new0 (BlittableClass, 1);
 		res->a = 42;
 		res->b = 43;
 	}
@@ -2391,6 +2455,7 @@ typedef struct {
 		guint16 uiVal;
 		guint32 ulVal;
 		guint64 ullVal;
+		gpointer byref;
 		struct {
 			gpointer pvRecord;
 			gpointer pRecInfo;
@@ -2620,10 +2685,30 @@ mono_test_marshal_variant_out_sbyte(VARIANT* variant)
 }
 
 LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_sbyte_byref(VARIANT* variant)
+{
+	variant->vt = VT_I1|VT_BYREF;
+	variant->byref = marshal_alloc(1);
+	*((gint8*)variant->byref) = 100;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
 mono_test_marshal_variant_out_byte(VARIANT* variant)
 {	
 	variant->vt = VT_UI1;
 	variant->bVal = 100;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_byte_byref(VARIANT* variant)
+{	
+	variant->vt = VT_UI1|VT_BYREF;
+	variant->byref = marshal_alloc(1);
+	*((gint8*)variant->byref) = 100;
 
 	return 0;
 }
@@ -2638,10 +2723,30 @@ mono_test_marshal_variant_out_short(VARIANT* variant)
 }
 
 LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_short_byref(VARIANT* variant)
+{
+	variant->vt = VT_I2|VT_BYREF;
+	variant->byref = marshal_alloc(2);
+	*((gint16*)variant->byref) = 314;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
 mono_test_marshal_variant_out_ushort(VARIANT* variant)
 {
 	variant->vt = VT_UI2;
 	variant->uiVal = 314;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_ushort_byref(VARIANT* variant)
+{
+	variant->vt = VT_UI2|VT_BYREF;
+	variant->byref = marshal_alloc(2);
+	*((guint16*)variant->byref) = 314;
 
 	return 0;
 }
@@ -2656,10 +2761,30 @@ mono_test_marshal_variant_out_int(VARIANT* variant)
 }
 
 LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_int_byref(VARIANT* variant)
+{
+	variant->vt = VT_I4|VT_BYREF;
+	variant->byref = marshal_alloc(4);
+	*((gint32*)variant->byref) = 314;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
 mono_test_marshal_variant_out_uint(VARIANT* variant)
 {
 	variant->vt = VT_UI4;
 	variant->ulVal = 314;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_uint_byref(VARIANT* variant)
+{
+	variant->vt = VT_UI4|VT_BYREF;
+	variant->byref = marshal_alloc(4);
+	*((guint32*)variant->byref) = 314;
 
 	return 0;
 }
@@ -2674,10 +2799,30 @@ mono_test_marshal_variant_out_long(VARIANT* variant)
 }
 
 LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_long_byref(VARIANT* variant)
+{
+	variant->vt = VT_I8|VT_BYREF;
+	variant->byref = marshal_alloc(8);
+	*((gint64*)variant->byref) = 314;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
 mono_test_marshal_variant_out_ulong(VARIANT* variant)
 {
 	variant->vt = VT_UI8;
 	variant->ullVal = 314;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_ulong_byref(VARIANT* variant)
+{
+	variant->vt = VT_UI8|VT_BYREF;
+	variant->byref = marshal_alloc(8);
+	*((guint64*)variant->byref) = 314;
 
 	return 0;
 }
@@ -2692,10 +2837,30 @@ mono_test_marshal_variant_out_float(VARIANT* variant)
 }
 
 LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_float_byref(VARIANT* variant)
+{
+	variant->vt = VT_R4|VT_BYREF;
+	variant->byref = marshal_alloc(4);
+	*((float*)variant->byref) = 3.14;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
 mono_test_marshal_variant_out_double(VARIANT* variant)
 {
 	variant->vt = VT_R8;
 	variant->dblVal = 3.14;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_double_byref(VARIANT* variant)
+{
+	variant->vt = VT_R8|VT_BYREF;
+	variant->byref = marshal_alloc(8);
+	*((double*)variant->byref) = 3.14;
 
 	return 0;
 }
@@ -2710,6 +2875,16 @@ mono_test_marshal_variant_out_bstr(VARIANT* variant)
 }
 
 LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_bstr_byref(VARIANT* variant)
+{
+	variant->vt = VT_BSTR|VT_BYREF;
+	variant->byref = marshal_alloc(sizeof(gpointer));
+	*((gunichar**)variant->byref) = (gunichar*)marshal_bstr_alloc("PI");
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
 mono_test_marshal_variant_out_bool_true (VARIANT* variant)
 {
 	variant->vt = VT_BOOL;
@@ -2719,10 +2894,30 @@ mono_test_marshal_variant_out_bool_true (VARIANT* variant)
 }
 
 LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_bool_true_byref (VARIANT* variant)
+{
+	variant->vt = VT_BOOL|VT_BYREF;
+	variant->byref = marshal_alloc(2);
+	*((gint16*)variant->byref) = VARIANT_TRUE;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
 mono_test_marshal_variant_out_bool_false (VARIANT* variant)
 {
 	variant->vt = VT_BOOL;
 	variant->boolVal = VARIANT_FALSE;
+
+	return 0;
+}
+
+LIBTEST_API int STDCALL 
+mono_test_marshal_variant_out_bool_false_byref (VARIANT* variant)
+{
+	variant->vt = VT_BOOL|VT_BYREF;
+	variant->byref = marshal_alloc(2);
+	*((gint16*)variant->byref) = VARIANT_FALSE;
 
 	return 0;
 }
@@ -3133,16 +3328,19 @@ ITestOut(MonoComObject* pUnk, MonoComObject* *ppUnk)
 	return S_OK;
 }
 
+static void create_com_object (MonoComObject** pOut);
+
 LIBTEST_API int STDCALL 
 get_ITest(MonoComObject* pUnk, MonoComObject* *ppUnk)
 {
+	create_com_object (ppUnk);
 	return S_OK;
 }
 
 static void create_com_object (MonoComObject** pOut)
 {
-	*pOut = g_new0 (MonoComObject, 1);
-	(*pOut)->vtbl = g_new0 (MonoIUnknown, 1);
+	*pOut = marshal_new0 (MonoComObject, 1);
+	(*pOut)->vtbl = marshal_new0 (MonoIUnknown, 1);
 
 	(*pOut)->m_ref = 1;
 	(*pOut)->vtbl->QueryInterface = MonoQueryInterface;
@@ -3263,7 +3461,7 @@ mono_test_marshal_ccw_itest (MonoComObject *pUnk)
 /* thunks.cs:TestStruct */
 typedef struct _TestStruct {
 	int A;
-	double B ALIGN(8);  /* align according to  mono's struct layout */
+	double B;
 } TestStruct;
 
 /* Searches for mono symbols in all loaded modules */
@@ -5046,3 +5244,137 @@ mono_test_marshal_thread_attach (SimpleDelegate del)
 	return call_managed_res;
 #endif
 }
+
+typedef int (STDCALL *Callback) (void);
+
+static Callback callback;
+
+LIBTEST_API void STDCALL 
+mono_test_marshal_set_callback (Callback cb)
+{
+	callback = cb;
+}
+
+LIBTEST_API int STDCALL 
+mono_test_marshal_call_callback (void)
+{
+	return callback ();
+}
+
+LIBTEST_API int STDCALL
+mono_test_marshal_lpstr (char *str)
+{
+	return strcmp ("ABC", str);
+}
+
+LIBTEST_API int STDCALL
+mono_test_marshal_lpwstr (gunichar2 *str)
+{
+	char *s;
+	int res;
+
+	s = g_utf16_to_utf8 (str, -1, NULL, NULL, NULL);
+	res = strcmp ("ABC", s);
+	g_free (s);
+
+	return res;
+}
+
+LIBTEST_API char* STDCALL
+mono_test_marshal_return_lpstr (void)
+{
+	char *res = marshal_alloc (4);
+	strcpy (res, "XYZ");
+	return res;
+}
+
+
+LIBTEST_API gunichar2* STDCALL
+mono_test_marshal_return_lpwstr (void)
+{
+	gunichar2 *res = marshal_alloc (8);
+	gunichar2* tmp = g_utf8_to_utf16 ("XYZ", -1, NULL, NULL, NULL);
+
+	memcpy (res, tmp, 8);
+	g_free (tmp);
+
+	return res;
+}
+
+
+#ifndef TARGET_X86
+
+LIBTEST_API int STDCALL
+mono_test_has_thiscall (void)
+{
+	return 1;
+}
+
+LIBTEST_API int
+_mono_test_native_thiscall1 (int arg)
+{
+	return arg;
+}
+
+LIBTEST_API int
+_mono_test_native_thiscall2 (int arg, int arg2)
+{
+	return arg + (arg2^1);
+}
+
+LIBTEST_API int
+_mono_test_native_thiscall3 (int arg, int arg2, int arg3)
+{
+	return arg + (arg2^1) + (arg3^2);
+}
+
+#elif defined(__GNUC__)
+
+LIBTEST_API int STDCALL
+mono_test_has_thiscall (void)
+{
+	return 1;
+}
+
+#define def_asm_fn(name) \
+	"\t.align 4\n" \
+	"\t.globl _" #name "\n" \
+	"_" #name ":\n" \
+	"\t.globl __" #name "\n" \
+	"__" #name ":\n"
+
+asm(".text\n"
+
+def_asm_fn(mono_test_native_thiscall1)
+"\tmovl %ecx,%eax\n"
+"\tret\n"
+
+def_asm_fn(mono_test_native_thiscall2)
+"\tmovl %ecx,%eax\n"
+"\tmovl 4(%esp),%ecx\n"
+"\txorl $1,%ecx\n"
+"\taddl %ecx,%eax\n"
+"\tret $4\n"
+
+def_asm_fn(mono_test_native_thiscall3)
+"\tmovl %ecx,%eax\n"
+"\tmovl 4(%esp),%ecx\n"
+"\txorl $1,%ecx\n"
+"\taddl %ecx,%eax\n"
+"\tmovl 8(%esp),%ecx\n"
+"\txorl $2,%ecx\n"
+"\taddl %ecx,%eax\n"
+"\tret $8\n"
+
+);
+
+#else
+
+LIBTEST_API int STDCALL
+mono_test_has_thiscall (void)
+{
+	return 0;
+}
+
+#endif
+

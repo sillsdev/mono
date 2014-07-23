@@ -1,122 +1,94 @@
 /*
+ * sgen-major-scan-object.h: Object scanning in the major collectors.
+ *
  * Copyright 2001-2003 Ximian, Inc
  * Copyright 2003-2010 Novell, Inc.
- * 
- * Permission is hereby granted, free of charge, to any person obtaining
- * a copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- * 
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
- * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
- * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
- * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * Copyright (C) 2012 Xamarin Inc
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Library General Public
+ * License 2.0 as published by the Free Software Foundation;
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Library General Public
+ * License 2.0 along with this library; if not, write to the Free
+ * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
-extern long long stat_scan_object_called_nursery;
+
 extern long long stat_scan_object_called_major;
 
-#undef HANDLE_PTR
-#define HANDLE_PTR(ptr,obj)	do {	\
-		void *__old = *(ptr);	\
-		void *__copy;		\
-		if (__old) {	\
-			copy_object ((ptr), queue);	\
-			__copy = *(ptr);	\
-			DEBUG (9, if (__old != __copy) fprintf (gc_debug_file, "Overwrote field at %p with %p (was: %p)\n", (ptr), *(ptr), __old));	\
-			if (G_UNLIKELY (ptr_in_nursery (__copy) && !ptr_in_nursery ((ptr)))) \
-				mono_sgen_add_to_global_remset ((ptr));	\
-		}	\
-	} while (0)
+#ifdef FIXED_HEAP
+#define PREFETCH_DYNAMIC_HEAP(addr)
+#else
+#define PREFETCH_DYNAMIC_HEAP(addr)	PREFETCH ((addr))
+#endif
 
-/*
- * Scan the object pointed to by @start for references to
- * other objects between @from_start and @from_end and copy
- * them to the gray_objects area.
- */
-static void
-minor_scan_object (char *start, SgenGrayQueue *queue)
-{
-#include "sgen-scan-object.h"
-
-	HEAVY_STAT (++stat_scan_object_called_nursery);
-}
-
-/*
- * scan_vtype:
- *
- * Scan the valuetype pointed to by START, described by DESC for references to
- * other objects between @from_start and @from_end and copy them to the gray_objects area.
- * Returns a pointer to the end of the object.
- */
-static char*
-minor_scan_vtype (char *start, MonoClass* klass, char* from_start, char* from_end, SgenGrayQueue *queue)
-{
-	size_t skip_size;
-	mword desc = (mword)klass->gc_descr;
-
-	/* The descriptors include info about the MonoObject header as well */
-	start -= sizeof (MonoObject);
-
-	switch (desc & 0x7) {
-	case DESC_TYPE_RUN_LENGTH:
-		OBJ_RUN_LEN_FOREACH_PTR (desc,start);
-		OBJ_RUN_LEN_SIZE (skip_size, desc, start);
-		g_assert (skip_size);
-		return start + skip_size;
-	case DESC_TYPE_SMALL_BITMAP:
-		OBJ_BITMAP_FOREACH_PTR (desc,start);
-		OBJ_BITMAP_SIZE (skip_size, desc, start);
-		return start + skip_size;
-	case DESC_TYPE_LARGE_BITMAP:
-		OBJ_LARGE_BITMAP_FOREACH_PTR (desc,start);
-		skip_size = klass->instance_size;
-		return start + skip_size;
-		break;
-	case DESC_TYPE_COMPLEX:
-		OBJ_COMPLEX_FOREACH_PTR (desc,start);
-		skip_size = klass->instance_size;
-		return start + skip_size;
-		break;
-	default:
-		// The other descriptors can't happen with vtypes
-		g_assert_not_reached ();
-		break;
-	}
-	return NULL;
-}
+#ifdef SCAN_FOR_CONCURRENT_MARK
+#define FOLLOW_OBJECT(addr)	(!sgen_ptr_in_nursery ((addr)))
+#define ALWAYS_ADD_TO_GLOBAL_REMSET	1
+#define CONCURRENT_NAME(x)	x ## _concurrent
+#else
+#define FOLLOW_OBJECT(addr)	1
+#define ALWAYS_ADD_TO_GLOBAL_REMSET	0
+#define CONCURRENT_NAME(x)	x
+#endif
 
 #undef HANDLE_PTR
 #define HANDLE_PTR(ptr,obj)	do {					\
 		void *__old = *(ptr);					\
 		void *__copy;						\
-		if (__old) {						\
-			major_copy_or_mark_object ((ptr), queue);	\
+		SGEN_OBJECT_LAYOUT_STATISTICS_MARK_BITMAP ((obj), (ptr)); \
+		if (__old && FOLLOW_OBJECT (__old)) {			\
+			PREFETCH_DYNAMIC_HEAP (__old);			\
+			CONCURRENT_NAME (major_copy_or_mark_object) ((ptr), __old, queue); \
 			__copy = *(ptr);				\
-			DEBUG (9, if (__old != __copy) mono_sgen_debug_printf (9, "Overwrote field at %p with %p (was: %p)\n", (ptr), *(ptr), __old)); \
-			if (G_UNLIKELY (ptr_in_nursery (__copy) && !ptr_in_nursery ((ptr)))) \
-				mono_sgen_add_to_global_remset ((ptr));	\
+			SGEN_COND_LOG (9, __old != __copy, "Overwrote field at %p with %p (was: %p)", (ptr), *(ptr), __old); \
+			if (G_UNLIKELY (sgen_ptr_in_nursery (__copy) && !sgen_ptr_in_nursery ((ptr)))) \
+				sgen_add_to_global_remset ((ptr), __copy);	\
+		} else {						\
+			if (ALWAYS_ADD_TO_GLOBAL_REMSET && G_UNLIKELY (sgen_ptr_in_nursery (__old) && !sgen_ptr_in_nursery ((ptr)))) \
+				sgen_add_to_global_remset ((ptr), __old); \
 		}							\
 	} while (0)
 
 static void
-major_scan_object (char *start, SgenGrayQueue *queue)
+CONCURRENT_NAME (major_scan_object) (char *start, SgenGrayQueue *queue)
 {
+	SGEN_OBJECT_LAYOUT_STATISTICS_DECLARE_BITMAP;
+
+#define SCAN_OBJECT_PROTOCOL
 #include "sgen-scan-object.h"
 
+	SGEN_OBJECT_LAYOUT_STATISTICS_COMMIT_BITMAP;
 	HEAVY_STAT (++stat_scan_object_called_major);
 }
 
-#define FILL_COLLECTOR_SCAN_OBJECT(collector)	do {			\
-		(collector)->major_scan_object = major_scan_object;	\
-		(collector)->minor_scan_object = minor_scan_object;	\
-		(collector)->minor_scan_vtype = minor_scan_vtype;	\
-	} while (0)
+#ifdef SCAN_FOR_CONCURRENT_MARK
+#ifdef SGEN_PARALLEL_MARK
+#error concurrent and parallel mark not supported yet
+#else
+static void
+CONCURRENT_NAME (major_scan_vtype) (char *start, mword desc, SgenGrayQueue *queue BINARY_PROTOCOL_ARG (size_t size))
+{
+	SGEN_OBJECT_LAYOUT_STATISTICS_DECLARE_BITMAP;
+
+	/* The descriptors include info about the MonoObject header as well */
+	start -= sizeof (MonoObject);
+
+#define SCAN_OBJECT_NOVTABLE
+#define SCAN_OBJECT_PROTOCOL
+#include "sgen-scan-object.h"
+
+	SGEN_OBJECT_LAYOUT_STATISTICS_COMMIT_BITMAP;
+}
+#endif
+#endif
+
+#undef PREFETCH_DYNAMIC_HEAP
+#undef FOLLOW_OBJECT
+#undef ALWAYS_ADD_TO_GLOBAL_REMSET
+#undef CONCURRENT_NAME

@@ -7,6 +7,7 @@
 //
 // Copyright 2001, 2002, 2003 Ximian, Inc.
 // Copyright 2003-2009 Novell, Inc.
+// Copyright 2011 Xamarin Inc
 //
 // Completion* classes derive from ExpressionStatement as this allows
 // them to pass through the parser in many conditions that require
@@ -43,6 +44,16 @@ namespace Mono.CSharp {
 			}
 		}
 
+		public override bool ContainsEmitWithAwait ()
+		{
+			return false;
+		}
+
+		public override Expression CreateExpressionTree (ResolveContext ec)
+		{
+			return null;
+		}
+
 		public override void EmitStatement (EmitContext ec)
 		{
 			// Do nothing
@@ -51,11 +62,6 @@ namespace Mono.CSharp {
 		public override void Emit (EmitContext ec)
 		{
 			// Do nothing
-		}
-
-		public override Expression CreateExpressionTree (ResolveContext ec)
-		{
-			return null;
 		}
 	}
 	
@@ -72,11 +78,9 @@ namespace Mono.CSharp {
 		{
 			var results = new List<string> ();
 
-			AppendResults (results, Prefix, Evaluator.GetVarNames ());
-			AppendResults (results, Prefix, ec.CurrentMemberDefinition.Parent.NamespaceEntry.CompletionGetTypesStartingWith (Prefix));
-			AppendResults (results, Prefix, Evaluator.GetUsingList ());
-			
-			throw new CompletionResult (Prefix, results.ToArray ());
+			ec.CurrentMemberDefinition.GetCompletionStartingWith (Prefix, results);
+
+			throw new CompletionResult (Prefix, results.Distinct ().Select (l => l.Substring (Prefix.Length)).ToArray ());
 		}
 
 		protected override void CloneTo (CloneContext clonectx, Expression t)
@@ -105,48 +109,58 @@ namespace Mono.CSharp {
 			this.targs = targs;
 		}
 		
-		protected override Expression DoResolve (ResolveContext ec)
+		protected override Expression DoResolve (ResolveContext rc)
 		{
-			Expression expr_resolved = expr.Resolve (ec,
-				ResolveFlags.VariableOrValue | ResolveFlags.Type);
+			var sn = expr as SimpleName;
+			const ResolveFlags flags = ResolveFlags.VariableOrValue | ResolveFlags.Type;
 
-			if (expr_resolved == null)
+			if (sn != null) {
+				expr = sn.LookupNameExpression (rc, MemberLookupRestrictions.ReadAccess | MemberLookupRestrictions.ExactArity);
+
+				//
+				// Resolve expression which does have type set as we need expression type
+				// with disable flow analysis as we don't know whether left side expression
+				// is used as variable or type
+				//
+				if (expr is VariableReference || expr is ConstantExpr || expr is Linq.TransparentMemberAccess) {
+					expr = expr.Resolve (rc);
+				} else if (expr is TypeParameterExpr) {
+					expr.Error_UnexpectedKind (rc, flags, sn.Location);
+					expr = null;
+				}
+			} else {
+				expr = expr.Resolve (rc, flags);
+			}
+
+			if (expr == null)
 				return null;
 
-			TypeSpec expr_type = expr_resolved.Type;
-			if (expr_type.IsPointer || expr_type == TypeManager.void_type || expr_type == InternalType.Null || expr_type == InternalType.AnonymousMethod) {
-				Unary.Error_OperatorCannotBeApplied (ec, loc, ".", expr_type);
+			TypeSpec expr_type = expr.Type;
+			if (expr_type.IsPointer || expr_type.Kind == MemberKind.Void || expr_type == InternalType.NullLiteral || expr_type == InternalType.AnonymousMethod) {
+				expr.Error_OperatorCannotBeApplied (rc, loc, ".", expr_type);
 				return null;
 			}
 
 			if (targs != null) {
-				if (!targs.Resolve (ec))
+				if (!targs.Resolve (rc))
 					return null;
 			}
 
 			var results = new List<string> ();
-			if (expr_resolved is Namespace){
-				Namespace nexpr = expr_resolved as Namespace;
+			var nexpr = expr as NamespaceExpression;
+			if (nexpr != null) {
 				string namespaced_partial;
 
 				if (partial_name == null)
-					namespaced_partial = nexpr.Name;
+					namespaced_partial = nexpr.Namespace.Name;
 				else
-					namespaced_partial = nexpr.Name + "." + partial_name;
+					namespaced_partial = nexpr.Namespace.Name + "." + partial_name;
 
-#if false
-				Console.WriteLine ("Workign with: namespaced partial {0}", namespaced_partial);
-				foreach (var x in ec.TypeContainer.NamespaceEntry.CompletionGetTypesStartingWith (ec.TypeContainer, namespaced_partial)){
-					Console.WriteLine ("    {0}", x);
-				}
-#endif
-
-				CompletionSimpleName.AppendResults (
-					results,
-					partial_name, 
-					ec.CurrentMemberDefinition.Parent.NamespaceEntry.CompletionGetTypesStartingWith (namespaced_partial));
+				rc.CurrentMemberDefinition.GetCompletionStartingWith (namespaced_partial, results);
+				if (partial_name != null)
+					results = results.Select (l => l.Substring (partial_name.Length)).ToList ();
 			} else {
-				var r = MemberCache.GetCompletitionMembers (expr_type, partial_name).Select (l => l.Name);
+				var r = MemberCache.GetCompletitionMembers (rc, expr_type, partial_name).Select (l => l.Name);
 				AppendResults (results, partial_name, r);
 			}
 
@@ -175,7 +189,7 @@ namespace Mono.CSharp {
 		
 		protected override Expression DoResolve (ResolveContext ec)
 		{
-			var members = MemberCache.GetCompletitionMembers (ec.CurrentInitializerVariable.Type, partial_name);
+			var members = MemberCache.GetCompletitionMembers (ec, ec.CurrentInitializerVariable.Type, partial_name);
 
 // TODO: Does this mean exact match only ?
 //			if (partial_name != null && results.Count > 0 && result [0] == "")

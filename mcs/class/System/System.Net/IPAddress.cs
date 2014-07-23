@@ -127,9 +127,9 @@ namespace System.Net {
 		///   Constructor from a 32-bit constant with the address bytes in
 		///   little-endian order (the lower order bytes contain the netid)
 		/// </summary>
-		public IPAddress (long addr)
+		public IPAddress (long newAddress)
 		{
-			m_Address = addr;
+			m_Address = newAddress;
 			m_Family = AddressFamily.InterNetwork;
 		}
 
@@ -140,14 +140,9 @@ namespace System.Net {
 
 			int len = address.Length;
 
-#if NET_2_0
 			if (len != 16 && len != 4)
 				throw new ArgumentException ("An invalid IP address was specified.",
 					"address");
-#else
-			if (len != 16)
-				throw new ArgumentException ("address");
-#endif
 
 			if (len == 16) {
 				m_Numbers = new ushort [8];
@@ -161,23 +156,19 @@ namespace System.Net {
 			}
 		}
 
-		public IPAddress(byte[] address, long scopeId)
+		public IPAddress(byte[] address, long scopeid)
 		{
 			if (address == null)
 				throw new ArgumentNullException ("address");
 
 			if (address.Length != 16)
-#if NET_2_0
 				throw new ArgumentException ("An invalid IP address was specified.",
 					"address");
-#else
-				throw new ArgumentException("address");
-#endif
 
 			m_Numbers = new ushort [8];
 			Buffer.BlockCopy(address, 0, m_Numbers, 0, 16);
 			m_Family = AddressFamily.InterNetworkV6;
-			m_ScopeId = scopeId;
+			m_ScopeId = scopeid;
 		}
 
 		internal IPAddress(ushort[] address, long scopeId)
@@ -199,12 +190,7 @@ namespace System.Net {
 			throw new FormatException ("An invalid IP address was specified.");
 		}
 
-#if NET_2_0
-		public
-#else
-		internal
-#endif
-		static bool TryParse (string ipString, out IPAddress address)
+		public static bool TryParse (string ipString, out IPAddress address)
 		{
 			if (ipString == null)
 				throw new ArgumentNullException ("ipString");
@@ -217,28 +203,18 @@ namespace System.Net {
 
 		private static IPAddress ParseIPV4 (string ip)
 		{
-#if ONLY_1_1
-			if (ip.Length == 0 || ip == " ")
-				return new IPAddress (0);
-#endif
 
 			int pos = ip.IndexOf (' ');
 			if (pos != -1) {
-#if NET_2_0
 				string [] nets = ip.Substring (pos + 1).Split (new char [] {'.'});
 				if (nets.Length > 0) {
 					string lastNet = nets [nets.Length - 1];
 					if (lastNet.Length == 0)
 						return null;
-#if NET_2_1 //workaround for smcs, as it generate code that can't access string.GetEnumerator ()
-					foreach (char c in lastNet.ToCharArray ())
-#else
 					foreach (char c in lastNet)
-#endif
 						if (!Uri.IsHexDigit (c))
 							return null;
 				}
-#endif
 				ip = ip.Substring (0, pos);
 			}
 
@@ -274,12 +250,8 @@ namespace System.Net {
 						}
 					}
 					else {
-#if NET_2_0
 						if (!Int64.TryParse (subnet, NumberStyles.None, null, out val))
 							return null;
-#else
-						val = long.Parse (subnet, NumberStyles.None);
-#endif
 					}
 
 					if (i == (ips.Length - 1)) {
@@ -336,7 +308,6 @@ namespace System.Net {
 			get { return m_Address; }
 		}
 
-#if NET_2_0
 		public bool IsIPv6LinkLocal {
 			get {
 				if (m_Family == AddressFamily.InterNetwork)
@@ -359,6 +330,15 @@ namespace System.Net {
 			get {
 				return m_Family != AddressFamily.InterNetwork &&
 					((ushort) NetworkToHostOrder ((short) m_Numbers [0]) & 0xFF00) == 0xFF00;
+			}
+		}
+
+#if NET_4_0
+		public bool IsIPv6Teredo {
+			get {
+				return m_Family != AddressFamily.InterNetwork &&
+					NetworkToHostOrder ((short) m_Numbers [0]) == 0x2001 &&
+					m_Numbers[1] == 0;
 			}
 		}
 #endif
@@ -409,22 +389,17 @@ namespace System.Net {
 		/// </summary>
 		/// <param name="addr">Address to compare</param>
 		/// <returns></returns>
-		public static bool IsLoopback (IPAddress addr)
+		public static bool IsLoopback (IPAddress address)
 		{
-#if MOONLIGHT
-			// even 4.0 throws an NRE
-			if (addr == null)
-				throw new ArgumentNullException ("addr");
-#endif
-			if(addr.m_Family == AddressFamily.InterNetwork)
-				return (addr.m_Address & 0xFF) == 127;
+			if(address.m_Family == AddressFamily.InterNetwork)
+				return (address.m_Address & 0xFF) == 127;
 			else {
 				for(int i=0; i<6; i++) {
-					if(addr.m_Numbers[i] != 0)
+					if(address.m_Numbers[i] != 0)
 						return false;
 				}
 
-				return NetworkToHostOrder((short)addr.m_Numbers[7]) == 1;
+				return NetworkToHostOrder((short)address.m_Numbers[7]) == 1;
 			}
 		}
 
@@ -464,9 +439,9 @@ namespace System.Net {
 		/// <returns>
 		///   Whether both objects are equal.
 		/// </returns>
-		public override bool Equals (object other)
+		public override bool Equals (object comparand)
 		{
-			IPAddress otherAddr = other as IPAddress;
+			IPAddress otherAddr = comparand as IPAddress;
 			if (otherAddr != null){
 				if(AddressFamily != otherAddr.AddressFamily)
 					return false;

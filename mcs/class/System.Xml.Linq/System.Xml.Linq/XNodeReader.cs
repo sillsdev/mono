@@ -3,6 +3,7 @@
 //   Atsushi Enomoto
 //
 // Copyright 2007 Novell (http://www.novell.com)
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -45,6 +46,10 @@ namespace System.Xml.Linq
 			this.node = node;
 			start = node;
 		}
+		
+#if NET_4_0
+		internal bool OmitDuplicateNamespaces { get; set; }
+#endif
 
 		int IXmlLineInfo.LineNumber {
 			get {

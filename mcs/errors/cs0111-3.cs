@@ -1,17 +1,10 @@
-// CS0111:
-// Line: 8
+// CS0111: A member `Class.op_Implicit(byte)' is already defined. Rename this member or use different parameter types
+// Line: 9
 
-using System;
-
-class Test {}
-
-namespace Test
-{
-    public class Foo
-    {
-		public static void Main ()
-		{
-			Test t = new Test ();
-		}
-    }
+public class Class {
+        static public implicit operator Class(byte value) {
+               return new Class();
+        }
+    
+        public static void op_Implicit (byte value) {}
 }

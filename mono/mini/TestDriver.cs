@@ -17,7 +17,7 @@ public class TestDriver {
 
 	static public int RunTests (Type type, string[] args) {
 		int failed = 0, ran = 0;
-		int result, expected, elen;
+		int result, expected;
 		int i, j, iterations;
 		string name;
 		MethodInfo[] methods;
@@ -40,6 +40,7 @@ public class TestDriver {
 					j += 2;
 				} else if ((args [j] == "-v") || (args [j] == "--verbose")) {
 					verbose = true;
+					j += 1;
 				} else if (args [j] == "--exclude") {
 					exclude [args [j + 1]] = args [j + 1];
 					j += 2;

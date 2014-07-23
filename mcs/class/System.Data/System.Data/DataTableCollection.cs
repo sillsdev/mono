@@ -274,9 +274,9 @@ namespace System.Data
 			int count = 0, match = -1;
 			for (int i = start; i < List.Count; i++) {
 				String name2 = ((DataTable) List[i]).TableName;
-				if (String.Compare (name, name2, false) == 0)
+				if (String.Compare (name, name2, false, dataSet.Locale) == 0)
 					return i;
-				if (String.Compare (name, name2, true) == 0) {
+				if (String.Compare (name, name2, true, dataSet.Locale) == 0) {
 					match = i;
 					count++;
 				}
@@ -372,16 +372,16 @@ namespace System.Data
 
 #if NET_2_0
 	sealed partial class DataTableCollection {
-		public DataTable this [string name, string tbNamespace] {
+		public DataTable this [string name, string tableNamespace] {
 			get {
-				int index = IndexOf (name, tbNamespace, true);
+				int index = IndexOf (name, tableNamespace, true);
 				return index < 0 ? null : (DataTable) List [index];
 			}
 		}
 
-		public DataTable Add (string name, string tbNamespace)
+		public DataTable Add (string name, string tableNamespace)
 		{
-			DataTable table = new DataTable (name, tbNamespace);
+			DataTable table = new DataTable (name, tableNamespace);
 			this.Add (table);
 			return table;
 		}

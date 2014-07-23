@@ -5,6 +5,7 @@
 //      Gert Driesen (drieseng@users.sourceforge.net)
 //
 // Copyright (C) 2007 Gert Driesen
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -26,21 +27,75 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
-
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 
 using NUnit.Framework;
+using System;
 
 namespace MonoTests.System.Collections.Generic
 {
 	[TestFixture]
 	public class ComparerTest
 	{
+		class CustomComparer : IComparable, IComparable<object>
+		{
+			int IComparable<object>.CompareTo (object other)
+			{
+				throw new NotImplementedException ();
+			}
 
-#if !NET_4_0 && !NET_2_1 // FIXME: the blob contains the 2.0 mscorlib version
+			int IComparable.CompareTo (object obj)
+			{
+				return 9;
+			}
+		}
+
+#if NET_4_5
+		[Test]
+		public void Create ()
+		{
+			var comparer = Comparer<int>.Create ((a, b) => a - b);
+			Assert.AreEqual (-1, comparer.Compare (1, 2), "#1");
+		}
+
+		[Test]
+		public void Create_Invalid ()
+		{
+			try {
+				Comparer<int>.Create (null);
+				Assert.Fail ("#1");
+			} catch (ArgumentNullException) {
+			}
+		}
+#endif
+
+		[Test]
+		public void DefaultComparer_UserComparable ()
+		{
+			IComparer c = Comparer<object>.Default;
+			Assert.AreEqual (-9, c.Compare (new object (), new CustomComparer ()), "#1");
+			Assert.AreEqual (9, c.Compare (new CustomComparer (), new object ()), "#2");
+		}
+
+		[Test]
+		public void DefaultComparer_NotComparableArgument ()
+		{
+			IComparer c = Comparer<object>.Default;
+			try {
+				c.Compare (new object (), new object ());
+				Assert.Fail ("#1");
+			} catch (ArgumentException) {
+			}
+
+			var o = new object ();
+			Assert.AreEqual (0, c.Compare (o, o), "#2");
+		}
+
+
+#if !NET_4_0 // FIXME: the blob contains the 2.0 mscorlib version
 
 		[Test] // bug #80929
 		public void SerializeDefault ()
@@ -91,6 +146,3 @@ namespace MonoTests.System.Collections.Generic
 			0x0b };
 	}
 }
-
-#endif
-

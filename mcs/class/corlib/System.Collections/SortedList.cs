@@ -59,10 +59,10 @@ namespace System.Collections {
 
 		private enum EnumeratorMode : int { KEY_MODE = 0, VALUE_MODE, ENTRY_MODE }
 
-		private int inUse;
-		private int modificationCount;
 		private Slot[] table;
 		private IComparer comparer;
+		private int inUse;
+		private int modificationCount;
 		private int defaultCapacity;
 
 		//
@@ -243,8 +243,7 @@ namespace System.Collections {
 
 		public virtual void Clear () 
 		{
-			defaultCapacity = INITIAL_SIZE;
-			this.table = new Slot [defaultCapacity];
+			Array.Clear (table, 0, table.Length);
 			inUse = 0;
 			modificationCount++;
 		}
@@ -589,7 +588,7 @@ namespace System.Collections {
 			int right = len-1;
 
 			while (left <= right) {
-				int guess = (left + right) >> 1;
+				int guess = (int)((uint)(left + right) >> 1);
 
 				int cmp = comparer.Compare (table[guess].key, key);
 				if (cmp == 0) return guess;
@@ -611,17 +610,17 @@ namespace System.Collections {
 		private sealed class Enumerator : ICloneable, IDictionaryEnumerator, IEnumerator {
 
 			private SortedList host;
+			private object currentKey;
+			private object currentValue;
+
 			private int stamp;
 			private int pos;
 			private int size;
 			private EnumeratorMode mode;
 
-			private object currentKey;
-			private object currentValue;
+			bool invalid;
 
-			bool invalid = false;
-
-			private readonly static string xstr = "SortedList.Enumerator: snapshot out of sync.";
+			const string xstr = "SortedList.Enumerator: snapshot out of sync.";
 
 			public Enumerator (SortedList host, EnumeratorMode mode)
 			{

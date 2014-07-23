@@ -32,7 +32,7 @@
 
 using System.IO;
 using System.Runtime.InteropServices;
-#if NET_2_0 && !NET_2_1
+#if !NET_2_1 || MOBILE
 using System.Timers;
 using System.Threading;
 #endif
@@ -51,8 +51,8 @@ namespace System.Net.Sockets
 		{
 		}
 
-		public NetworkStream (Socket socket, bool owns_socket)
-			: this (socket, FileAccess.ReadWrite, owns_socket)
+		public NetworkStream (Socket socket, bool ownsSocket)
+			: this (socket, FileAccess.ReadWrite, ownsSocket)
 		{
 		}
 
@@ -61,7 +61,7 @@ namespace System.Net.Sockets
 		{
 		}
 		
-		public NetworkStream (Socket socket, FileAccess access, bool owns_socket)
+		public NetworkStream (Socket socket, FileAccess access, bool ownsSocket)
 		{
 			if (socket == null)
 				throw new ArgumentNullException ("socket is null");
@@ -73,7 +73,7 @@ namespace System.Net.Sockets
 				throw new IOException ("Operation not allowed on a non-blocking socket.");
 			
 			this.socket = socket;
-			this.owns_socket = owns_socket;
+			this.owns_socket = ownsSocket;
 			this.access = access;
 
 			readable = CanRead;
@@ -93,14 +93,12 @@ namespace System.Net.Sockets
 			}
 		}
 
-#if NET_2_0
 		public override bool CanTimeout
 		{
 			get {
 				return(true);
 			}
 		}
-#endif
 
 		public override bool CanWrite {
 			get {
@@ -144,14 +142,15 @@ namespace System.Net.Sockets
 			}
 		}
 
-#if NET_2_0 && !NET_2_1
+#if !NET_2_1 || MOBILE
 #if TARGET_JVM
 		[MonoNotSupported ("Not supported since Socket.ReceiveTimeout is not supported")]
 #endif
 		public override int ReadTimeout
 		{
 			get {
-				return(socket.ReceiveTimeout);
+				int r = socket.ReceiveTimeout;
+				return (r <= 0) ? Timeout.Infinite : r;
 			}
 			set {
 				if (value <= 0 && value != Timeout.Infinite) {
@@ -179,14 +178,15 @@ namespace System.Net.Sockets
 			}
 		}
 
-#if NET_2_0 && !NET_2_1
+#if !NET_2_1 || MOBILE
 #if TARGET_JVM
 		[MonoNotSupported ("Not supported since Socket.SendTimeout is not supported")]
 #endif
 		public override int WriteTimeout
 		{
 			get {
-				return(socket.SendTimeout);
+				int r = socket.SendTimeout;
+				return (r <= 0) ? Timeout.Infinite : r;
 			}
 			set {
 				if (value <= 0 && value != Timeout.Infinite) {
@@ -266,14 +266,8 @@ namespace System.Net.Sockets
 			Dispose (false);
 		}
 		
-#if !NET_2_0
-		public override void Close ()
-		{
-			((IDisposable) this).Dispose ();
-		}
-#endif
 
-#if NET_2_0 && !NET_2_1
+#if !NET_2_1 || MOBILE
 		public void Close (int timeout)
 		{
 			if (timeout < -1) {
@@ -296,13 +290,7 @@ namespace System.Net.Sockets
 		}
 #endif
 
-		protected
-#if NET_2_0
-		override
-#else
-		virtual
-#endif
-		void Dispose (bool disposing)
+		protected override void Dispose (bool disposing)
 		{
 			if (disposed) 
 				return;
@@ -365,13 +353,6 @@ namespace System.Net.Sockets
 		{
 			// network streams are non-buffered, this is a no-op
 		}
-
-#if !NET_2_0
-		void IDisposable.Dispose ()
-		{
-			Dispose (true);
-		}
-#endif
 
 		public override int Read ([In,Out] byte [] buffer, int offset, int size)
 		{

@@ -6,9 +6,11 @@ with_mono_path_monolite = MONO_PATH="$(topdir)/class/lib/monolite$(PLATFORM_PATH
 monolite_flag := $(depsdir)/use-monolite
 use_monolite := $(wildcard $(monolite_flag))
 
+MONOLITE_MCS = $(topdir)/class/lib/monolite/basic.exe
+
 ifdef use_monolite
 PROFILE_RUNTIME = $(with_mono_path_monolite) $(RUNTIME)
-BOOTSTRAP_MCS = $(PROFILE_RUNTIME) $(RUNTIME_FLAGS) $(topdir)/class/lib/monolite/mcs.exe
+BOOTSTRAP_MCS = $(PROFILE_RUNTIME) $(RUNTIME_FLAGS) $(MONOLITE_MCS) -sdk:2
 else
 PROFILE_RUNTIME = $(EXTERNAL_RUNTIME)
 BOOTSTRAP_MCS = $(EXTERNAL_MCS)
@@ -58,14 +60,13 @@ do-profile-check: $(depsdir)/.stamp
 	@ok=:; \
 	rm -f $(PROFILE_EXE) $(PROFILE_OUT); \
 	$(MAKE) $(MAKE_Q) $(PROFILE_OUT) || ok=false; \
-	rm -f $(PROFILE_EXE) $(PROFILE_OUT); \
-	if $$ok; then :; else \
-	    if test -f $(topdir)/class/lib/monolite/mcs.exe; then \
+	if $$ok; then rm -f $(PROFILE_EXE) $(PROFILE_OUT); else \
+	    if test -f $(MONOLITE_MCS); then \
 		$(MAKE) -s do-profile-check-monolite ; \
 	    else \
 		echo "*** The compiler '$(BOOTSTRAP_MCS)' doesn't appear to be usable." 1>&2; \
                 echo "*** You need Mono version 2.4 or better installed to build MCS" 1>&2 ; \
-                echo "*** Read INSTALL.txt for information on how to bootstrap a Mono installation." 1>&2 ; \
+                echo "*** Check mono README for information on how to bootstrap a Mono installation." 1>&2 ; \
 	        exit 1; fi; fi
 
 

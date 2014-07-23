@@ -39,6 +39,9 @@ using System.Text;
 namespace MonoTests.System.Security.Permissions {
 
 	[TestFixture]
+#if MOBILE
+	[Ignore]
+#endif
 	public class FileIOPermissionAttributeTest {
 
 		[Test]
@@ -118,7 +121,7 @@ namespace MonoTests.System.Security.Permissions {
 			Assert.AreEqual (filename, p.GetPathList (FileIOPermissionAccess.Read) [0], "All=FileIOPermissionAttribute-Read");
 			Assert.AreEqual (filename, p.GetPathList (FileIOPermissionAccess.Write) [0], "All=FileIOPermissionAttribute-Write");
 		}
-#if NET_1_1
+
 		[Test]
 		[ExpectedException (typeof (NotSupportedException))]
 		public void All_Get () 
@@ -126,7 +129,7 @@ namespace MonoTests.System.Security.Permissions {
 			FileIOPermissionAttribute attr = new FileIOPermissionAttribute (SecurityAction.Assert);
 			string s = attr.All;
 		}
-#endif
+
 		[Test]
 		public void Append ()
 		{

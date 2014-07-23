@@ -19,7 +19,6 @@
 //
 // Copyright (C) 2005, 2006 Novell, Inc (http://www.novell.com)
 //
-#if NET_2_0
 #if CONFIGURATION_DEP && !TARGET_JVM
 extern alias PrebuiltSystem;
 using NameValueCollection = PrebuiltSystem.System.Collections.Specialized.NameValueCollection;
@@ -99,12 +98,24 @@ namespace System.Configuration {
 				if (iasp != null)
 					iasp.Reset (Context);
 			}
-                                                
+			InternalSave ();
+
 			Reload ();
 #endif
 		}
 
-		public override void Save()
+		public override void Save ()
+		{
+			var e = new CancelEventArgs ();
+
+			OnSettingsSaving (this, e);
+			if (e.Cancel)
+				return;
+
+			InternalSave ();
+		}
+
+		void InternalSave ()
 		{
 #if (CONFIGURATION_DEP)
 			Context.CurrentSettings = this;
@@ -207,7 +218,12 @@ namespace System.Configuration {
 
 			if (col.Count > 0) {
 				SettingsPropertyValueCollection vals = provider.GetPropertyValues (Context, col);
-				PropertyValues.Add (vals);
+				foreach (SettingsPropertyValue prop in vals) {
+					if (PropertyValues [prop.Name] != null)
+						PropertyValues [prop.Name].PropertyValue = prop.PropertyValue;
+					else
+						PropertyValues.Add (prop);
+				}
 			}
 
 			OnSettingsLoaded (this, new SettingsLoadedEventArgs (provider));
@@ -466,5 +482,4 @@ namespace System.Configuration {
         }
 
 }
-#endif
 

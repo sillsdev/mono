@@ -46,7 +46,7 @@ namespace MonoTests.System
 		};
 
 		[SetUp]
-		public void GetReady ()
+		public void Setup ()
 		{
 			string sep = NumberFormatInfo.CurrentInfo.NumberDecimalSeparator;
 			string_values = new string [15];
@@ -224,11 +224,12 @@ namespace MonoTests.System
 		[Test]
 		public void ParseAllowWhitespaces ()
 		{
+			var nf = CultureInfo.CurrentCulture.NumberFormat;
 			NumberStyles style = NumberStyles.Float;
 			double.Parse (" 32 ");
-			double.Parse ("  Infinity  ");
-			double.Parse ("  -Infinity  ");
-			double.Parse ("  NaN  ");
+			double.Parse (string.Format ("  {0}  ", nf.PositiveInfinitySymbol));
+			double.Parse (string.Format ("  {0}  ", nf.NegativeInfinitySymbol));
+			double.Parse (string.Format ("  {0}  ", nf.NaNSymbol));
 		}
 
 		[Test] // bug #81630
@@ -255,6 +256,15 @@ namespace MonoTests.System
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
 			}
+		}
+
+		[Test]
+		public void Parse_Infinity ()
+		{
+			double value;
+			IFormatProvider german = new CultureInfo ("de-DE");
+			var res = double.Parse ("+unendlich", NumberStyles.Float, german);
+			Assert.AreEqual (double.PositiveInfinity, res);
 		}
 
 		[Test]
@@ -552,13 +562,7 @@ namespace MonoTests.System
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentException))]
-#else
-		[Category ("NotWorking")]
-		// MS accept hex values under 1.x but the results neither match the long value
-		// nor the value of a 64bits double
-#endif
 		public void HexNumber_WithHexToParse ()
 		{
 			// from bug #72221
@@ -568,13 +572,7 @@ namespace MonoTests.System
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentException))]
-#else
-		[Category ("NotWorking")]
-		// MS accept hex values under 1.x but the results neither match the long value
-		// nor the value of a 64bits double
-#endif
 		public void HexNumber_NoHexToParse ()
 		{
 			double d;
@@ -597,10 +595,8 @@ namespace MonoTests.System
 			Assert.IsFalse (Double.TryParse ("string", NumberStyles.Any, null, out value), "#1");
 			Assert.IsFalse (Double.TryParse ("with whitespace", NumberStyles.Any, null, out value), "#2");
 			
-#if NET_2_0
 			Assert.IsFalse (Double.TryParse ("string", out value), "#3");
 			Assert.IsFalse (Double.TryParse ("with whitespace", out value), "#4");
-#endif
 		}
 
 					
@@ -614,10 +610,35 @@ namespace MonoTests.System
 				double d = double.Parse ("$4.56", NumberStyles.Currency, f);
 				Assert.AreEqual (4.56, d);
 			} finally {
-				// restore original culture
 				Thread.CurrentThread.CurrentCulture = originalCulture;
 			}
+		}
 
+		[Test]
+		public void ParseEmptyNumberGroupSeparator ()
+		{
+			CultureInfo originalCulture = CultureInfo.CurrentCulture;
+			Thread.CurrentThread.CurrentCulture = new CultureInfo ("en-US");
+			try {
+				var nf = new NumberFormatInfo ();
+				nf.NumberDecimalSeparator = ".";
+				nf.NumberGroupSeparator = "";
+				double d = double.Parse ("4.5", nf);
+				Assert.AreEqual (4.5, d);
+			} finally {
+				Thread.CurrentThread.CurrentCulture = originalCulture;
+			}
+		}
+
+		[Test]
+		public void ParseAdvanced ()
+		{
+			Assert.AreEqual (-456, double.Parse("(456 ) ", NumberStyles.AllowParentheses | NumberStyles.AllowTrailingWhite, CultureInfo.InvariantCulture), "#1");
+			Assert.AreEqual (-456, double.Parse("(456)", NumberStyles.AllowParentheses, CultureInfo.InvariantCulture), "#2");
+			Assert.AreEqual (-3, double.Parse("3-", NumberStyles.AllowTrailingSign, CultureInfo.InvariantCulture), "#3");
+			Assert.AreEqual (-3.5, double.Parse("3.5-", NumberStyles.AllowTrailingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture), "#4");
+			Assert.AreEqual (-0.5, double.Parse ("0.5 - ", NumberStyles.AllowTrailingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowTrailingWhite, CultureInfo.InvariantCulture), "#5");
+			Assert.AreEqual (-900000, double.Parse ("-9E5 " + CultureInfo.InvariantCulture.NumberFormat.CurrencySymbol + "   ", NumberStyles.Any, CultureInfo.InvariantCulture), "#6");
 		}
 	}
 }

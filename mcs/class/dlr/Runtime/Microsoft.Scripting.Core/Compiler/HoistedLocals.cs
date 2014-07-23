@@ -1,4 +1,4 @@
-/* ****************************************************************************
+﻿/* ****************************************************************************
  *
  * Copyright (c) Microsoft Corporation. 
  *
@@ -18,7 +18,7 @@ using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 using System.Dynamic.Utils;
 
-#if CLR2
+#if !FEATURE_CORE_DLR
 namespace Microsoft.Scripting.Ast.Compiler {
 #else
 namespace System.Linq.Expressions.Compiler {
@@ -64,7 +64,7 @@ namespace System.Linq.Expressions.Compiler {
         internal readonly HoistedLocals Parent;
 
         // A mapping of hoisted variables to their indexes in the array
-        internal readonly ReadOnlyDictionary<Expression, int> Indexes;
+        internal readonly System.Dynamic.Utils.ReadOnlyDictionary<Expression, int> Indexes;
 
         // The variables, in the order they appear in the array
         internal readonly ReadOnlyCollection<ParameterExpression> Variables;
@@ -87,7 +87,7 @@ namespace System.Linq.Expressions.Compiler {
             SelfVariable = Expression.Variable(typeof(object[]), null);
             Parent = parent;
             Variables = vars;
-            Indexes = new ReadOnlyDictionary<Expression, int>(indexes);
+            Indexes = new System.Dynamic.Utils.ReadOnlyDictionary<Expression, int>(indexes);
         }
 
         internal ParameterExpression ParentVariable {

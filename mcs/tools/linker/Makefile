@@ -9,11 +9,12 @@ CECIL = $(topdir)/class/lib/$(PROFILE)/Mono.Cecil.dll
 RESOURCES = \
 	Descriptors/mscorlib.xml	\
 	Descriptors/System.xml		\
+	Descriptors/System.Core.xml		\
 	Descriptors/System.Drawing.xml	\
 	Descriptors/System.Web.xml		\
 	Descriptors/Mono.Posix.xml		\
 
-PROGRAM = $(topdir)/class/lib/$(PROFILE)/monolinker.exe
+PROGRAM = monolinker.exe
 
 $(PROGRAM): $(RESOURCES)
 

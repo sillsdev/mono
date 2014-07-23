@@ -26,8 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
-
 using System.ComponentModel;
 #if !NET_2_1
 using System.ComponentModel.Design.Serialization;
@@ -38,9 +36,6 @@ using System.Reflection;
 namespace System {
 
 	public
-#if MOONLIGHT
-	sealed
-#endif
 	class UriTypeConverter : TypeConverter {
 
 		public UriTypeConverter ()
@@ -94,12 +89,14 @@ namespace System {
 				return value;
 
 			string s = (value as string);
-			if (s != null)
+			if (s != null) {
 #if NET_2_1
 				if (s == "")
 					return null;
 #endif
 				return new Uri (s, UriKind.RelativeOrAbsolute);
+			}
+
 #if !NET_2_1
 			InstanceDescriptor id = (value as InstanceDescriptor);
 			if (id != null) {
@@ -128,13 +125,13 @@ namespace System {
 #else
 				throw new NotSupportedException (Locale.GetText ("Cannot convert to destination type."));
 #endif
-			} else {
-#if NET_2_1
-				throw new NotSupportedException (Locale.GetText ("Cannot convert to destination type."));
-#endif
 			}
 
+#if NET_2_1
+			throw new NotSupportedException (Locale.GetText ("Cannot convert to destination type."));
+#else
 			return base.ConvertTo (context, culture, value, destinationType);
+#endif
 		}
 
 #if !NET_2_1
@@ -150,5 +147,3 @@ namespace System {
 #endif
 	}
 }
-
-#endif

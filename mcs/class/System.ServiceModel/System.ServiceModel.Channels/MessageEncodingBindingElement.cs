@@ -35,12 +35,14 @@ namespace System.ServiceModel.Channels
 {
 	public abstract class MessageEncodingBindingElement : BindingElement
 	{
-		public MessageEncodingBindingElement ()
+		public
+		MessageEncodingBindingElement ()
 		{
 		}
 
 		[MonoTODO]
-		public MessageEncodingBindingElement (MessageEncodingBindingElement source)
+		public
+		MessageEncodingBindingElement (MessageEncodingBindingElement source)
 		{
 			MessageVersion = source.MessageVersion;
 		}

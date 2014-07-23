@@ -65,6 +65,7 @@ namespace System.Net
 		internal WebHeaderCollection headers;
 		int chunkSize;
 		int chunkRead;
+		int totalWritten;
 		State state;
 		//byte [] waitBuffer;
 		StringBuilder saved;
@@ -85,12 +86,14 @@ namespace System.Net
 			saved = new StringBuilder ();
 			chunks = new ArrayList ();
 			chunkSize = -1;
+			totalWritten = 0;
 		}
 
 		public void ResetBuffer ()
 		{
 			chunkSize = -1;
 			chunkRead = 0;
+			totalWritten = 0;
 			chunks.Clear ();
 		}
 		
@@ -130,7 +133,8 @@ namespace System.Net
 		
 		public void Write (byte [] buffer, int offset, int size)
 		{
-			InternalWrite (buffer, ref offset, size);
+			if (offset < size)
+				InternalWrite (buffer, ref offset, size);
 		}
 		
 		void InternalWrite (byte [] buffer, ref int offset, int size)
@@ -177,6 +181,24 @@ namespace System.Net
 			get { return (chunkRead != chunkSize || chunkSize != 0 || state != State.None); }
 		}
 
+		public bool DataAvailable {
+			get {
+				int count = chunks.Count;
+				for (int i = 0; i < count; i++) {
+					Chunk ch = (Chunk) chunks [i];
+					if (ch == null || ch.Bytes == null)
+						continue;
+					if (ch.Bytes.Length > 0 && ch.Offset < ch.Bytes.Length)
+						return (state != State.Body);
+				}
+				return false;
+			}
+		}
+
+		public int TotalDataSize {
+			get { return totalWritten; }
+		}
+
 		public int ChunkLeft {
 			get { return chunkSize - chunkRead; }
 		}
@@ -195,12 +217,15 @@ namespace System.Net
 			chunks.Add (new Chunk (chunk));
 			offset += diff;
 			chunkRead += diff;
+			totalWritten += diff;
 			return (chunkRead == chunkSize) ? State.BodyFinished : State.Body;
 				
 		}
 		
 		State GetChunkSize (byte [] buffer, ref int offset, int size)
 		{
+			chunkRead = 0;
+			chunkSize = 0;
 			char c = '\0';
 			while (offset < size) {
 				c = (char) buffer [offset++];
@@ -246,7 +271,7 @@ namespace System.Net
 			} catch (Exception) {
 				ThrowProtocolViolation ("Cannot parse chunk size.");
 			}
-			
+
 			if (chunkSize == 0) {
 				trailerState = 2;
 				return State.Trailer;

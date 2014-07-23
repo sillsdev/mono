@@ -7,6 +7,7 @@
  *
  * Copyright 2001-2003 Ximian, Inc (http://www.ximian.com)
  * Copyright 2004-2009 Novell, Inc (http://www.novell.com)
+ * Copyright 2012 Xamarin Inc (http://www.xamarin.com)
  */
 
 #include <config.h>
@@ -174,21 +175,13 @@ static gint64 convert_filetime (const FILETIME *filetime)
 	return (gint64)ticks;
 }
 
-static void convert_win32_file_attribute_data (const WIN32_FILE_ATTRIBUTE_DATA *data, const gunichar2 *name, MonoIOStat *stat)
+static void convert_win32_file_attribute_data (const WIN32_FILE_ATTRIBUTE_DATA *data, MonoIOStat *stat)
 {
-	int len;
-	
 	stat->attributes = data->dwFileAttributes;
 	stat->creation_time = convert_filetime (&data->ftCreationTime);
 	stat->last_access_time = convert_filetime (&data->ftLastAccessTime);
 	stat->last_write_time = convert_filetime (&data->ftLastWriteTime);
 	stat->length = ((gint64)data->nFileSizeHigh << 32) | data->nFileSizeLow;
-
-	len = 0;
-	while (name [len])
-		++ len;
-
-	MONO_STRUCT_SETREF (stat, name, mono_string_new_utf16 (mono_domain_get (), name, len));
 }
 
 /* Managed file attributes have nearly but not quite the same values
@@ -335,6 +328,7 @@ ves_icall_System_IO_MonoIO_GetFileSystemEntries (MonoString *path,
 	
 	MONO_ARCH_SAVE_REGS;
 
+	result = NULL;
 	*error = ERROR_SUCCESS;
 
 	domain = mono_domain_get ();
@@ -343,11 +337,11 @@ ves_icall_System_IO_MonoIO_GetFileSystemEntries (MonoString *path,
 	if (attributes != -1) {
 		if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
 			*error = ERROR_INVALID_NAME;
-			return (NULL);
+			goto leave;
 		}
 	} else {
 		*error = GetLastError ();
-		return (NULL);
+		goto leave;
 	}
 	
 	find_handle = FindFirstFile (mono_string_chars (path_with_pattern), &data);
@@ -356,15 +350,11 @@ ves_icall_System_IO_MonoIO_GetFileSystemEntries (MonoString *path,
 		
 		if (find_error == ERROR_FILE_NOT_FOUND || find_error == ERROR_NO_MORE_FILES) {
 			/* No files, so just return an empty array */
-			result = mono_array_new (domain,
-						 mono_defaults.string_class,
-						 0);
-
-			return(result);
+			goto leave;
 		}
 		
 		*error = find_error;
-		return(NULL);
+		goto leave;
 	}
 
 	utf8_path = get_search_dir (path_with_pattern);
@@ -404,7 +394,12 @@ ves_icall_System_IO_MonoIO_GetFileSystemEntries (MonoString *path,
 	}
 	g_ptr_array_free (names, TRUE);
 	g_free (utf8_path);
-	
+
+leave:
+	// If there's no array and no error, then return an empty array.
+	if (result == NULL && *error == ERROR_SUCCESS)
+		result = mono_array_new (domain, mono_defaults.string_class, 0);
+
 	return result;
 }
 
@@ -487,7 +482,7 @@ ves_icall_System_IO_MonoIO_FindNext (gpointer handle, gint32 *result_attr, gint3
 	WIN32_FIND_DATA data;
 	MonoString *result;
 
-	error = ERROR_SUCCESS;
+	*error = ERROR_SUCCESS;
 	do {
 		if (FindNextFile (ifh->find_handle, &data) == FALSE){
 			int e = GetLastError ();
@@ -612,6 +607,7 @@ ves_icall_System_IO_MonoIO_ReplaceFile (MonoString *sourceFileName, MonoString *
 	if (ignoreMetadataErrors)
 		replaceFlags |= REPLACEFILE_IGNORE_MERGE_ERRORS;
 
+	/* FIXME: source and destination file names must not be NULL, but apparently they might be! */
 	ret = ReplaceFile (utf16_destinationFileName, utf16_sourceFileName, utf16_destinationBackupFileName,
 			 replaceFlags, NULL, NULL);
 	if (ret == FALSE)
@@ -733,9 +729,7 @@ ves_icall_System_IO_MonoIO_GetFileStat (MonoString *path, MonoIOStat *stat,
 	result = get_file_attributes_ex (mono_string_chars (path), &data);
 
 	if (result) {
-		convert_win32_file_attribute_data (&data,
-						   mono_string_chars (path),
-						   stat);
+		convert_win32_file_attribute_data (&data, stat);
 	} else {
 		*error=GetLastError ();
 		memset (stat, 0, sizeof (MonoIOStat));
@@ -831,9 +825,9 @@ ves_icall_System_IO_MonoIO_Read (HANDLE handle, MonoArray *dest,
 	*error=ERROR_SUCCESS;
 
 	MONO_CHECK_ARG_NULL (dest);
-	
-	if (dest_offset + count > mono_array_length (dest))
-		return 0;
+
+	if (dest_offset > mono_array_length (dest) - count)
+		mono_raise_exception (mono_get_exception_argument ("array", "array too small. numBytes/offset wrong."));
 
 	buffer = mono_array_addr (dest, guchar, dest_offset);
 	result = ReadFile (handle, buffer, count, &n, NULL);
@@ -861,8 +855,8 @@ ves_icall_System_IO_MonoIO_Write (HANDLE handle, MonoArray *src,
 
 	MONO_CHECK_ARG_NULL (src);
 	
-	if (src_offset + count > mono_array_length (src))
-		return 0;
+	if (src_offset > mono_array_length (src) - count)
+		mono_raise_exception (mono_get_exception_argument ("array", "array too small. numBytes/offset wrong."));
 	
 	buffer = mono_array_addr (src, guchar, src_offset);
 	result = WriteFile (handle, buffer, count, &n, NULL);
@@ -1225,7 +1219,7 @@ void ves_icall_System_IO_MonoIO_Unlock (HANDLE handle, gint64 position,
 
 //Support for io-layer free mmap'd files.
 
-#if (defined (__MACH__) && defined (TARGET_ARM)) || defined (TARGET_ANDROID)
+#if defined (TARGET_IOS) || defined (TARGET_ANDROID)
 
 gint64
 mono_filesize_from_path (MonoString *string)

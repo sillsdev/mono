@@ -38,7 +38,7 @@ namespace System
 	public class OperationCanceledException : SystemException
 	{
 		const int Result = unchecked ((int)0x8013153b);
-#if NET_4_0 || MOBILE
+#if NET_4_0
 		CancellationToken? token;
 #endif
 
@@ -66,7 +66,7 @@ namespace System
 		{
 		}
 		
-#if NET_4_0 || MOBILE
+#if NET_4_0
 		public OperationCanceledException (CancellationToken token)
 			: this ()
 		{
@@ -90,9 +90,6 @@ namespace System
 				if (token == null)
 					return CancellationToken.None;
 				return token.Value;
-			}
-			private set {
-				token = value;
 			}
 		}
 #endif

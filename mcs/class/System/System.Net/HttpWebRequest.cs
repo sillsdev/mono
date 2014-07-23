@@ -34,7 +34,9 @@
 using System;
 using System.Collections;
 using System.Configuration;
+using System.Globalization;
 using System.IO;
+using System.Net;
 using System.Net.Cache;
 using System.Net.Sockets;
 using System.Runtime.Remoting.Messaging;
@@ -45,12 +47,8 @@ using System.Threading;
 
 namespace System.Net 
 {
-#if MOONLIGHT
-	internal class HttpWebRequest : WebRequest, ISerializable {
-#else
 	[Serializable]
 	public class HttpWebRequest : WebRequest, ISerializable {
-#endif
 		Uri requestUri;
 		Uri actualUri;
 		bool hostChanged;
@@ -65,7 +63,7 @@ namespace System.Net
 		bool haveResponse;		
 		bool haveRequest;
 		bool requestSent;
-		WebHeaderCollection webHeaders = new WebHeaderCollection (true);
+		WebHeaderCollection webHeaders;
 		bool keepAlive = true;
 		int maxAutoRedirect = 50;
 		string mediaType = String.Empty;
@@ -91,7 +89,6 @@ namespace System.Net
 		bool gotRequestStream;
 		int redirects;
 		bool expectContinue;
-		bool authCompleted;
 		byte[] bodyBuffer;
 		int bodyBufferLength;
 		bool getResponseCalled;
@@ -109,7 +106,7 @@ namespace System.Net
 			Challenge,
 			Response
 		}
-		NtlmAuthState ntlm_auth_state;
+		AuthorizationState auth_state, proxy_auth_state;
 		string host;
 
 		// Constructors
@@ -138,7 +135,10 @@ namespace System.Net
 			this.requestUri = uri;
 			this.actualUri = uri;
 			this.proxy = GlobalProxySelection.Select;
-		}		
+			this.webHeaders = new WebHeaderCollection (WebHeaderCollection.HeaderInfo.Request);
+			ThrowOnError = true;
+			ResetAuthorization ();
+		}
 		
 		[Obsolete ("Serialization is obsoleted for this type", false)]
 		protected HttpWebRequest (SerializationInfo serializationInfo, StreamingContext streamingContext) 
@@ -165,6 +165,13 @@ namespace System.Net
 			timeout = info.GetInt32 ("timeout");
 			redirects = info.GetInt32 ("redirects");
 			host = info.GetString ("host");
+			ResetAuthorization ();
+		}
+
+		void ResetAuthorization ()
+		{
+			auth_state = new AuthorizationState (this, false);
+			proxy_auth_state = new AuthorizationState (this, true);
 		}
 		
 		// Properties
@@ -191,6 +198,13 @@ namespace System.Net
 			get { return allowBuffering; }
 			set { allowBuffering = value; }
 		}
+		
+#if NET_4_5
+		public virtual bool AllowReadStreamBuffering {
+			get { return allowBuffering; }
+			set { allowBuffering = value; }
+		}
+#endif
 
 		static Exception GetMustImplement ()
 		{
@@ -233,19 +247,17 @@ namespace System.Net
 			get { return webHeaders ["Connection"]; }
 			set {
 				CheckRequestStarted ();
-				string val = value;
-				if (val != null) 
-					val = val.Trim ().ToLower ();
 
-				if (val == null || val.Length == 0) {
+				if (string.IsNullOrEmpty (value)) {
 					webHeaders.RemoveInternal ("Connection");
 					return;
 				}
 
-				if (val == "keep-alive" || val == "close") 
+				string val = value.ToLowerInvariant ();
+				if (val.Contains ("keep-alive") || val.Contains ("close"))
 					throw new ArgumentException ("Keep-Alive and Close may not be set with this property");
 
-				if (keepAlive && val.IndexOf ("keep-alive", StringComparison.Ordinal) == -1)
+				if (keepAlive)
 					value = value + ", Keep-Alive";
 				
 				webHeaders.RemoveAndAdd ("Connection", value);
@@ -271,6 +283,8 @@ namespace System.Net
 		internal long InternalContentLength {
 			set { contentLength = value; }
 		}
+			
+		internal bool ThrowOnError { get; set; }
 		
 		public override string ContentType { 
 			get { return webHeaders ["Content-Type"]; }
@@ -288,6 +302,9 @@ namespace System.Net
 			set { continueDelegate = value; }
 		}
 		
+#if NET_4_5
+		virtual
+#endif
 		public CookieContainer CookieContainer {
 			get { return cookieContainer; }
 			set { cookieContainer = value; }
@@ -297,7 +314,24 @@ namespace System.Net
 			get { return credentials; }
 			set { credentials = value; }
 		}
+#if NET_4_0
+		public DateTime Date {
+			get {
+				string date = webHeaders ["Date"];
+				if (date == null)
+					return DateTime.MinValue;
+				return DateTime.ParseExact (date, "r", CultureInfo.InvariantCulture).ToLocalTime ();
+			}
+			set {
+				if (value.Equals (DateTime.MinValue))
+					webHeaders.RemoveInternal ("Date");
+				else
+					webHeaders.RemoveAndAdd ("Date", value.ToUniversalTime ().ToString ("r", CultureInfo.InvariantCulture));
+			}
+		}
+#endif
 
+#if !NET_2_1
 		[MonoTODO]
 		public static new RequestCachePolicy DefaultCachePolicy
 		{
@@ -308,6 +342,7 @@ namespace System.Net
 				throw GetMustImplement ();
 			}
 		}
+#endif
 		
 		[MonoTODO]
 		public static int DefaultMaximumErrorResponseLength
@@ -340,6 +375,9 @@ namespace System.Net
 			}
 		}
 		
+#if NET_4_5
+		virtual
+#endif
 		public bool HaveResponse {
 			get { return haveResponse; }
 		}
@@ -348,7 +386,7 @@ namespace System.Net
 			get { return webHeaders; }
 			set {
 				CheckRequestStarted ();
-				WebHeaderCollection newHeaders = new WebHeaderCollection (true);
+				WebHeaderCollection newHeaders = new WebHeaderCollection (WebHeaderCollection.HeaderInfo.Request);
 				int count = value.Count;
 				for (int i = 0; i < count; i++) 
 					newHeaders.Add (value.GetKey (i), value.Get (i));
@@ -356,6 +394,7 @@ namespace System.Net
 				webHeaders = newHeaders;
 			}
 		}
+		
 #if NET_4_0
 		public
 #else
@@ -378,12 +417,8 @@ namespace System.Net
 			}
 		}
 
-		static char [] colon = { ':' };
 		static bool CheckValidHost (string scheme, string val)
 		{
-			if (val == null)
-				throw new ArgumentNullException ("value");
-
 			if (val.Length == 0)
 				return false;
 
@@ -393,6 +428,10 @@ namespace System.Net
 			int idx = val.IndexOf ('/');
 			if (idx >= 0)
 				return false;
+
+			IPAddress ipaddr;
+			if (IPAddress.TryParse (val, out ipaddr))
+				return true;
 
 			string u = scheme + "://" + val + "/";
 			return Uri.IsWellFormedUriString (u, UriKind.Absolute);
@@ -461,6 +500,14 @@ namespace System.Net
 				readWriteTimeout = value;
 			}
 		}
+		
+#if NET_4_5
+		[MonoTODO]
+		public int ContinueTimeout {
+			get { throw new NotImplementedException (); }
+			set { throw new NotImplementedException (); }
+		}
+#endif
 		
 		public string MediaType {
 			get { return mediaType; }
@@ -541,7 +588,19 @@ namespace System.Net
 		public ServicePoint ServicePoint {
 			get { return GetServicePoint (); }
 		}
-		
+
+		internal ServicePoint ServicePointNoLock {
+			get { return servicePoint; }
+		}
+#if NET_4_0
+		public virtual bool SupportsCookieContainer { 
+			get {
+				// The managed implementation supports the cookie container
+				// it is only Silverlight that returns false here
+				return true;
+			}
+		}
+#endif
 		public override int Timeout { 
 			get { return timeout; }
 			set {
@@ -626,43 +685,99 @@ namespace System.Net
 		
 		public void AddRange (int range)
 		{
-			AddRange ("bytes", range);
+			AddRange ("bytes", (long) range);
 		}
 		
 		public void AddRange (int from, int to)
 		{
-			AddRange ("bytes", from, to);
+			AddRange ("bytes", (long) from, (long) to);
 		}
 		
 		public void AddRange (string rangeSpecifier, int range)
 		{
-			if (rangeSpecifier == null)
-				throw new ArgumentNullException ("rangeSpecifier");
-			string value = webHeaders ["Range"];
-			if (value == null || value.Length == 0) 
-				value = rangeSpecifier + "=";
-			else if (value.ToLower ().StartsWith (rangeSpecifier.ToLower () + "="))
-				value += ",";
-			else
-				throw new InvalidOperationException ("rangeSpecifier");
-			webHeaders.RemoveAndAdd ("Range", value + range + "-");	
+			AddRange (rangeSpecifier, (long) range);
 		}
 		
 		public void AddRange (string rangeSpecifier, int from, int to)
 		{
+			AddRange (rangeSpecifier, (long) from, (long) to);
+		}
+#if NET_4_0
+		public
+#else
+		internal
+#endif
+		void AddRange (long range)
+		{
+			AddRange ("bytes", (long) range);
+		}
+
+#if NET_4_0
+		public
+#else
+		internal
+#endif
+		void AddRange (long from, long to)
+		{
+			AddRange ("bytes", from, to);
+		}
+
+#if NET_4_0
+		public
+#else
+		internal
+#endif
+		void AddRange (string rangeSpecifier, long range)
+		{
 			if (rangeSpecifier == null)
 				throw new ArgumentNullException ("rangeSpecifier");
-			if (from < 0 || to < 0 || from > to)
-				throw new ArgumentOutOfRangeException ();			
-			string value = webHeaders ["Range"];
-			if (value == null || value.Length == 0) 
-				value = rangeSpecifier + "=";
-			else if (value.ToLower ().StartsWith (rangeSpecifier.ToLower () + "="))
-				value += ",";
+			if (!WebHeaderCollection.IsHeaderValue (rangeSpecifier))
+				throw new ArgumentException ("Invalid range specifier", "rangeSpecifier");
+
+			string r = webHeaders ["Range"];
+			if (r == null)
+				r = rangeSpecifier + "=";
+			else {
+				string old_specifier = r.Substring (0, r.IndexOf ('='));
+				if (String.Compare (old_specifier, rangeSpecifier, StringComparison.OrdinalIgnoreCase) != 0)
+					throw new InvalidOperationException ("A different range specifier is already in use");
+				r += ",";
+			}
+
+			string n = range.ToString (CultureInfo.InvariantCulture);
+			if (range < 0)
+				r = r + "0" + n;
 			else
-				throw new InvalidOperationException ("rangeSpecifier");
-			webHeaders.RemoveAndAdd ("Range", value + from + "-" + to);	
+				r = r + n + "-";
+			webHeaders.RemoveAndAdd ("Range", r);
 		}
+
+#if NET_4_0
+		public
+#else
+		internal
+#endif
+		void AddRange (string rangeSpecifier, long from, long to)
+		{
+			if (rangeSpecifier == null)
+				throw new ArgumentNullException ("rangeSpecifier");
+			if (!WebHeaderCollection.IsHeaderValue (rangeSpecifier))
+				throw new ArgumentException ("Invalid range specifier", "rangeSpecifier");
+			if (from > to || from < 0)
+				throw new ArgumentOutOfRangeException ("from");
+			if (to < 0)
+				throw new ArgumentOutOfRangeException ("to");
+
+			string r = webHeaders ["Range"];
+			if (r == null)
+				r = rangeSpecifier + "=";
+			else
+				r += ",";
+
+			r = String.Format ("{0}{1}-{2}", r, from, to);
+			webHeaders.RemoveAndAdd ("Range", r);
+		}
+
 		
 		public override IAsyncResult BeginGetRequestStream (AsyncCallback callback, object state) 
 		{
@@ -683,6 +798,9 @@ namespace System.Net
 
 			lock (locker)
 			{
+				if (getResponseCalled)
+					throw new InvalidOperationException ("The operation cannot be performed once the request has been submitted.");
+
 				if (asyncWrite != null) {
 					throw new InvalidOperationException ("Cannot re-call start of asynchronous " +
 								"method while a previous call is still in progress.");
@@ -745,15 +863,29 @@ namespace System.Net
 			return EndGetRequestStream (asyncResult);
 		}
 
-		void CheckIfForceWrite ()
+		WebAsyncResult CheckIfForceWrite (AsyncCallback callback, object state)
 		{
-			if (writeStream == null || writeStream.RequestWritten|| contentLength < 0 || !InternalAllowBuffering)
-				return;
+			if (writeStream == null || writeStream.RequestWritten || !InternalAllowBuffering)
+				return null;
+#if NET_4_0
+			if (contentLength < 0 && writeStream.CanWrite == true && writeStream.WriteBufferLength < 0)
+				return null;
+
+			if (contentLength < 0 && writeStream.WriteBufferLength >= 0)
+				InternalContentLength = writeStream.WriteBufferLength;
+#else
+			if (contentLength < 0 && writeStream.CanWrite == true)
+				return null;
+#endif
 
 			// This will write the POST/PUT if the write stream already has the expected
-			// amount of bytes in it (ContentLength) (bug #77753).
-			if (writeStream.WriteBufferLength == contentLength)
-				writeStream.WriteRequest ();
+			// amount of bytes in it (ContentLength) (bug #77753) or if the write stream
+			// contains data and it has been closed already (xamarin bug #1512).
+
+			if (writeStream.WriteBufferLength == contentLength || (contentLength == -1 && writeStream.CanWrite == false))
+				return writeStream.WriteRequestAsync (callback, state);
+
+			return null;
 		}
 
 		public override IAsyncResult BeginGetResponse (AsyncCallback callback, object state)
@@ -776,10 +908,36 @@ namespace System.Net
 							"method while a previous call is still in progress.");
 			}
 
-			CheckIfForceWrite ();
 			asyncRead = new WebAsyncResult (this, callback, state);
 			WebAsyncResult aread = asyncRead;
 			initialMethod = method;
+
+			aread.InnerAsyncResult = CheckIfForceWrite (GetResponseAsyncCB, aread);
+			if (aread.InnerAsyncResult == null)
+				GetResponseAsyncCB2 (aread);
+			else
+				Monitor.Exit (locker);
+			return aread;
+		}
+
+		void GetResponseAsyncCB (IAsyncResult ar)
+		{
+			var result = (WebAsyncResult)ar;
+			var innerResult = (WebAsyncResult)result.InnerAsyncResult;
+			result.InnerAsyncResult = null;
+
+			if (innerResult != null && innerResult.GotException) {
+				asyncRead.SetCompleted (true, innerResult.Exception);
+				asyncRead.DoCallback ();
+				return;
+			}
+
+			Monitor.Enter (locker);
+			GetResponseAsyncCB2 ((WebAsyncResult)ar);
+		}
+
+		void GetResponseAsyncCB2 (WebAsyncResult aread)
+		{
 			if (haveResponse) {
 				Exception saved = saved_exc;
 				if (webResponse != null) {
@@ -790,15 +948,15 @@ namespace System.Net
 						aread.SetCompleted (true, saved);
 					}
 					aread.DoCallback ();
-					return aread;
+					return;
 				} else if (saved != null) {
 					Monitor.Exit (locker);
 					aread.SetCompleted (true, saved);
 					aread.DoCallback ();
-					return aread;
+					return;
 				}
 			}
-			
+
 			if (!requestSent) {
 				requestSent = true;
 				redirects = 0;
@@ -807,9 +965,8 @@ namespace System.Net
 			}
 
 			Monitor.Exit (locker);
-			return aread;
 		}
-		
+
 		public override WebResponse EndGetResponse (IAsyncResult asyncResult)
 		{
 			if (asyncResult == null)
@@ -829,6 +986,14 @@ namespace System.Net
 
 			return result.Response;
 		}
+		
+#if NET_3_5
+		public Stream EndGetRequestStream (IAsyncResult asyncResult, out TransportContext transportContext)
+		{
+			transportContext = null;
+			return EndGetRequestStream (asyncResult);
+		}
+#endif
 
 		public override WebResponse GetResponse()
 		{
@@ -950,29 +1115,19 @@ namespace System.Net
 			redirects++;
 			Exception e = null;
 			string uriString = null;
-
 			switch (code) {
 			case HttpStatusCode.Ambiguous: // 300
 				e = new WebException ("Ambiguous redirect.");
 				break;
 			case HttpStatusCode.MovedPermanently: // 301
 			case HttpStatusCode.Redirect: // 302
-			case HttpStatusCode.TemporaryRedirect: // 307
-				/* MS follows the redirect for POST too
-				if (method != "GET" && method != "HEAD") // 10.3
-					return false;
-				*/
-
-				contentLength = -1;
-				bodyBufferLength = 0;
-				bodyBuffer = null;
-				if (code != HttpStatusCode.TemporaryRedirect)
+				if (method == "POST")
 					method = "GET";
-				uriString = webResponse.Headers ["Location"];
+				break;
+			case HttpStatusCode.TemporaryRedirect: // 307
 				break;
 			case HttpStatusCode.SeeOther: //303
 				method = "GET";
-				uriString = webResponse.Headers ["Location"];
 				break;
 			case HttpStatusCode.NotModified: // 304
 				return false;
@@ -987,6 +1142,11 @@ namespace System.Net
 
 			if (e != null)
 				throw e;
+
+			contentLength = -1;
+			//bodyBufferLength = 0;
+			//bodyBuffer = null;
+			uriString = webResponse.Headers ["Location"];
 
 			if (uriString == null)
 				throw new WebException ("No Location header found for " + (int) code,
@@ -1013,13 +1173,15 @@ namespace System.Net
 				webHeaders.RemoveAndAdd ("Transfer-Encoding", "chunked");
 				webHeaders.RemoveInternal ("Content-Length");
 			} else if (contentLength != -1) {
-				if (ntlm_auth_state != NtlmAuthState.Challenge) {
+				if (auth_state.NtlmAuthState == NtlmAuthState.Challenge || proxy_auth_state.NtlmAuthState == NtlmAuthState.Challenge) {
+					// We don't send any body with the NTLM Challenge request.
+					webHeaders.SetInternal ("Content-Length", "0");
+				} else {
 					if (contentLength > 0)
 						continue100 = true;
 
-					webHeaders.SetInternal ("Content-Length", contentLength.ToString ());
-				} else {
-					webHeaders.SetInternal ("Content-Length", "0");
+					if (gotRequestStream || contentLength > 0)
+						webHeaders.SetInternal ("Content-Length", contentLength.ToString ());
 				}
 				webHeaders.RemoveInternal ("Transfer-Encoding");
 			} else {
@@ -1042,7 +1204,9 @@ namespace System.Net
 			bool spoint10 = (proto_version == null || proto_version == HttpVersion.Version10);
 
 			if (keepAlive && (version == HttpVersion.Version10 || spoint10)) {
-				webHeaders.RemoveAndAdd (connectionHeader, "keep-alive");
+				if (webHeaders[connectionHeader] == null
+				    || webHeaders[connectionHeader].IndexOf ("keep-alive", StringComparison.OrdinalIgnoreCase) == -1)
+					webHeaders.RemoveAndAdd (connectionHeader, "keep-alive");
 			} else if (!keepAlive && version == HttpVersion.Version11) {
 				webHeaders.RemoveAndAdd (connectionHeader, "close");
 			}
@@ -1051,7 +1215,9 @@ namespace System.Net
 			if (cookieContainer != null) {
 				string cookieHeader = cookieContainer.GetCookieHeader (actualUri);
 				if (cookieHeader != "")
-					webHeaders.SetInternal ("Cookie", cookieHeader);
+					webHeaders.RemoveAndAdd ("Cookie", cookieHeader);
+				else
+					webHeaders.RemoveInternal ("Cookie");
 			}
 
 			string accept_encoding = null;
@@ -1107,7 +1273,7 @@ namespace System.Net
 			}
 		}
 
-		internal void SendRequestHeaders (bool propagate_error)
+		internal byte[] GetRequestHeaders ()
 		{
 			StringBuilder req = new StringBuilder ();
 			string query;
@@ -1129,18 +1295,7 @@ namespace System.Net
 								actualVersion.Major, actualVersion.Minor);
 			req.Append (GetHeaders ());
 			string reqstr = req.ToString ();
-			byte [] bytes = Encoding.UTF8.GetBytes (reqstr);
-			try {
-				writeStream.SetHeaders (bytes);
-			} catch (WebException wexc) {
-				SetWriteStreamError (wexc.Status, wexc);
-				if (propagate_error)
-					throw;
-			} catch (Exception exc) {
-				SetWriteStreamError (WebExceptionStatus.SendFailure, exc);
-				if (propagate_error)
-					throw;
-			}
+			return Encoding.UTF8.GetBytes (reqstr);
 		}
 
 		internal void SetWriteStream (WebConnectionStream stream)
@@ -1155,14 +1310,42 @@ namespace System.Net
 				writeStream.SendChunked = false;
 			}
 
-			SendRequestHeaders (false);
+			try {
+				var result = writeStream.SetHeadersAsync (false, SetWriteStreamCB, null);
+				if (result == null)
+					SetWriteStreamCB (null);
+			} catch (Exception exc) {
+				SetWriteStreamErrorCB (exc);
+			}
+		}
 
+		void SetWriteStreamErrorCB (Exception exc)
+		{
+			WebException wexc = exc as WebException;
+			if (wexc != null)
+				SetWriteStreamError (wexc.Status, wexc);
+			else
+				SetWriteStreamError (WebExceptionStatus.SendFailure, exc);
+		}
+
+		void SetWriteStreamCB (IAsyncResult ar)
+		{
+			WebAsyncResult result = ar as WebAsyncResult;
+
+			if (result != null && result.Exception != null) {
+				SetWriteStreamErrorCB (result.Exception);
+				return;
+			}
+		
 			haveRequest = true;
-			
+
+			WebAsyncResult writeRequestResult = null;
+
 			if (bodyBuffer != null) {
 				// The body has been written and buffered. The request "user"
 				// won't write it again, so we must do it.
-				if (ntlm_auth_state != NtlmAuthState.Challenge) {
+				if (auth_state.NtlmAuthState != NtlmAuthState.Challenge && proxy_auth_state.NtlmAuthState != NtlmAuthState.Challenge) {
+					// FIXME: this is a blocking call on the thread pool that could lead to thread pool exhaustion
 					writeStream.Write (bodyBuffer, 0, bodyBufferLength);
 					bodyBuffer = null;
 					writeStream.Close ();
@@ -1170,11 +1353,23 @@ namespace System.Net
 			} else if (method != "HEAD" && method != "GET" && method != "MKCOL" && method != "CONNECT" &&
 					method != "TRACE") {
 				if (getResponseCalled && !writeStream.RequestWritten)
-					writeStream.WriteRequest ();
+					writeRequestResult = writeStream.WriteRequestAsync (SetWriteStreamCB2, null);
+			}
+
+			if (writeRequestResult == null)
+				SetWriteStreamCB2 (null);
+		}
+
+		void SetWriteStreamCB2 (IAsyncResult ar)
+		{
+			var result = (WebAsyncResult)ar;
+			if (result != null && result.GotException) {
+				SetWriteStreamErrorCB (result.Exception);
+				return;
 			}
 
 			if (asyncWrite != null) {
-				asyncWrite.SetCompleted (false, stream);
+				asyncWrite.SetCompleted (false, writeStream);
 				asyncWrite.DoCallback ();
 				asyncWrite = null;
 			}
@@ -1232,14 +1427,17 @@ namespace System.Net
 			}
 		}
 
-		void HandleNtlmAuth (WebAsyncResult r)
+		bool HandleNtlmAuth (WebAsyncResult r)
 		{
+			bool isProxy = webResponse.StatusCode == HttpStatusCode.ProxyAuthenticationRequired;
+			if ((isProxy ? proxy_auth_state.NtlmAuthState : auth_state.NtlmAuthState) == NtlmAuthState.None)
+				return false;
+
 			WebConnectionStream wce = webResponse.GetResponseStream () as WebConnectionStream;
 			if (wce != null) {
 				WebConnection cnc = wce.Connection;
 				cnc.PriorityRequest = this;
-				bool isProxy = (proxy != null && !proxy.IsBypassed (actualUri));
-				ICredentials creds = (!isProxy) ? credentials : proxy.Credentials;
+				ICredentials creds = !isProxy ? credentials : proxy.Credentials;
 				if (creds != null) {
 					cnc.NtlmCredential = creds.GetCredential (requestUri, "NTLM");
 					cnc.UnsafeAuthenticatedConnectionSharing = unsafe_auth_blah;
@@ -1250,6 +1448,7 @@ namespace System.Net
 			haveResponse = false;
 			webResponse.ReadAll ();
 			webResponse = null;
+			return true;
 		}
 
 		internal void SetResponseData (WebConnectionData data)
@@ -1295,12 +1494,14 @@ namespace System.Net
 					return;
 				}
 
+				bool isProxy = ProxyQuery && !proxy.IsBypassed (actualUri);
+
 				bool redirected;
 				try {
 					redirected = CheckFinalStatus (r);
 					if (!redirected) {
-						if (ntlm_auth_state != NtlmAuthState.None && authCompleted && webResponse != null
-							&& (int)webResponse.StatusCode < 400) {
+						if ((isProxy ? proxy_auth_state.IsNtlmAuthenticated : auth_state.IsNtlmAuthenticated) &&
+								webResponse != null && (int)webResponse.StatusCode < 400) {
 							WebConnectionStream wce = webResponse.GetResponseStream () as WebConnectionStream;
 							if (wce != null) {
 								WebConnection cnc = wce.Connection;
@@ -1318,10 +1519,8 @@ namespace System.Net
 						r.DoCallback ();
 					} else {
 						if (webResponse != null) {
-							if (ntlm_auth_state != NtlmAuthState.None) {
-								HandleNtlmAuth (r);
+							if (HandleNtlmAuth (r))
 								return;
-							}
 							webResponse.Close ();
 						}
 						finished_reading = false;
@@ -1353,35 +1552,84 @@ namespace System.Net
 			}
 		}
 
+		struct AuthorizationState
+		{
+			readonly HttpWebRequest request;
+			readonly bool isProxy;
+			bool isCompleted;
+			NtlmAuthState ntlm_auth_state;
+
+			public bool IsCompleted {
+				get { return isCompleted; }
+			}
+
+			public NtlmAuthState NtlmAuthState {
+				get { return ntlm_auth_state; }
+			}
+
+			public bool IsNtlmAuthenticated {
+				get { return isCompleted && ntlm_auth_state != NtlmAuthState.None; }
+			}
+
+			public AuthorizationState (HttpWebRequest request, bool isProxy)
+			{
+				this.request = request;
+				this.isProxy = isProxy;
+				isCompleted = false;
+				ntlm_auth_state = NtlmAuthState.None;
+			}
+
+			public bool CheckAuthorization (WebResponse response, HttpStatusCode code)
+			{
+				isCompleted = false;
+				if (code == HttpStatusCode.Unauthorized && request.credentials == null)
+					return false;
+
+				// FIXME: This should never happen!
+				if (isProxy != (code == HttpStatusCode.ProxyAuthenticationRequired))
+					return false;
+
+				if (isProxy && (request.proxy == null || request.proxy.Credentials == null))
+					return false;
+
+				string [] authHeaders = response.Headers.GetValues_internal (isProxy ? "Proxy-Authenticate" : "WWW-Authenticate", false);
+				if (authHeaders == null || authHeaders.Length == 0)
+					return false;
+
+				ICredentials creds = (!isProxy) ? request.credentials : request.proxy.Credentials;
+				Authorization auth = null;
+				foreach (string authHeader in authHeaders) {
+					auth = AuthenticationManager.Authenticate (authHeader, request, creds);
+					if (auth != null)
+						break;
+				}
+				if (auth == null)
+					return false;
+				request.webHeaders [isProxy ? "Proxy-Authorization" : "Authorization"] = auth.Message;
+				isCompleted = auth.Complete;
+				bool is_ntlm = (auth.Module.AuthenticationType == "NTLM");
+				if (is_ntlm)
+					ntlm_auth_state = (NtlmAuthState)((int) ntlm_auth_state + 1);
+				return true;
+			}
+
+			public void Reset ()
+			{
+				isCompleted = false;
+				ntlm_auth_state = NtlmAuthState.None;
+				request.webHeaders.RemoveInternal (isProxy ? "Proxy-Authorization" : "Authorization");
+			}
+
+			public override string ToString ()
+			{
+				return string.Format ("{0}AuthState [{1}:{2}]", isProxy ? "Proxy" : "", isCompleted, ntlm_auth_state);
+			}
+		}
+
 		bool CheckAuthorization (WebResponse response, HttpStatusCode code)
 		{
-			authCompleted = false;
-			if (code == HttpStatusCode.Unauthorized && credentials == null)
-				return false;
-
-			bool isProxy = (code == HttpStatusCode.ProxyAuthenticationRequired);
-			if (isProxy && (proxy == null || proxy.Credentials == null))
-				return false;
-
-			string [] authHeaders = response.Headers.GetValues ( (isProxy) ? "Proxy-Authenticate" : "WWW-Authenticate");
-			if (authHeaders == null || authHeaders.Length == 0)
-				return false;
-
-			ICredentials creds = (!isProxy) ? credentials : proxy.Credentials;
-			Authorization auth = null;
-			foreach (string authHeader in authHeaders) {
-				auth = AuthenticationManager.Authenticate (authHeader, this, creds);
-				if (auth != null)
-					break;
-			}
-			if (auth == null)
-				return false;
-			webHeaders [(isProxy) ? "Proxy-Authorization" : "Authorization"] = auth.Message;
-			authCompleted = auth.Complete;
-			bool is_ntlm = (auth.Module.AuthenticationType == "NTLM");
-			if (is_ntlm)
-				ntlm_auth_state = (NtlmAuthState)((int) ntlm_auth_state + 1);
-			return true;
+			bool isProxy = code == HttpStatusCode.ProxyAuthenticationRequired;
+			return isProxy ? proxy_auth_state.CheckAuthorization (response, code) : auth_state.CheckAuthorization (response, code);
 		}
 
 		// Returns true if redirected
@@ -1399,8 +1647,8 @@ namespace System.Net
 			HttpStatusCode code = 0;
 			if (throwMe == null && webResponse != null) {
 				code = webResponse.StatusCode;
-				if (!authCompleted && ((code == HttpStatusCode.Unauthorized && credentials != null) ||
-				     (ProxyQuery && code == HttpStatusCode.ProxyAuthenticationRequired))) {
+				if ((!auth_state.IsCompleted && code == HttpStatusCode.Unauthorized && credentials != null) ||
+					(ProxyQuery && !proxy_auth_state.IsCompleted && code == HttpStatusCode.ProxyAuthenticationRequired)) {
 					if (!usedPreAuth && CheckAuthorization (webResponse, code)) {
 						// Keep the written body, so it can be rewritten in the retry
 						if (InternalAllowBuffering) {
@@ -1408,7 +1656,7 @@ namespace System.Net
 							// We save it in the first request (first 401), don't send anything
 							// in the challenge request and send it in the response request along
 							// with the buffers kept form the first request.
-							if (ntlm_auth_state != NtlmAuthState.Response) {
+							if (auth_state.NtlmAuthState == NtlmAuthState.Challenge || proxy_auth_state.NtlmAuthState == NtlmAuthState.Challenge) {
 								bodyBuffer = writeStream.WriteBuffer;
 								bodyBufferLength = writeStream.WriteBufferLength;
 							}
@@ -1417,13 +1665,16 @@ namespace System.Net
 							bodyBuffer = null;
 							return true;
 						}
-						
+
+						if (!ThrowOnError)
+							return false;
+							
 						writeStream.InternalClose ();
 						writeStream = null;
 						webResponse.Close ();
 						webResponse = null;
 						bodyBuffer = null;
-
+							
 						throw new WebException ("This request requires buffering " +
 									"of data for authentication or " +
 									"redirection to be sucessful.");
@@ -1452,11 +1703,15 @@ namespace System.Net
 				bool b = false;
 				int c = (int) code;
 				if (allowAutoRedirect && c >= 300) {
+					b = Redirect (result, code);
 					if (InternalAllowBuffering && writeStream.WriteBufferLength > 0) {
 						bodyBuffer = writeStream.WriteBuffer;
 						bodyBufferLength = writeStream.WriteBufferLength;
 					}
-					b = Redirect (result, code);
+					if (b && !unsafe_auth_blah) {
+						auth_state.Reset ();
+						proxy_auth_state.Reset ();
+					}
 				}
 
 				if (resp != null && c >= 300 && c != 304)
@@ -1464,6 +1719,9 @@ namespace System.Net
 
 				return b;
 			}
+				
+			if (!ThrowOnError)
+				return false;
 
 			if (writeStream != null) {
 				writeStream.InternalClose ();
@@ -1474,6 +1732,13 @@ namespace System.Net
 
 			throw throwMe;
 		}
+
+		internal bool ReuseConnection {
+			get;
+			set;
+		}
+
+		internal WebConnection StoredConnection;
 	}
 }
 

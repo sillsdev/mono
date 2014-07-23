@@ -8,6 +8,13 @@
 #include <config.h>
 
 #ifdef HAVE_KW_THREAD
+
+#define MONO_HAVE_FAST_TLS
+#define MONO_FAST_TLS_SET(x,y) x = y
+#define MONO_FAST_TLS_GET(x) x
+#define MONO_FAST_TLS_INIT(x)
+#define MONO_FAST_TLS_DECLARE(x) static __thread gpointer x MONO_TLS_FAST;
+
 #if HAVE_TLS_MODEL_ATTR
 
 #if defined(__PIC__) && !defined(PIC)
@@ -118,10 +125,10 @@
 #  define MONO_THREAD_VAR_OFFSET(var,offset) do { guint64 foo;  				\
 						__asm__ ("basr	%%r1,0\n\t"			\
 							 "j	0f\n\t"				\
-							 ".quad " #var "@INDNTPOFF\n\t"		\
+							 ".quad " #var "@TLSGD\n\t"		\
 							 "0:\n\t"				\
 							 "lg	%%r2,4(%%r1)\n\t"		\
-							 "brasl	%%r14,__tls_get_offset@PLT\n\t" \
+							 "brasl	%%r14,__tls_get_offset@PLT:tls_gdcall:"#var"\n\t" \
 							 "lgr	%0,%%r2\n\t"			\
 							: "=r" (foo) : 				\
 							: "1", "2", "14", "cc");		\
@@ -136,6 +143,7 @@
 							: "=r" (foo) : : "1");			\
 						offset = foo; } while (0)
 # endif
+
 #else
 #define MONO_THREAD_VAR_OFFSET(var,offset) (offset) = -1
 #endif
@@ -149,14 +157,41 @@
 #define MONO_THREAD_VAR_OFFSET(var,offset) (offset) = -1
 #endif
 
+#elif defined(__APPLE__) && (defined(__i386__) || defined(__x86_64__))
+
+#define MONO_HAVE_FAST_TLS
+#define MONO_FAST_TLS_SET(x,y) pthread_setspecific(x, y)
+#define MONO_FAST_TLS_GET(x) pthread_getspecific(x)
+#define MONO_FAST_TLS_ADDR(x) (mono_mach_get_tls_address_from_thread (pthread_self (), x))
+#define MONO_FAST_TLS_INIT(x) pthread_key_create(&x, NULL)
+#define MONO_FAST_TLS_DECLARE(x) static pthread_key_t x;
+
+#define MONO_THREAD_VAR_OFFSET(x,y) ({	\
+	typeof(x) _x = (x);			\
+	pthread_key_t _y;	\
+	(void) (&_x == &_y);		\
+	y = (gint32) x; })
 #else /* no HAVE_KW_THREAD */
 
 #define MONO_THREAD_VAR_OFFSET(var,offset) (offset) = -1
 
+/*Macros to facilitate user code*/
+#define MONO_FAST_TLS_INIT(x)
 #endif
+
+#if defined(MONO_HAVE_FAST_TLS) && !defined(MONO_FAST_TLS_ADDR)
+#define MONO_FAST_TLS_ADDR(x) (&(x))
+#endif
+
 
 /* Deal with Microsoft C compiler differences */
 #ifdef _MSC_VER
+
+#include <math.h>
+
+#if _MSC_VER < 1800 /* VS 2013 */
+#define strtoull _strtoui64
+#endif
 
 #include <float.h>
 #define isnan(x)	_isnan(x)
@@ -177,7 +212,7 @@
 
 #endif /* _MSC_VER */
 
-#if !defined(_MSC_VER) && !defined(PLATFORM_SOLARIS) && !defined(_WIN32) && !defined(__CYGWIN__) && HAVE_VISIBILITY_HIDDEN
+#if !defined(_MSC_VER) && !defined(PLATFORM_SOLARIS) && !defined(_WIN32) && !defined(__CYGWIN__) && !defined(MONOTOUCH) && HAVE_VISIBILITY_HIDDEN
 #define MONO_INTERNAL __attribute__ ((visibility ("hidden")))
 #if MONO_LLVM_LOADED
 #define MONO_LLVM_INTERNAL 
@@ -193,6 +228,14 @@
 #define MONO_DEPRECATED __attribute__ ((deprecated))
 #else
 #define MONO_DEPRECATED 
+#endif
+
+#ifdef __GNUC__
+#define MONO_ALWAYS_INLINE __attribute__((always_inline))
+#elif defined(_MSC_VER)
+#define MONO_ALWAYS_INLINE __forceinline
+#else
+#define MONO_ALWAYS_INLINE
 #endif
 
 #endif /* __UTILS_MONO_COMPILER_H__*/

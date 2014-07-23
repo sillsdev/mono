@@ -44,6 +44,7 @@
 #include <mono/utils/mono-membar.h>
 #include <mono/utils/mono-counters.h>
 #include <mono/utils/mono-error-internals.h>
+#include <mono/utils/mono-tls.h>
 
 MonoDefaults mono_defaults;
 
@@ -66,13 +67,13 @@ static guint32 signatures_size;
 /*
  * This TLS variable contains the last type load error encountered by the loader.
  */
-guint32 loader_error_thread_id;
+MonoNativeTlsKey loader_error_thread_id;
 
 /*
  * This TLS variable holds how many times the current thread has acquired the loader 
  * lock.
  */
-guint32 loader_lock_nest_id;
+MonoNativeTlsKey loader_lock_nest_id;
 
 static void dllmap_cleanup (void);
 
@@ -85,8 +86,8 @@ mono_loader_init ()
 		InitializeCriticalSection (&loader_mutex);
 		loader_lock_inited = TRUE;
 
-		loader_error_thread_id = TlsAlloc ();
-		loader_lock_nest_id = TlsAlloc ();
+		mono_native_tls_alloc (&loader_error_thread_id, NULL);
+		mono_native_tls_alloc (&loader_lock_nest_id, NULL);
 
 		mono_counters_register ("Inflated signatures size",
 								MONO_COUNTER_GENERICS | MONO_COUNTER_INT, &inflated_signatures_size);
@@ -106,8 +107,8 @@ mono_loader_cleanup (void)
 {
 	dllmap_cleanup ();
 
-	TlsFree (loader_error_thread_id);
-	TlsFree (loader_lock_nest_id);
+	mono_native_tls_free (loader_error_thread_id);
+	mono_native_tls_free (loader_lock_nest_id);
 
 	DeleteCriticalSection (&loader_mutex);
 	loader_lock_inited = FALSE;	
@@ -128,7 +129,8 @@ mono_loader_cleanup (void)
 static void
 set_loader_error (MonoLoaderError *error)
 {
-	TlsSetValue (loader_error_thread_id, error);
+	mono_loader_clear_error ();
+	mono_native_tls_set_value (loader_error_thread_id, error);
 }
 
 /**
@@ -266,7 +268,7 @@ mono_loader_set_error_bad_image (char *msg)
 MonoLoaderError*
 mono_loader_get_last_error (void)
 {
-	return (MonoLoaderError*)TlsGetValue (loader_error_thread_id);
+	return (MonoLoaderError*)mono_native_tls_get_value (loader_error_thread_id);
 }
 
 /**
@@ -277,15 +279,15 @@ mono_loader_get_last_error (void)
 void
 mono_loader_clear_error (void)
 {
-	MonoLoaderError *ex = (MonoLoaderError*)TlsGetValue (loader_error_thread_id);
+	MonoLoaderError *ex = (MonoLoaderError*)mono_native_tls_get_value (loader_error_thread_id);
 
 	if (ex) {
 		g_free (ex->class_name);
 		g_free (ex->assembly_name);
 		g_free (ex->msg);
 		g_free (ex);
-	
-		TlsSetValue (loader_error_thread_id, NULL);
+
+		mono_native_tls_set_value (loader_error_thread_id, NULL);
 	}
 }
 
@@ -329,19 +331,18 @@ mono_loader_error_prepare_exception (MonoLoaderError *error)
 	}
 		
 	case MONO_EXCEPTION_MISSING_FIELD: {
-		char *cnspace = g_strdup ((error->klass && *error->klass->name_space) ? error->klass->name_space : "");
-		char *cname = g_strdup (error->klass ? error->klass->name : "");
+		char *class_name;
 		char *cmembername = g_strdup (error->member_name);
-                char *class_name;
+		if (error->klass)
+			class_name = mono_type_get_full_name (error->klass);
+		else
+			class_name = g_strdup ("");
 
 		mono_loader_clear_error ();
-		class_name = g_strdup_printf ("%s%s%s", cnspace, cnspace ? "." : "", cname);
 		
 		ex = mono_get_exception_missing_field (class_name, cmembername);
 		g_free (class_name);
-		g_free (cname);
 		g_free (cmembername);
-		g_free (cnspace);
 		break;
         }
 	
@@ -531,13 +532,13 @@ mono_field_from_token (MonoImage *image, guint32 token, MonoClass **retklass,
 		return result;
 	}
 
-	mono_loader_lock ();
+	mono_image_lock (image);
 	if ((field = g_hash_table_lookup (image->field_cache, GUINT_TO_POINTER (token)))) {
 		*retklass = field->parent;
-		mono_loader_unlock ();
+		mono_image_unlock (image);
 		return field;
 	}
-	mono_loader_unlock ();
+	mono_image_unlock (image);
 
 	if (mono_metadata_token_table (token) == MONO_TABLE_MEMBERREF)
 		field = field_from_memberref (image, token, retklass, context);
@@ -554,10 +555,10 @@ mono_field_from_token (MonoImage *image, guint32 token, MonoClass **retklass,
 		field = mono_class_get_field (k, token);
 	}
 
-	mono_loader_lock ();
+	mono_image_lock (image);
 	if (field && field->parent && !field->parent->generic_class && !field->parent->generic_container)
 		g_hash_table_insert (image->field_cache, GUINT_TO_POINTER (token), field);
-	mono_loader_unlock ();
+	mono_image_unlock (image);
 	return field;
 }
 
@@ -780,6 +781,25 @@ fail:
 	return NULL;
 }
 
+/*
+ * mono_inflate_generic_signature:
+ *
+ *   Inflate SIG with CONTEXT, and return a canonical copy. On error, set ERROR, and return NULL.
+ */
+MonoMethodSignature*
+mono_inflate_generic_signature (MonoMethodSignature *sig, MonoGenericContext *context, MonoError *error)
+{
+	MonoMethodSignature *res, *cached;
+
+	res = inflate_generic_signature_checked (NULL, sig, context, error);
+	if (!mono_error_ok (error))
+		return NULL;
+	cached = mono_metadata_get_inflated_signature (res, context);
+	if (cached != res)
+		mono_metadata_free_inflated_signature (res);
+	return cached;
+}
+
 static MonoMethodHeader*
 inflate_generic_header (MonoMethodHeader *header, MonoGenericContext *context)
 {
@@ -835,9 +855,11 @@ mono_method_get_signature_full (MonoMethod *method, MonoImage *image, guint32 to
 	if (method->klass->generic_class)
 		return mono_method_signature (method);
 
+#ifndef DISABLE_REFLECTION_EMIT
 	if (image->dynamic) {
 		sig = mono_reflection_lookup_signature (image, method, token);
 	} else {
+#endif
 		mono_metadata_decode_row (&image->tables [MONO_TABLE_MEMBERREF], idx-1, cols, MONO_MEMBERREF_SIZE);
 		sig_idx = cols [MONO_MEMBERREF_SIGNATURE];
 
@@ -866,7 +888,9 @@ mono_method_get_signature_full (MonoMethod *method, MonoImage *image, guint32 to
 			mono_loader_set_error_bad_image (g_strdup_printf ("Incompatible method signature class token 0x%08x field name %s token 0x%08x on image %s", class, fname, token, image->name));
 			return NULL;
 		}
+#ifndef DISABLE_REFLECTION_EMIT
 	}
+#endif
 
 
 	if (context) {
@@ -1180,10 +1204,31 @@ mono_dllmap_lookup (MonoImage *assembly, const char *dll, const char* func, cons
 	return mono_dllmap_lookup_list (global_dll_map, dll, func, rdll, rfunc);
 }
 
-/*
+/**
  * mono_dllmap_insert:
+ * @assembly: if NULL, this is a global mapping, otherwise the remapping of the dynamic library will only apply to the specified assembly
+ * @dll: The name of the external library, as it would be found in the DllImport declaration.  If prefixed with 'i:' the matching of the library name is done without case sensitivity
+ * @func: if not null, the mapping will only applied to the named function (the value of EntryPoint)
+ * @tdll: The name of the library to map the specified @dll if it matches.
+ * @tfunc: if func is not NULL, the name of the function that replaces the invocation
  *
  * LOCKING: Acquires the loader lock.
+ *
+ * This function is used to programatically add DllImport remapping in either
+ * a specific assembly, or as a global remapping.   This is done by remapping
+ * references in a DllImport attribute from the @dll library name into the @tdll
+ * name.    If the @dll name contains the prefix "i:", the comparison of the 
+ * library name is done without case sensitivity.
+ *
+ * If you pass @func, this is the name of the EntryPoint in a DllImport if specified
+ * or the name of the function as determined by DllImport.    If you pass @func, you
+ * must also pass @tfunc which is the name of the target function to invoke on a match.
+ *
+ * Example:
+ * mono_dllmap_insert (NULL, "i:libdemo.dll", NULL, relocated_demo_path, NULL);
+ *
+ * The above will remap DllImport statments for "libdemo.dll" and "LIBDEMO.DLL" to
+ * the contents of relocated_demo_path for all assemblies in the Mono process.
  *
  * NOTE: This can be called before the runtime is initialized, for example from
  * mono_config_parse ().
@@ -1264,6 +1309,19 @@ cached_module_load (const char *name, int flags, char **err)
 	return res;
 }
 
+static MonoDl *internal_module;
+
+static gboolean
+is_absolute_path (const char *path)
+{
+#ifdef PLATFORM_MACOSX
+	if (!strncmp (path, "@executable_path/", 17) || !strncmp (path, "@loader_path/", 13) ||
+	    !strncmp (path, "@rpath/", 7))
+	    return TRUE;
+#endif
+	return g_path_is_absolute (path);
+}
+
 gpointer
 mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char **exc_arg)
 {
@@ -1278,11 +1336,17 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 	const char *orig_scope;
 	const char *new_scope;
 	char *error_msg;
-	char *full_name, *file_name;
+	char *full_name, *file_name, *found_name = NULL;
 	int i;
 	MonoDl *module = NULL;
+	gboolean cached = FALSE;
 
 	g_assert (method->flags & METHOD_ATTRIBUTE_PINVOKE_IMPL);
+
+	if (exc_class) {
+		*exc_class = NULL;
+		*exc_arg = NULL;
+	}
 
 	if (piinfo->addr)
 		return piinfo->addr;
@@ -1314,22 +1378,40 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 
 	mono_dllmap_lookup (image, orig_scope, import, &new_scope, &import);
 
-	mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
-			"DllImport attempting to load: '%s'.", new_scope);
-
-	if (exc_class) {
-		*exc_class = NULL;
-		*exc_arg = NULL;
+	if (!module) {
+		mono_loader_lock ();
+		if (!image->pinvoke_scopes) {
+			image->pinvoke_scopes = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+			image->pinvoke_scope_filenames = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+		}
+		module = g_hash_table_lookup (image->pinvoke_scopes, new_scope);
+		found_name = g_hash_table_lookup (image->pinvoke_scope_filenames, new_scope);
+		mono_loader_unlock ();
+		if (module)
+			cached = TRUE;
+		if (found_name)
+			found_name = g_strdup (found_name);
 	}
 
-	/* we allow a special name to dlopen from the running process namespace */
-	if (strcmp (new_scope, "__Internal") == 0)
-		module = mono_dl_open (NULL, MONO_DL_LAZY, &error_msg);
+	if (!module) {
+		mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
+					"DllImport attempting to load: '%s'.", new_scope);
+
+		/* we allow a special name to dlopen from the running process namespace */
+		if (strcmp (new_scope, "__Internal") == 0){
+			if (internal_module == NULL)
+				internal_module = mono_dl_open (NULL, MONO_DL_LAZY, &error_msg);
+			module = internal_module;
+		}
+	}
 
 	/*
 	 * Try loading the module using a variety of names
 	 */
 	for (i = 0; i < 4; ++i) {
+		char *base_name = NULL, *dir_name = NULL;
+		gboolean is_absolute = is_absolute_path (new_scope);
+		
 		switch (i) {
 		case 0:
 			/* Try the original name */
@@ -1345,12 +1427,21 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 				continue;
 			break;
 		case 2:
-			if (strstr (new_scope, "lib") != new_scope) {
+			if (is_absolute) {
+				dir_name = g_path_get_dirname (new_scope);
+				base_name = g_path_get_basename (new_scope);
+				if (strstr (base_name, "lib") != base_name) {
+					char *tmp = g_strdup_printf ("lib%s", base_name);       
+					g_free (base_name);
+					base_name = tmp;
+					file_name = g_strdup_printf ("%s%s%s", dir_name, G_DIR_SEPARATOR_S, base_name);
+					break;
+				}
+			} else if (strstr (new_scope, "lib") != new_scope) {
 				file_name = g_strdup_printf ("lib%s", new_scope);
+				break;
 			}
-			else
-				continue;
-			break;
+			continue;
 		default:
 #ifndef TARGET_WIN32
 			if (!g_ascii_strcasecmp ("user32.dll", new_scope) ||
@@ -1365,19 +1456,38 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 			break;
 #endif
 		}
+		
+		if (is_absolute) {
+			if (!dir_name)
+				dir_name = g_path_get_dirname (file_name);
+			if (!base_name)
+				base_name = g_path_get_basename (file_name);
+		}
+		
+		if (!module && is_absolute) {
+			module = cached_module_load (file_name, MONO_DL_LAZY, &error_msg);
+			if (!module) {
+				mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
+						"DllImport error loading library '%s': '%s'.",
+							file_name, error_msg);
+				g_free (error_msg);
+			} else {
+				found_name = g_strdup (file_name);
+			}
+		}
 
-		if (!module) {
+		if (!module && !is_absolute) {
 			void *iter = NULL;
 			char *mdirname = g_path_get_dirname (image->name);
 			while ((full_name = mono_dl_build_path (mdirname, file_name, &iter))) {
-				mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
-					"DllImport loading library: '%s'.", full_name);
 				module = cached_module_load (full_name, MONO_DL_LAZY, &error_msg);
 				if (!module) {
 					mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
-						"DllImport error loading library '%s'.",
-						error_msg);
+						"DllImport error loading library '%s': '%s'.",
+								full_name, error_msg);
 					g_free (error_msg);
+				} else {
+					found_name = g_strdup (full_name);
 				}
 				g_free (full_name);
 				if (module)
@@ -1388,15 +1498,16 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 
 		if (!module) {
 			void *iter = NULL;
-			while ((full_name = mono_dl_build_path (NULL, file_name, &iter))) {
-				mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
-						"DllImport loading location: '%s'.", full_name);
+			char *file_or_base = is_absolute ? base_name : file_name;
+			while ((full_name = mono_dl_build_path (dir_name, file_or_base, &iter))) {
 				module = cached_module_load (full_name, MONO_DL_LAZY, &error_msg);
 				if (!module) {
 					mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
-							"DllImport error loading library: '%s'.",
-							error_msg);
+							"DllImport error loading library '%s': '%s'.",
+								full_name, error_msg);
 					g_free (error_msg);
+				} else {
+					found_name = g_strdup (full_name);
 				}
 				g_free (full_name);
 				if (module)
@@ -1405,17 +1516,21 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 		}
 
 		if (!module) {
-			mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
-					"DllImport loading: '%s'.", file_name);
 			module = cached_module_load (file_name, MONO_DL_LAZY, &error_msg);
 			if (!module) {
 				mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
-						"DllImport error loading library '%s'.",
-						error_msg);
+						"DllImport error loading library '%s': '%s'.",
+							file_name, error_msg);
+			} else {
+				found_name = g_strdup (file_name);
 			}
 		}
 
 		g_free (file_name);
+		if (is_absolute) {
+			g_free (base_name);
+			g_free (dir_name);
+		}
 
 		if (module)
 			break;
@@ -1433,6 +1548,21 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 		}
 		return NULL;
 	}
+
+	if (!cached) {
+		mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
+					"DllImport loaded library '%s'.", found_name);
+		mono_loader_lock ();
+		if (!g_hash_table_lookup (image->pinvoke_scopes, new_scope)) {
+			g_hash_table_insert (image->pinvoke_scopes, g_strdup (new_scope), module);
+			g_hash_table_insert (image->pinvoke_scope_filenames, g_strdup (new_scope), g_strdup (found_name));
+		}
+		mono_loader_unlock ();
+	}
+
+	mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_DLLIMPORT,
+				"DllImport searching in: '%s' ('%s').", new_scope, found_name);
+	g_free (found_name);
 
 #ifdef TARGET_WIN32
 	if (import && import [0] == '#' && isdigit (import [1])) {
@@ -1682,7 +1812,7 @@ MonoMethod *
 mono_get_method_full (MonoImage *image, guint32 token, MonoClass *klass,
 		      MonoGenericContext *context)
 {
-	MonoMethod *result;
+	MonoMethod *result = NULL;
 	gboolean used_context = FALSE;
 
 	/* We do everything inside the lock to prevent creation races */
@@ -1693,7 +1823,7 @@ mono_get_method_full (MonoImage *image, guint32 token, MonoClass *klass,
 		if (!image->method_cache)
 			image->method_cache = g_hash_table_new (NULL, NULL);
 		result = g_hash_table_lookup (image->method_cache, GINT_TO_POINTER (mono_metadata_token_index (token)));
-	} else {
+	} else if (!image->dynamic) {
 		if (!image->methodref_cache)
 			image->methodref_cache = g_hash_table_new (NULL, NULL);
 		result = g_hash_table_lookup (image->methodref_cache, GINT_TO_POINTER (token));
@@ -1703,16 +1833,18 @@ mono_get_method_full (MonoImage *image, guint32 token, MonoClass *klass,
 	if (result)
 		return result;
 
+
 	result = mono_get_method_from_token (image, token, klass, context, &used_context);
 	if (!result)
 		return NULL;
 
 	mono_image_lock (image);
 	if (!used_context && !result->is_inflated) {
-		MonoMethod *result2;
+		MonoMethod *result2 = NULL;
+
 		if (mono_metadata_token_table (token) == MONO_TABLE_METHOD)
 			result2 = g_hash_table_lookup (image->method_cache, GINT_TO_POINTER (mono_metadata_token_index (token)));
-		else
+		else if (!image->dynamic)
 			result2 = g_hash_table_lookup (image->methodref_cache, GINT_TO_POINTER (token));
 
 		if (result2) {
@@ -1722,7 +1854,7 @@ mono_get_method_full (MonoImage *image, guint32 token, MonoClass *klass,
 
 		if (mono_metadata_token_table (token) == MONO_TABLE_METHOD)
 			g_hash_table_insert (image->method_cache, GINT_TO_POINTER (mono_metadata_token_index (token)), result);
-		else
+		else if (!image->dynamic)
 			g_hash_table_insert (image->methodref_cache, GINT_TO_POINTER (token), result);
 	}
 
@@ -1731,37 +1863,17 @@ mono_get_method_full (MonoImage *image, guint32 token, MonoClass *klass,
 	return result;
 }
 
-/**
- * mono_get_method_constrained:
- *
- * This is used when JITing the `constrained.' opcode.
- *
- * This returns two values: the contrained method, which has been inflated
- * as the function return value;   And the original CIL-stream method as
- * declared in cil_method.  The later is used for verification.
- */
-MonoMethod *
-mono_get_method_constrained (MonoImage *image, guint32 token, MonoClass *constrained_class,
-			     MonoGenericContext *context, MonoMethod **cil_method)
+static MonoMethod *
+get_method_constrained (MonoImage *image, MonoMethod *method, MonoClass *constrained_class, MonoGenericContext *context)
 {
-	MonoMethod *method, *result;
+	MonoMethod *result;
 	MonoClass *ic = NULL;
 	MonoGenericContext *method_context = NULL;
 	MonoMethodSignature *sig, *original_sig;
 
-	mono_loader_lock ();
-
-	*cil_method = mono_get_method_from_token (image, token, NULL, context, NULL);
-	if (!*cil_method) {
-		mono_loader_unlock ();
-		return NULL;
-	}
-
 	mono_class_init (constrained_class);
-	method = *cil_method;
 	original_sig = sig = mono_method_signature (method);
 	if (sig == NULL) {
-		mono_loader_unlock ();
 		return NULL;
 	}
 
@@ -1784,7 +1896,6 @@ mono_get_method_constrained (MonoImage *image, guint32 token, MonoClass *constra
 			/*Fixme, property propagate this error*/
 			sig = inflate_generic_signature_checked (method->klass->image, sig, &ctx, &error);
 			if (!mono_error_ok (&error)) {
-				mono_loader_unlock ();
 				mono_error_cleanup (&error);
 				return NULL;
 			}
@@ -1799,14 +1910,58 @@ mono_get_method_constrained (MonoImage *image, guint32 token, MonoClass *constra
 		mono_metadata_free_inflated_signature (sig);
 
 	if (!result) {
-		g_warning ("Missing method %s.%s.%s in assembly %s token %x", method->klass->name_space,
-			   method->klass->name, method->name, image->name, token);
-		mono_loader_unlock ();
+		char *m = mono_method_full_name (method, 1);
+		g_warning ("Missing method %s.%s.%s in assembly %s method %s", method->klass->name_space,
+			   method->klass->name, method->name, image->name, m);
+		g_free (m);
 		return NULL;
 	}
 
 	if (method_context)
 		result = mono_class_inflate_generic_method (result, method_context);
+
+	return result;
+}
+
+MonoMethod *
+mono_get_method_constrained_with_method (MonoImage *image, MonoMethod *method, MonoClass *constrained_class,
+			     MonoGenericContext *context)
+{
+	MonoMethod *result;
+
+	g_assert (method);
+
+	mono_loader_lock ();
+
+	result = get_method_constrained (image, method, constrained_class, context);
+
+	mono_loader_unlock ();
+	return result;	
+}
+/**
+ * mono_get_method_constrained:
+ *
+ * This is used when JITing the `constrained.' opcode.
+ *
+ * This returns two values: the contrained method, which has been inflated
+ * as the function return value;   And the original CIL-stream method as
+ * declared in cil_method.  The later is used for verification.
+ */
+MonoMethod *
+mono_get_method_constrained (MonoImage *image, guint32 token, MonoClass *constrained_class,
+			     MonoGenericContext *context, MonoMethod **cil_method)
+{
+	MonoMethod *result;
+
+	mono_loader_lock ();
+
+	*cil_method = mono_get_method_from_token (image, token, NULL, context, NULL);
+	if (!*cil_method) {
+		mono_loader_unlock ();
+		return NULL;
+	}
+
+	result = get_method_constrained (image, *cil_method, constrained_class, context);
 
 	mono_loader_unlock ();
 	return result;
@@ -1892,6 +2047,21 @@ mono_method_get_param_names (MonoMethod *method, const char **names)
 			for (i = 0; i < mono_method_signature (method)->param_count; ++i)
 				if (method_aux->param_names [i + 1])
 					names [i] = method_aux->param_names [i + 1];
+		}
+		return;
+	}
+
+	if (method->wrapper_type) {
+		char **pnames = NULL;
+
+		mono_image_lock (klass->image);
+		if (klass->image->wrapper_param_names)
+			pnames = g_hash_table_lookup (klass->image->wrapper_param_names, method);
+		mono_image_unlock (klass->image);
+
+		if (pnames) {
+			for (i = 0; i < signature->param_count; ++i)
+				names [i] = pnames [i];
 		}
 		return;
 	}
@@ -2069,29 +2239,42 @@ mono_method_get_wrapper_data (MonoMethod *method, guint32 id)
 	return data [id];
 }
 
-static void
-default_stack_walk (MonoStackWalk func, gboolean do_il_offset, gpointer user_data) {
-	g_error ("stack walk not installed");
-}
+typedef struct {
+	MonoStackWalk func;
+	gpointer user_data;
+} StackWalkUserData;
 
-static MonoStackWalkImpl stack_walk = default_stack_walk;
+static gboolean
+stack_walk_adapter (MonoStackFrameInfo *frame, MonoContext *ctx, gpointer data)
+{
+	StackWalkUserData *d = data;
+
+	switch (frame->type) {
+	case FRAME_TYPE_DEBUGGER_INVOKE:
+	case FRAME_TYPE_MANAGED_TO_NATIVE:
+		return FALSE;
+	case FRAME_TYPE_MANAGED:
+		g_assert (frame->ji);
+		return d->func (mono_jit_info_get_method (frame->ji), frame->native_offset, frame->il_offset, frame->managed, d->user_data);
+		break;
+	default:
+		g_assert_not_reached ();
+		return FALSE;
+	}
+}
 
 void
 mono_stack_walk (MonoStackWalk func, gpointer user_data)
 {
-	stack_walk (func, TRUE, user_data);
+	StackWalkUserData ud = { func, user_data };
+	mono_get_eh_callbacks ()->mono_walk_stack_with_ctx (stack_walk_adapter, NULL, MONO_UNWIND_LOOKUP_ALL, &ud);
 }
 
 void
 mono_stack_walk_no_il (MonoStackWalk func, gpointer user_data)
 {
-	stack_walk (func, FALSE, user_data);
-}
-
-void
-mono_install_stack_walk (MonoStackWalkImpl func)
-{
-	stack_walk = func;
+	StackWalkUserData ud = { func, user_data };
+	mono_get_eh_callbacks ()->mono_walk_stack_with_ctx (stack_walk_adapter, NULL, MONO_UNWIND_DEFAULT, &ud);
 }
 
 static gboolean
@@ -2108,7 +2291,7 @@ MonoMethod*
 mono_method_get_last_managed (void)
 {
 	MonoMethod *m = NULL;
-	stack_walk (last_managed, FALSE, &m);
+	mono_stack_walk_no_il (last_managed, &m);
 	return m;
 }
 
@@ -2124,7 +2307,7 @@ mono_loader_lock (void)
 {
 	mono_locks_acquire (&loader_mutex, LoaderLock);
 	if (G_UNLIKELY (loader_lock_track_ownership)) {
-		TlsSetValue (loader_lock_nest_id, GUINT_TO_POINTER (GPOINTER_TO_UINT (TlsGetValue (loader_lock_nest_id)) + 1));
+		mono_native_tls_set_value (loader_lock_nest_id, GUINT_TO_POINTER (GPOINTER_TO_UINT (mono_native_tls_get_value (loader_lock_nest_id)) + 1));
 	}
 }
 
@@ -2133,7 +2316,7 @@ mono_loader_unlock (void)
 {
 	mono_locks_release (&loader_mutex, LoaderLock);
 	if (G_UNLIKELY (loader_lock_track_ownership)) {
-		TlsSetValue (loader_lock_nest_id, GUINT_TO_POINTER (GPOINTER_TO_UINT (TlsGetValue (loader_lock_nest_id)) - 1));
+		mono_native_tls_set_value (loader_lock_nest_id, GUINT_TO_POINTER (GPOINTER_TO_UINT (mono_native_tls_get_value (loader_lock_nest_id)) - 1));
 	}
 }
 
@@ -2161,7 +2344,7 @@ mono_loader_lock_is_owned_by_self (void)
 {
 	g_assert (loader_lock_track_ownership);
 
-	return GPOINTER_TO_UINT (TlsGetValue (loader_lock_nest_id)) > 0;
+	return GPOINTER_TO_UINT (mono_native_tls_get_value (loader_lock_nest_id)) > 0;
 }
 
 /*
@@ -2267,9 +2450,8 @@ mono_method_signature_checked (MonoMethod *m, MonoError *error)
 
 		signature = mono_metadata_parse_method_signature_full (img, container, idx, sig_body, NULL);
 		if (!signature) {
-			mono_loader_clear_error ();
+			mono_error_set_from_loader_error (error);
 			mono_loader_unlock ();
-			mono_error_set_method_load (error, m->klass, m->name, "");
 			return NULL;
 		}
 

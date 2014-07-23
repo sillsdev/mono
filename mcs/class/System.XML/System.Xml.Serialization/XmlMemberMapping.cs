@@ -122,12 +122,11 @@ namespace System.Xml.Serialization
 			get { return _form; }
 		}
 		
-#if NET_2_0
 		public string XsdElementName
 		{
 			get { return _mapMember.Name; }
 		}
-#if !TARGET_JVM	&& !MOBILE
+#if !TARGET_JVM	&& !NET_2_1
 		public string GenerateTypeName (System.CodeDom.Compiler.CodeDomProvider codeProvider)
 		{
 			string ret = codeProvider.CreateValidIdentifier (_mapMember.TypeData.FullTypeName);
@@ -135,15 +134,11 @@ namespace System.Xml.Serialization
 				"System.Nullable`1[" + ret + "]" : ret;
 		}
 #endif
-#endif
 
-#if NET_1_1
 		public bool CheckSpecified
 		{
 			get { return _mapMember.IsOptionalValueType; }
 		}
-#endif
-
 		#endregion // Properties
 	}
 }

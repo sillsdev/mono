@@ -86,6 +86,7 @@ namespace MonoTests.System.Threading
 	}
 
 	[TestFixture]
+	[Category("MobileNotWorking")] // Abort #10240
 	public class ThreadTest
 	{
 		TimeSpan Infinite = new TimeSpan (-10000);	// -10000 ticks == -1 ms
@@ -449,6 +450,16 @@ namespace MonoTests.System.Threading
 		}
 
 		[Test]
+		public void TestUndivisibleByPageSizeMaxStackSize ()
+		{
+			const int undivisible_stacksize = 1048573;
+
+			var thread = new Thread (new ThreadStart (delegate {}), undivisible_stacksize);
+			thread.Start ();
+			thread.Join ();
+		}
+
+		[Test]
 		public void TestIsBackground1 ()
 		{
 			if (is_win32 && is_mono)
@@ -467,7 +478,6 @@ namespace MonoTests.System.Threading
 		}
 
 		[Test]
-		[Category ("NotDotNet")] // on MS, ThreadState is immediately Stopped after Abort
 		public void TestIsBackground2 ()
 		{
 			C2Test test1 = new C2Test();
@@ -478,7 +488,14 @@ namespace MonoTests.System.Threading
 			} finally {
 				TestThread.Abort();
 			}
-			Assert.IsTrue (TestThread.IsBackground, "#52 Is Background Changed to Start ");
+			
+			if (TestThread.IsAlive) {
+				try {
+					Assert.IsTrue (TestThread.IsBackground, "#52 Is Background Changed to Start ");
+				} catch (ThreadStateException) {
+					// Ignore if thread died meantime
+				}
+			}
 		}
 
 		[Test]
@@ -807,25 +824,24 @@ namespace MonoTests.System.Threading
 		}
 		
 		[Test]
+		[Category ("NotDotNet")] // it crashes nunit.
 		public void Test_InterruptCurrentThread ()
 		{
 			bool interruptedExceptionThrown = false;
 
+			Thread.CurrentThread.Interrupt ();
 			try {
-				try {
-					Thread.CurrentThread.Interrupt ();
-				} finally {
-					try {
-						Thread.Sleep (0);
-					} catch (ThreadInterruptedException) {
-						Assert.Fail ("ThreadInterruptedException should not be thrown.");
-					}
-				}
+				Thread.Sleep (0);
+				Assert.Fail ();
 			} catch (ThreadInterruptedException) {
-				interruptedExceptionThrown = true;
 			}
+		}
 
-			Assert.IsFalse (interruptedExceptionThrown, "ThreadInterruptedException should not be thrown.");
+		[Test]
+		public void GetNamedDataSlotTest ()
+		{
+			Assert.IsNotNull (Thread.GetNamedDataSlot ("te#st"), "#1");
+			Assert.AreSame (Thread.GetNamedDataSlot ("te#st"), Thread.GetNamedDataSlot ("te#st"), "#2");
 		}
 
 		void CheckIsRunning (string s, Thread t)
@@ -937,7 +953,7 @@ namespace MonoTests.System.Threading
 			public string ad_b2;
 			public string message;
 		}
-
+#if !MOBILE
 		[Test]
 		public void ManagedThreadId_AppDomains ()
 		{
@@ -978,7 +994,7 @@ namespace MonoTests.System.Threading
 			Assert.AreNotEqual (mbro.ad_b1, AppDomain.CurrentDomain.FriendlyName, "Name #5");
 			Assert.AreNotEqual (mbro.ad_b2, AppDomain.CurrentDomain.FriendlyName, "Name #6");
 		}
-
+#endif
 		void A1 ()
 		{
 			mbro.id_a1 = Thread.CurrentThread.ManagedThreadId;
@@ -1111,6 +1127,117 @@ namespace MonoTests.System.Threading
 				exception_occured = true;
 			}
 			Assert.IsTrue (exception_occured, "Thread1 Started Invalid Exception Occured");
+		}
+
+		[Test]
+		public void TestSetApartmentStateSameState ()
+		{
+			Thread t1 = new Thread (new ThreadStart (Start));
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "Thread1 Set Once");
+
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "Thread1 Set twice");
+		}
+
+		[Test]
+		[ExpectedException(typeof(InvalidOperationException))]
+		public void TestSetApartmentStateDiffState ()
+		{
+			Thread t1 = new Thread (new ThreadStart (Start));
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "Thread1 Set Once");
+
+			t1.SetApartmentState (ApartmentState.MTA);
+		}
+
+		[Test]
+		public void TestTrySetApartmentState ()
+		{
+			Thread t1 = new Thread (new ThreadStart (Start));
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "#1");
+
+			bool result = t1.TrySetApartmentState (ApartmentState.MTA);
+			Assert.IsFalse (result, "#2");
+
+			result = t1.TrySetApartmentState (ApartmentState.STA);
+			Assert.IsTrue (result, "#3");
+		}
+
+		[Test]
+		public void TestTrySetApartmentStateRunning ()
+		{
+			Thread t1 = new Thread (new ThreadStart (Start));
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "#1");
+
+			t1.Start ();
+
+			try {
+				t1.TrySetApartmentState (ApartmentState.STA);
+				Assert.Fail ("#2");
+			} catch (ThreadStateException) {
+			}
+
+			t1.Join ();
+		}
+
+		[Test]
+		public void Volatile () {
+			double v3 = 55667;
+			Thread.VolatileWrite (ref v3, double.MaxValue);
+			Assert.AreEqual (v3, double.MaxValue);
+
+			float v4 = 1;
+			Thread.VolatileWrite (ref v4, float.MaxValue);
+			Assert.AreEqual (v4, float.MaxValue);
+		}
+
+		[Test]
+		public void Culture ()
+		{
+			Assert.IsNotNull (Thread.CurrentThread.CurrentCulture, "CurrentCulture");
+			Assert.IsNotNull (Thread.CurrentThread.CurrentUICulture, "CurrentUICulture");
+		}
+
+		[Test]
+		public void ThreadStartSimple ()
+		{
+			int i = 0;
+			Thread t = new Thread (delegate () {
+				// ensure the NSAutoreleasePool works
+				i++;
+			});
+			t.Start ();
+			t.Join ();
+			Assert.AreEqual (1, i, "ThreadStart");
+		}
+
+		[Test]
+		public void ParametrizedThreadStart ()
+		{
+			int i = 0;
+			object arg = null;
+			Thread t = new Thread (delegate (object obj) {
+				// ensure the NSAutoreleasePool works
+				i++;
+				arg = obj;
+			});
+			t.Start (this);
+			t.Join ();
+
+			Assert.AreEqual (1, i, "ParametrizedThreadStart");
+			Assert.AreEqual (this, arg, "obj");	
+		}		
+
+		[Test]
+		public void SetNameTpThread () {
+			ThreadPool.QueueUserWorkItem(new WaitCallback(ThreadProc));
+		}
+
+		static void ThreadProc(Object stateInfo) {
+			Thread.CurrentThread.Name = "My Worker";
 		}
 	}
 

@@ -1,4 +1,4 @@
-// CS0230.cs: Type and identifier are both required in a foreach statement
+// CS0230: Type and identifier are both required in a foreach statement
 // Line: 12
 
 using System;
@@ -9,7 +9,7 @@ class X
 	{
 		int [] a = new int [5] {5, 4, 3, 2, 1};
 		
-		foreach (int in a) {
+		foreach (int ) {
 			Console.WriteLine (x);
 		}
 	}

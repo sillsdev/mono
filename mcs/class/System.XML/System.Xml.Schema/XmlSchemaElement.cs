@@ -889,14 +889,6 @@ namespace System.Xml.Schema
 			return true;
 		}
 
-		internal override void CheckRecursion (int depth, ValidationEventHandler h, XmlSchema schema)
-		{
-			XmlSchemaComplexType ct = this.ElementType as XmlSchemaComplexType;
-			if (ct == null || ct.Particle == null)
-				return;
-			ct.Particle.CheckRecursion (depth + 1, h, schema);
-		}
-
 		internal override void ValidateUniqueParticleAttribution (XmlSchemaObjectTable qnames, ArrayList nsNames,
 			ValidationEventHandler h, XmlSchema schema)
 		{
@@ -968,8 +960,12 @@ namespace System.Xml.Schema
 			XmlNamespaceManager nsmgr = null;
 			if (datatype.TokenizedType == XmlTokenizedType.QName) {
 				if (this.Namespaces != null)
-					foreach (XmlQualifiedName qname in Namespaces.ToArray ())
+					foreach (XmlQualifiedName qname in Namespaces.ToArray ()) {
+						if (nsmgr == null)
+							nsmgr = new XmlNamespaceManager (new NameTable());
+
 						nsmgr.AddNamespace (qname.Name, qname.Namespace);
+					}
 			}
 
 			try {

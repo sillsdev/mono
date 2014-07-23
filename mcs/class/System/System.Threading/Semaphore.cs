@@ -26,11 +26,10 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
-
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
+using System.Security.Permissions;
 using System.Runtime.CompilerServices;
 using System.IO;
 
@@ -82,7 +81,7 @@ namespace System.Threading {
 		{
 		}
 
-		[MonoTODO ("Does not support access control, semaphoreSecurity is ignored")]
+		[MonoTODO ("CreateSemaphore_internal does not support access control, semaphoreSecurity is ignored")]
 		public Semaphore (int initialCount, int maximumCount, string name, out bool createdNew, 
 			SemaphoreSecurity semaphoreSecurity)
 		{
@@ -98,10 +97,12 @@ namespace System.Threading {
 							   out createdNew);
 		}
 
-		[MonoTODO]
 		public SemaphoreSecurity GetAccessControl ()
 		{
-			throw new NotImplementedException ();
+			return new SemaphoreSecurity (SafeWaitHandle,
+						      AccessControlSections.Owner |
+						      AccessControlSections.Group |
+						      AccessControlSections.Access);
 		}
 
 		[PrePrepareMethod]
@@ -130,17 +131,17 @@ namespace System.Threading {
 			return (ret);
 		}
 
-		[MonoTODO]
 		public void SetAccessControl (SemaphoreSecurity semaphoreSecurity)
 		{
 			if (semaphoreSecurity == null)
 				throw new ArgumentNullException ("semaphoreSecurity");
-
-			throw new NotImplementedException ();
+				
+			semaphoreSecurity.PersistModifications (SafeWaitHandle);
 		}
 
 		// static methods
 
+#if !MOBILE
 		public static Semaphore OpenExisting (string name)
 		{
 			return OpenExisting (name, SemaphoreRights.Synchronize | SemaphoreRights.Modify);
@@ -168,7 +169,53 @@ namespace System.Threading {
 			
 			return(new Semaphore (handle));
 		}
+
+		[SecurityPermissionAttribute (SecurityAction.LinkDemand, Flags = SecurityPermissionFlag.UnmanagedCode)]
+		public static bool TryOpenExisting (string name, out Semaphore result)
+		{
+			return TryOpenExisting (name, SemaphoreRights.Synchronize | SemaphoreRights.Modify, out result);
+		}
+
+		[SecurityPermissionAttribute(SecurityAction.LinkDemand, Flags = SecurityPermissionFlag.UnmanagedCode)]
+		public static bool TryOpenExisting (string name, SemaphoreRights rights, out Semaphore result)
+		{
+			if (name == null)
+				throw new ArgumentNullException ("name");
+			if ((name.Length == 0) || (name.Length > 260))
+				throw new ArgumentException ("name", Locale.GetText ("Invalid length [1-260]."));
+			
+			MonoIOError error;
+			IntPtr handle = OpenSemaphore_internal (name, rights, out error);
+
+			if (handle == (IntPtr)null) {
+				result = null;
+				return false;
+			}
+
+			result = new Semaphore (handle);
+			return true;
+		}
+#else
+		public static Semaphore OpenExisting (string name)
+		{
+			throw new NotSupportedException ();
+		}
+
+		public static Semaphore OpenExisting (string name, SemaphoreRights rights)
+		{
+			throw new NotSupportedException ();
+		}
+
+		public static bool TryOpenExisting (string name, out Semaphore result)
+		{
+			throw new NotSupportedException ();
+		}
+
+		public static bool TryOpenExisting (string name, SemaphoreRights rights, out Semaphore result)
+		{
+			throw new NotSupportedException ();
+		}
+#endif
 	}
 }
 
-#endif

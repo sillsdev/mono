@@ -24,16 +24,17 @@
 #ifndef __MONO_SGEN_CARD_TABLE_INLINES_H__
 #define __MONO_SGEN_CARD_TABLE_INLINES_H__
 
-#define SGEN_HAVE_CARDTABLE	1
-
-#ifdef SGEN_HAVE_CARDTABLE
-
 void sgen_card_table_reset_region (mword start, mword end) MONO_INTERNAL;
 void* sgen_card_table_align_pointer (void *ptr) MONO_INTERNAL;
-void sgen_card_table_mark_address (mword address) MONO_INTERNAL;
 void sgen_card_table_mark_range (mword address, mword size) MONO_INTERNAL;
-void sgen_cardtable_scan_object (char *obj, mword obj_size, guint8 *cards, SgenGrayQueue *queue) MONO_INTERNAL;
+void sgen_cardtable_scan_object (char *obj, mword obj_size, guint8 *cards,
+		gboolean mod_union, SgenGrayQueue *queue) MONO_INTERNAL;
+
 gboolean sgen_card_table_get_card_data (guint8 *dest, mword address, mword cards) MONO_INTERNAL;
+
+guint8* sgen_card_table_update_mod_union (guint8 *dest, char *obj, mword obj_size, size_t *out_num_cards) MONO_INTERNAL;
+
+void sgen_card_table_init (SgenRemeberedSet *remset) MONO_INTERNAL;
 
 /*How many bytes a single card covers*/
 #define CARD_BITS 9
@@ -65,7 +66,7 @@ sgen_card_table_get_card_address (mword address)
 
 extern guint8 *sgen_shadow_cardtable MONO_INTERNAL;
 
-static inline  guint8*
+static inline guint8*
 sgen_card_table_get_shadow_card_address (mword address)
 {
 	return sgen_shadow_cardtable + ((address >> CARD_BITS) & CARD_MASK);
@@ -111,8 +112,16 @@ sgen_card_table_prepare_card_for_scanning (guint8 *card)
 
 #endif
 
-#endif
+static inline gboolean
+sgen_card_table_address_is_marked (mword address)
+{
+	return *sgen_card_table_get_card_address (address) != 0;
+}
 
-
+static inline void
+sgen_card_table_mark_address (mword address)
+{
+	*sgen_card_table_get_card_address (address) = 1;
+}
 
 #endif

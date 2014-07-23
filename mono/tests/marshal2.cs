@@ -5,7 +5,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-public class Test {
+public class Tests {
 
 
 	[StructLayout (LayoutKind.Sequential)]
@@ -42,8 +42,25 @@ public class Test {
 		[MarshalAs (UnmanagedType.ByValTStr, SizeConst=4)] public string s1;
 		public int i;
 	}
+
+	[StructLayout (LayoutKind.Sequential, Pack=1)]
+	public struct PackStruct1 {
+		float f;
+	}
+
+	[StructLayout (LayoutKind.Sequential)]
+	public struct PackStruct2 {
+		byte b;
+		PackStruct1 s;
+	}
 	
-	public unsafe static int Main () {
+	public unsafe static int Main (String[] args) {
+		if (TestDriver.RunTests (typeof (Tests), args) != 0)
+			return 34;
+		return 0;
+	}
+
+	public static int test_0_structure_to_ptr () {
 		SimpleStruct ss = new SimpleStruct ();
 		int size = Marshal.SizeOf (typeof (SimpleStruct));
 		
@@ -153,8 +170,21 @@ public class Test {
 
 		if (cp.a2 [1] != 'b')
 			return 30;
+		return 0;
+	}
 
-		/* ByValTStr with Unicode */
+	[StructLayout(LayoutKind.Sequential, Pack = 1, CharSet = CharSet.Unicode)]
+	public struct Struct1
+	{
+		[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 8)]
+        public string Field1;
+		[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 10)]
+        public string Field2;
+		[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)]
+        public string Field3;
+	}
+
+	public static int test_0_byvaltstr_unicode () {
 		ByValWStrStruct s = new ByValWStrStruct ();
 
 		IntPtr p2 = Marshal.AllocHGlobal (Marshal.SizeOf (typeof (ByValWStrStruct)));
@@ -178,8 +208,28 @@ public class Test {
 
 		if (s2.i != 55)
 			return 33;
+		return 0;
+	}
 
+	public static int test_0_byvaltstr_max_size () {
+		string buffer = "12345678123456789012345678901234";
+
+		IntPtr ptr = Marshal.StringToBSTR (buffer);
+
+		Struct1 data = (Struct1)Marshal.PtrToStructure (ptr, typeof (Struct1));
+		if (data.Field1 != "12345678")
+			return 1;
+		if (data.Field2 != "1234567890")
+			return 2;
+		if (data.Field3 != "12345678901234")
+			return 3;
+		return 0;
+	}
+
+	// Check that the 'Pack' directive on a struct changes the min alignment of the struct as well (#12110)
+	public static int test_0_struct_pack () {
+		if (Marshal.OffsetOf (typeof (PackStruct2), "s") != new IntPtr (1))
+			return 1;
 		return 0;
 	}
 }
-

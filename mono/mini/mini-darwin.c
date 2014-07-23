@@ -5,7 +5,8 @@
  *   Mono Team (mono-list@lists.ximian.com)
  *
  * Copyright 2001-2003 Ximian, Inc.
- * Copyright 2003-2008 Ximian, Inc.
+ * Copyright 2003-2011 Novell, Inc (http://www.novell.com)
+ * Copyright 2011 Xamarin, Inc (http://www.xamarin.com)
  *
  * See LICENSE for licensing information.
  */
@@ -68,7 +69,7 @@
 #include <dlfcn.h>
 #include <AvailabilityMacros.h>
 
-#if (MAC_OS_X_VERSION_MIN_REQUIRED <= MAC_OS_X_VERSION_10_5) && !defined (TARGET_ARM)
+#if defined (TARGET_OSX) && (MAC_OS_X_VERSION_MIN_REQUIRED <= MAC_OS_X_VERSION_10_5)
 #define NEEDS_EXCEPTION_THREAD
 #endif
 
@@ -94,6 +95,15 @@ typedef struct {
 
 /* The exception port */
 static mach_port_t mach_exception_port = VM_MAP_NULL;
+
+kern_return_t
+catch_exception_raise (
+	mach_port_t exception_port,
+	mach_port_t thread,
+	mach_port_t task,
+	exception_type_t exception,
+	exception_data_t code,
+	mach_msg_type_number_t code_count);
 
 /*
  * Implicitly called by exc_server. Must be public.
@@ -148,13 +158,17 @@ mach_exception_thread (void *arg)
 				   MACH_MSG_TIMEOUT_NONE,
 				   MACH_PORT_NULL);
 
-		g_assert (result == MACH_MSG_SUCCESS);
+		/*
+		If we try to abort the thread while delivering an exception. The port will be gone since the kernel
+		setup a send once port to deliver the resume message and thread_abort will consume it.
+		*/
+		g_assert (result == MACH_MSG_SUCCESS || result == MACH_SEND_INVALID_DEST);
 	}
 	return NULL;
 }
 
 static void
-macosx_register_exception_handler ()
+macosx_register_exception_handler (void)
 {
 	mach_port_t task;
 	pthread_attr_t attr;
@@ -196,6 +210,8 @@ macosx_register_exception_handler ()
 /* This is #define'd by Boehm GC to _GC_dlopen. */
 #undef dlopen
 
+void* dlopen(const char* path, int mode);
+
 void
 mono_runtime_install_handlers (void)
 {
@@ -230,30 +246,115 @@ void
 mono_gdb_render_native_backtraces (pid_t crashed_pid)
 {
 	const char *argv [5];
-	char gdb_template [] = "/tmp/mono-gdb-commands.XXXXXX";
+	char template [] = "/tmp/mono-gdb-commands.XXXXXX";
+	FILE *commands;
+	gboolean using_lldb = FALSE;
 
 	argv [0] = g_find_program_in_path ("gdb");
-	if (argv [0] == NULL) {
-		return;
+	if (!argv [0]) {
+		argv [0] = g_find_program_in_path ("lldb");
+		using_lldb = TRUE;
 	}
 
-	if (mkstemp (gdb_template) != -1) {
-		FILE *gdb_commands = fopen (gdb_template, "w");
+	if (argv [0] == NULL)
+		return;
 
-		fprintf (gdb_commands, "attach %ld\n", (long) crashed_pid);
-		fprintf (gdb_commands, "info threads\n");
-		fprintf (gdb_commands, "thread apply all bt\n");
+	if (mkstemp (template) == -1)
+		return;
 
-		fflush (gdb_commands);
-		fclose (gdb_commands);
-
+	commands = fopen (template, "w");
+	if (using_lldb) {
+		fprintf (commands, "process attach --pid %ld\n", (long) crashed_pid);
+		fprintf (commands, "script lldb.debugger.HandleCommand (\"thread list\")\n");
+		fprintf (commands, "script lldb.debugger.HandleCommand (\"thread backtrace all\")\n");
+		fprintf (commands, "detach\n");
+		fprintf (commands, "quit\n");
+		argv [1] = "--source";
+		argv [2] = template;
+		argv [3] = 0;
+		
+	} else {
+		fprintf (commands, "attach %ld\n", (long) crashed_pid);
+		fprintf (commands, "info threads\n");
+		fprintf (commands, "thread apply all bt\n");
 		argv [1] = "-batch";
 		argv [2] = "-x";
-		argv [3] = gdb_template;
+		argv [3] = template;
 		argv [4] = 0;
-
-		execv (argv [0], (char**)argv);
-
-		unlink (gdb_template);
 	}
+	fflush (commands);
+	fclose (commands);
+
+	execv (argv [0], (char**)argv);
+	unlink (template);
+}
+
+gboolean
+mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoNativeThreadId thread_id, MonoNativeThreadHandle thread_handle)
+{
+	kern_return_t ret;
+	mach_msg_type_number_t num_state;
+	thread_state_t state;
+	ucontext_t ctx;
+	mcontext_t mctx;
+	MonoJitTlsData *jit_tls;
+	void *domain;
+	MonoLMF *lmf;
+	MonoThreadInfo *info;
+
+	/*Zero enough state to make sure the caller doesn't confuse itself*/
+	tctx->valid = FALSE;
+	tctx->unwind_data [MONO_UNWIND_DATA_DOMAIN] = NULL;
+	tctx->unwind_data [MONO_UNWIND_DATA_LMF] = NULL;
+	tctx->unwind_data [MONO_UNWIND_DATA_JIT_TLS] = NULL;
+
+	state = (thread_state_t) alloca (mono_mach_arch_get_thread_state_size ());
+	mctx = (mcontext_t) alloca (mono_mach_arch_get_mcontext_size ());
+
+	ret = mono_mach_arch_get_thread_state (thread_handle, state, &num_state);
+	if (ret != KERN_SUCCESS)
+		return FALSE;
+
+	mono_mach_arch_thread_state_to_mcontext (state, mctx);
+	ctx.uc_mcontext = mctx;
+
+	mono_sigctx_to_monoctx (&ctx, &tctx->ctx);
+
+	info = mono_thread_info_lookup (thread_id);
+
+	if (info) {
+		/* mono_set_jit_tls () sets this */
+		jit_tls = mono_thread_info_tls_get (info, TLS_KEY_JIT_TLS);
+		/* SET_APPDOMAIN () sets this */
+		domain = mono_thread_info_tls_get (info, TLS_KEY_DOMAIN);
+	} else {
+		jit_tls = NULL;
+		domain = NULL;
+	}
+
+	/*Thread already started to cleanup, can no longer capture unwind state*/
+	if (!jit_tls || !domain)
+		return FALSE;
+
+	/*
+	 * The current LMF address is kept in a separate TLS variable, and its hard to read its value without
+	 * arch-specific code. But the address of the TLS variable is stored in another TLS variable which
+	 * can be accessed through MonoThreadInfo.
+	 */
+	lmf = NULL;
+	if (info) {
+		gpointer *addr;
+
+		/* mono_set_lmf_addr () sets this */
+		addr = mono_thread_info_tls_get (info, TLS_KEY_LMF_ADDR);
+		if (addr)
+			lmf = *addr;
+	}
+
+	tctx->unwind_data [MONO_UNWIND_DATA_DOMAIN] = domain;
+	tctx->unwind_data [MONO_UNWIND_DATA_JIT_TLS] = jit_tls;
+	tctx->unwind_data [MONO_UNWIND_DATA_LMF] = lmf;
+	tctx->valid = TRUE;
+
+	return TRUE;
 }

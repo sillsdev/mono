@@ -22,7 +22,6 @@
 // Authors:
 //	Andreia Gaita	<avidigal@novell.com>
 
-#if NET_2_0
 
 using System;
 using System.ComponentModel;
@@ -566,10 +565,14 @@ namespace System.Windows.Forms
 		[BrowsableAttribute(false)]
 		public event EventHandler StatusTextChanged;
 
+#pragma warning disable 0067
+		[MonoTODO]
 		[Browsable (false)]
 		[EditorBrowsable (EditorBrowsableState.Never)]
 		[DesignerSerializationVisibility (DesignerSerializationVisibility.Hidden)]
 		public new event EventHandler PaddingChanged;
+#pragma warning restore 0067
+
 		#endregion
 
 		#region Internal
@@ -701,5 +704,3 @@ namespace System.Windows.Forms
 	{
 	}
 }
-
-#endif

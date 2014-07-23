@@ -9,7 +9,11 @@
 //
 
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Xml;
+using System.Xml.XPath;
 
 using NUnit.Framework;
 
@@ -289,9 +293,124 @@ namespace MonoTests.System.Xml.XPath
 
 			XmlNode bax = baxs [0];
 			XmlNodeList ans = bax.SelectNodes ("ancestor::*");
+
 			Assert.AreEqual (2, ans.Count, "#1");
 			Assert.AreEqual ("bar", ans [0].Name, "#2");
 			Assert.AreEqual ("baz", ans [1].Name, "#3");
+
+			/* Should include the root node
+			   see http://www.w3.org/TR/xpath#axes
+			*/
+			bax = doc.GetElementsByTagName ("bax")[0];
+			ans = bax.SelectNodes ("ancestor::*");
+
+			Assert.AreEqual (3, ans.Count, "doc#1");
+			Assert.AreEqual ("foo", ans [0].Name, "doc#2");
+			Assert.AreEqual ("bar", ans [1].Name, "doc#3");
+			Assert.AreEqual ("baz", ans [2].Name, "doc#4");
+			//*/
+		}
+
+		[Test]
+		public void AncestorAxisOrder () {
+			XmlDocument doc = new XmlDocument ();
+			doc.LoadXml ("<foo><bar><baz><bax /></baz></bar></foo>");
+
+			/* This order, though we are going through in increasing
+			   value of the "position" query parameter, is not the same
+			   as the order obtained by iterating the node set, which is
+			   the document order.
+			   see http://www.w3.org/TR/xpath#node-sets
+			 */
+			XmlNode i, bax = doc.SelectSingleNode ("//bax");
+			i = bax.SelectSingleNode ("ancestor::*[1]");
+			Assert.AreEqual ("baz", i.Name, "#1");
+			i = bax.SelectSingleNode ("ancestor::*[2]");
+			Assert.AreEqual ("bar", i.Name, "#2");
+			i = bax.SelectSingleNode ("ancestor::*[3]");
+			Assert.AreEqual ("foo", i.Name, "#3");
+			i = bax.SelectSingleNode ("ancestor::*[4]");
+			Assert.AreEqual (null, i, "#3");
+			i = bax.SelectSingleNode ("ancestor::*[position()=1]");
+			Assert.AreEqual ("baz", i.Name, "#1fx");
+			i = bax.SelectSingleNode ("ancestor::*[position()=2]");
+			Assert.AreEqual ("bar", i.Name, "#2fx");
+			i = bax.SelectSingleNode ("ancestor::*[position()=3]");
+			Assert.AreEqual ("foo", i.Name, "#3fx");
+			i = bax.SelectSingleNode ("ancestor::*[position()=4]");
+			Assert.AreEqual (null, i, "#3");
+		}
+
+		[Test]
+		public void AncestorOrSelfAxis () {
+			XmlDocument doc = new XmlDocument ();
+			doc.LoadXml ("<foo><bar><baz><bax /></baz></bar></foo>");
+
+			XmlNode bar = doc.GetElementsByTagName ("bar") [0];
+			XmlElement barClone = (XmlElement) bar.CloneNode (true);
+			XmlNodeList baxs = barClone.GetElementsByTagName ("bax");
+
+			XmlNode bax = baxs [0];
+			XmlNodeList ans = bax.SelectNodes ("ancestor-or-self::*");
+
+			Assert.AreEqual (3, ans.Count, "#1");
+			Assert.AreEqual ("bar", ans [0].Name, "#2");
+			Assert.AreEqual ("baz", ans [1].Name, "#3");
+			Assert.AreEqual ("bax", ans [2].Name, "#4");
+
+			/*  Should include the root node
+			   see http://www.w3.org/TR/xpath#axes
+			*/
+			bax = doc.GetElementsByTagName ("bax")[0];
+			ans = bax.SelectNodes ("ancestor-or-self::*");
+
+			Assert.AreEqual (4, ans.Count, "#1");
+			Assert.AreEqual ("foo", ans [0].Name, "#2");
+			Assert.AreEqual ("bar", ans [1].Name, "#3");
+			Assert.AreEqual ("baz", ans [2].Name, "#4");
+			Assert.AreEqual ("bax", ans [3].Name, "#5");
+			//*/
+		}
+
+		[Test]
+		public void AncestorOrSelfAxisOrder () {
+			XmlDocument doc = new XmlDocument ();
+			doc.LoadXml ("<foo><bar><baz><bax /></baz></bar></foo>");
+
+			XmlNode i, bax = doc.SelectSingleNode ("//bax");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[1]");
+			Assert.AreEqual ("bax", i.Name, "#1");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[2]");
+			Assert.AreEqual ("baz", i.Name, "#2");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[3]");
+			Assert.AreEqual ("bar", i.Name, "#3");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[4]");
+			Assert.AreEqual ("foo", i.Name, "#4");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[5]");
+			Assert.AreEqual (null, i, "#5");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[position()=1]");
+			Assert.AreEqual ("bax", i.Name, "#1fx");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[position()=2]");
+			Assert.AreEqual ("baz", i.Name, "#2fx");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[position()=3]");
+			Assert.AreEqual ("bar", i.Name, "#3fx");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[position()=4]");
+			Assert.AreEqual ("foo", i.Name, "#4fx");
+			i = bax.SelectSingleNode ("ancestor-or-self::*[position()=5]");
+			Assert.AreEqual (null, i, "#5");
+		}
+
+		[Test] // bug #497017
+		public void AncestorAxisOrder2 () {
+			XmlDocument doc = new XmlDocument ();
+			doc.LoadXml ("<item id=\"1\"><item id=\"2\"><n/></item></item>");
+			XmlNode id, n = doc.SelectSingleNode ("/item/item/n");
+
+			id = n.SelectSingleNode ("ancestor::item[@id][position()=1]/@id");
+			Assert.AreEqual ("2", id.InnerText, "Nearest ancestor is 2");
+
+			id = n.SelectSingleNode ("ancestor::item[@id][2]/@id");
+			Assert.AreEqual ("1", id.InnerText, "Second ancestor is 1");
 		}
 
 		[Test] // bug #458245
@@ -343,6 +462,45 @@ namespace MonoTests.System.Xml.XPath
 			Assert.IsTrue (n != null, "#1");
 			XmlNodeList nodes = n.SelectNodes (".//_:div//_:div", ns);
 			Assert.AreEqual (5, nodes.Count, "#2");
+		}
+
+		// This test requires Linq.
+		[Test] // xamarin bug #3705
+		public void ReturnedNavigatorInstancesUnique ()
+		{
+			string testDocument = 
+				@"<Notes>
+					<Note><Reference>a</Reference>Some text1</Note>
+					<Note><Reference>b</Reference>Some text2</Note>
+					<Note><Reference>a</Reference>Some text3</Note>
+				</Notes>";
+			
+			StringReader r = new StringReader (testDocument);
+			var data = new XPathDocument (r);
+			var l = new List<XPathNavigator> ();
+
+			// test PredicateIterator wrapped by XPathNodeIteratorEnumerator.
+			var parent = data.CreateNavigator ().SelectSingleNode ("/Notes");
+			foreach (XPathNavigator n in parent.Select ("Note[Reference]")) {
+				Assert.IsFalse (l.Contains (n), "should not iterate the same XPathNavigator instance twice, regardless of whether position is same or not");
+				l.Add (n);
+			}
+
+			// Same test for SimpleSlashIterator wrapped by XPathNodeIteratorEnumerator.
+			l.Clear ();
+			foreach (XPathNavigator n in data.CreateNavigator ().Select ("/Notes/Note[Reference]")) {
+				Assert.IsFalse (l.Contains (n), "should not iterate the same XPathNavigator instance twice, regardless of whether position is same or not");
+				l.Add (n);
+			}
+
+			// test orderby too. In short, XPathNodeIteratorEnumerator is the key player that assures XPathNavigator uniqueness.
+			foreach (XPathNavigator n in data.CreateNavigator ()
+				.Select ("/Notes/Note[Reference]")
+				.Cast<XPathNavigator> ()
+				.OrderBy (nav => nav.SelectSingleNode ("Reference").Value)) {
+				Assert.IsFalse (l.Contains (n), "should not iterate the same XPathNavigator instance twice, regardless of whether position is same or not");
+				l.Add (n);
+			}
 		}
 	}
 }

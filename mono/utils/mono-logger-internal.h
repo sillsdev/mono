@@ -62,7 +62,7 @@ mono_trace_is_traced (GLogLevelFlags level, MonoTraceMask mask) MONO_INTERNAL;
 #define mono_trace_message(format...) mono_trace(G_LOG_LEVEL_MESSAGE, \
 											format)
 #else /* no varargs macros */
-static void
+G_GNUC_UNUSED static void
 mono_trace_error(MonoTraceMask mask, const char *format, ...)
 {
 	va_list args;
@@ -71,7 +71,7 @@ mono_trace_error(MonoTraceMask mask, const char *format, ...)
 	va_end (args);
 }
 
-static void
+G_GNUC_UNUSED static void
 mono_trace_warning(MonoTraceMask mask, const char *format, ...)
 {
 	va_list args;
@@ -80,7 +80,7 @@ mono_trace_warning(MonoTraceMask mask, const char *format, ...)
 	va_end (args);
 }
 
-static void
+G_GNUC_UNUSED static void
 mono_trace_message(MonoTraceMask mask, const char *format, ...)
 {
 	va_list args;
@@ -90,6 +90,27 @@ mono_trace_message(MonoTraceMask mask, const char *format, ...)
 }
 
 #endif /* !__GNUC__ */
+
+#if defined (PLATFORM_ANDROID) || (defined (TARGET_IOS) && defined (TARGET_IOS))
+
+#define mono_gc_printf(gc_log_file, format, ...) g_log ("mono-gc", G_LOG_LEVEL_MESSAGE, format "\n", ##__VA_ARGS__)
+#define mono_runtime_printf(format, ...) g_log ("mono-rt", G_LOG_LEVEL_MESSAGE, format "\n", ##__VA_ARGS__)
+#define mono_runtime_printf_err(format, ...) g_log ("mono-rt", G_LOG_LEVEL_CRITICAL, format "\n", ##__VA_ARGS__)
+#define mono_runtime_stdout_fflush() do { } while (0)
+
+#else
+
+#define mono_gc_printf(gc_log_file, format, ...) do {	\
+	fprintf (gc_log_file, format "\n", ##__VA_ARGS__);	\
+	fflush (gc_log_file);	\
+} while (0)
+
+#define mono_runtime_printf(format, ...) fprintf (stdout, format "\n", ##__VA_ARGS__)
+#define mono_runtime_printf_err(format, ...) fprintf (stderr, format "\n", ##__VA_ARGS__)
+#define mono_runtime_stdout_fflush() do { fflush (stdout); } while (0)
+
+#endif
+
 
 G_END_DECLS
 

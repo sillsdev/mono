@@ -26,13 +26,19 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if SECURITY_DEP || MOONLIGHT
+#if SECURITY_DEP
+
+#if MONOTOUCH
+using Mono.Security;
+using MX = Mono.Security.X509;
+#else
+extern alias MonoSecurity;
+using MonoSecurity::Mono.Security;
+using MX = MonoSecurity::Mono.Security.X509;
+#endif
 
 using System.Collections;
 using System.Text;
-
-using Mono.Security;
-using MX = Mono.Security.X509;
 
 namespace System.Security.Cryptography.X509Certificates {
 
@@ -91,7 +97,7 @@ namespace System.Security.Cryptography.X509Certificates {
 				RawData = new byte [2] { 0x30, 0x00 };
 				DecodeRawData ();
 			} else {
-				ASN1 dn = MX.X501.FromString (distinguishedName);
+				var dn = MX.X501.FromString (distinguishedName);
 				if ((flag & X500DistinguishedNameFlags.Reversed) != 0) {
 					ASN1 rdn = new ASN1 (0x30);
 					for (int i = dn.Count - 1; i >= 0; i--)	
@@ -179,10 +185,11 @@ namespace System.Security.Cryptography.X509Certificates {
 
 		private static string Canonize (string s)
 		{
-			int i = s.IndexOf ('=');
-			StringBuilder r = new StringBuilder (s.Substring (0, i + 1));
+			int i = s.IndexOf ('=') + 1;
+			StringBuilder r = new StringBuilder (s.Substring (0, i));
 			// skip any white space starting the value
-			while (Char.IsWhiteSpace (s, ++i));
+			while (i < s.Length && Char.IsWhiteSpace (s, i))
+				i++;
 			// ensure we skip white spaces at the end of the value
 			s = s.TrimEnd ();
 			// keep track of internal multiple spaces

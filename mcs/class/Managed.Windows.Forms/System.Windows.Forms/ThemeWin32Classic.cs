@@ -54,7 +54,8 @@ namespace System.Windows.Forms
 		protected static StringFormat string_format_menu_text;
 		protected static StringFormat string_format_menu_shortcut;
 		protected static StringFormat string_format_menu_menubar_text;
-		static ImageAttributes imagedisabled_attributes = null;
+		static ImageAttributes imagedisabled_attributes;
+		Font window_border_font;
 		const int SEPARATOR_HEIGHT = 6;
 		const int SEPARATOR_MIN_WIDTH = 20;
 		const int SM_CXBORDER = 1;
@@ -72,7 +73,7 @@ namespace System.Windows.Forms
 		public override void ResetDefaults() {
 			defaultWindowBackColor = this.ColorWindow;
 			defaultWindowForeColor = this.ColorControlText;
-			window_border_font = new Font(FontFamily.GenericSansSerif, 8.25f, FontStyle.Bold);
+			window_border_font = null;
 			
 			/* Menu string formats */
 			string_format_menu_text = new StringFormat ();
@@ -105,6 +106,12 @@ namespace System.Windows.Forms
 		public override int VerticalScrollBarWidth {
 			get {
 				return XplatUI.VerticalScrollBarWidth;
+			}
+		}
+		
+		public override Font WindowBorderFont {
+			get {
+				return window_border_font ?? (window_border_font = new Font(FontFamily.GenericSansSerif, 8.25f, FontStyle.Bold));
 			}
 		}
 
@@ -321,7 +328,6 @@ namespace System.Windows.Forms
 		#endregion
 
 		#region Button Layout Calculations
-#if NET_2_0
 		public override Size CalculateButtonAutoSize (Button button)
 		{
 			Size ret_size = Size.Empty;
@@ -357,7 +363,6 @@ namespace System.Windows.Forms
 			
 			return ret_size;
 		}
-#endif
 
 		public override void CalculateButtonTextAndImageLayout (ButtonBase button, out Rectangle textRectangle, out Rectangle imageRectangle)
 		{
@@ -889,7 +894,6 @@ namespace System.Windows.Forms
 		#endregion	// ButtonBase
 
 		#region CheckBox
-#if NET_2_0
 		public override void DrawCheckBox (Graphics g, CheckBox cb, Rectangle glyphArea, Rectangle textBounds, Rectangle imageBounds, Rectangle clipRectangle)
 		{
 			// Draw Button Background
@@ -1147,7 +1151,6 @@ namespace System.Windows.Forms
 				
 			return ret_size;
 		}
-#endif
 
 		public override void DrawCheckBox(Graphics dc, Rectangle clip_area, CheckBox checkbox) {
 			StringFormat		text_format;
@@ -2305,7 +2308,6 @@ namespace System.Windows.Forms
 		
 		#endregion // Datagrid
 
-#if NET_2_0
 		#region DataGridView
 		#region DataGridViewHeaderCell
 		#region DataGridViewRowHeaderCell
@@ -2348,7 +2350,6 @@ namespace System.Windows.Forms
 		}
 		#endregion
 		#endregion
-#endif
 
 		#region DateTimePicker
 		protected virtual void DateTimePickerDrawBorder (DateTimePicker dateTimePicker, Graphics g, Rectangle clippingArea)
@@ -2648,20 +2649,16 @@ namespace System.Windows.Forms
 			int first = control.FirstVisibleIndex;	
 			int lastvisibleindex = control.LastVisibleIndex;
 
-#if NET_2_0
 			if (control.VirtualMode)
 				control.OnCacheVirtualItems (new CacheVirtualItemsEventArgs (first, lastvisibleindex));
-#endif
 
 			for (int i = first; i <= lastvisibleindex; i++) {					
 				ListViewItem item = control.GetItemAtDisplayIndex (i);
 				if (clip.IntersectsWith (item.Bounds)) {
-#if NET_2_0
 					bool owner_draw = false;
 					if (control.OwnerDraw)
 						owner_draw = DrawListViewItemOwnerDraw (dc, item, i);
 					if (!owner_draw)
-#endif
 					{
 						DrawListViewItem (dc, control, item);
 						if (control.View == View.Details)
@@ -2670,7 +2667,6 @@ namespace System.Windows.Forms
 				}
 			}	
 
-#if NET_2_0
 			if (control.UsingGroups) {
 				// Use InternalCount instead of Count to take into account Default Group as needed
 				for (int i = 0; i < control.Groups.InternalCount; i++) {
@@ -2691,14 +2687,9 @@ namespace System.Windows.Forms
 				dc.FillPolygon (brush, insertion_mark.TopTriangle);
 				dc.FillPolygon (brush, insertion_mark.BottomTriangle);
 			}
-#endif
 			
 			// draw the gridlines
-#if NET_2_0
 			if (details && control.GridLines && !control.UsingGroups) {
-#else
-			if (details && control.GridLines) {
-#endif
 				Size control_size = control.ClientSize;
 				int top = (control.HeaderStyle == ColumnHeaderStyle.None) ?
 					0 : control.header_control.Height;
@@ -2752,13 +2743,11 @@ namespace System.Windows.Forms
 						Rectangle rect = col.Rect;
 						rect.X -= control.h_marker;
 
-#if NET_2_0
 						bool owner_draw = false;
 						if (control.OwnerDraw)
 							owner_draw = DrawListViewColumnHeaderOwnerDraw (dc, control, col, rect);
 						if (owner_draw)
 							continue;
-#endif
 
 						ListViewDrawColumnHeaderBackground (control, col, dc, rect, clip);
 						rect.X += 5;
@@ -2766,7 +2755,6 @@ namespace System.Windows.Forms
 						if (rect.Width <= 0)
 							continue;
 
-#if NET_2_0
 						int image_index;
 						if (control.SmallImageList == null)
 							image_index = -1;
@@ -2797,7 +2785,6 @@ namespace System.Windows.Forms
 							rect.X += image_width;
 							rect.Width -= image_width;
 						}
-#endif
 
 						dc.DrawString (col.Text, control.Font, SystemBrushes.ControlText, rect, col.Format);
 					}
@@ -2847,7 +2834,6 @@ namespace System.Windows.Forms
 			dc.DrawLine (ResPool.GetSizedPen (ColorHighlight, 2), target_x, 0, target_x, col.Rect.Height);
 		}
 
-#if NET_2_0
 		protected virtual bool DrawListViewColumnHeaderOwnerDraw (Graphics dc, ListView control, ColumnHeader column, Rectangle bounds)
 		{
 			ListViewItemStates state = ListViewItemStates.ShowKeyboardCues;
@@ -2892,7 +2878,6 @@ namespace System.Windows.Forms
 			
 			return true;
 		}
-#endif
 
 		protected virtual void DrawListViewItem (Graphics dc, ListView control, ListViewItem item)
 		{				
@@ -2901,12 +2886,8 @@ namespace System.Windows.Forms
 			Rectangle full_rect = item.GetBounds (ItemBoundsPortion.Entire);
 			Rectangle text_rect = item.GetBounds (ItemBoundsPortion.Label);			
 
-#if NET_2_0
 			// Tile view doesn't support CheckBoxes
 			if (control.CheckBoxes && control.View != View.Tile) {
-#else
-			if (control.CheckBoxes) {
-#endif
 				if (control.StateImageList == null) {
 					// Make sure we've got at least a line width of 1
 					int check_wd = Math.Max (3, rect_checkrect.Width / 6);
@@ -2947,11 +2928,7 @@ namespace System.Windows.Forms
 				else {
 					int simage_idx;
 					if (item.Checked)
-#if NET_2_0
 						simage_idx = control.StateImageList.Images.Count > 1 ? 1 : -1;
-#else
-						simage_idx = control.StateImageList.Images.Count > 1 ? 1 : 0;
-#endif
 					else
 						simage_idx = control.StateImageList.Images.Count > 0 ? 0 : -1;
 
@@ -2960,19 +2937,13 @@ namespace System.Windows.Forms
 				}
 			}
 
-			ImageList image_list = control.View == View.LargeIcon 
-#if NET_2_0
-				|| control.View == View.Tile
-#endif
-				? control.LargeImageList : control.SmallImageList;
+			ImageList image_list = control.View == View.LargeIcon || control.View == View.Tile ? control.LargeImageList : control.SmallImageList;
 			if (image_list != null) {
 				int idx;
 
-#if NET_2_0
 				if (item.ImageKey != String.Empty)
 					idx = image_list.Images.IndexOfKey (item.ImageKey);
 				else
-#endif
 					idx = item.ImageIndex;
 
 				if (idx > -1 && idx < image_list.Images.Count)
@@ -2991,21 +2962,12 @@ namespace System.Windows.Forms
 			else
 				format.Alignment = StringAlignment.Near;
 			
-#if NET_2_0
 			if (control.LabelWrap && control.View != View.Details && control.View != View.Tile)
-#else
-			if (control.LabelWrap && control.View != View.Details)
-#endif
 				format.FormatFlags = StringFormatFlags.LineLimit;
 			else
 				format.FormatFlags = StringFormatFlags.NoWrap;
 
-			if ((control.View == View.LargeIcon && !item.Focused)
-					|| control.View == View.Details 
-#if NET_2_0
-					|| control.View == View.Tile
-#endif
-			   )
+			if ((control.View == View.LargeIcon && !item.Focused) || control.View == View.Details || control.View == View.Tile)
 				format.Trimming = StringTrimming.EllipsisCharacter;
 
 			Rectangle highlight_rect = text_rect;
@@ -3028,7 +2990,6 @@ namespace System.Windows.Forms
 				(item.Selected && control.Focused) ? SystemBrushes.HighlightText :
 				this.ResPool.GetSolidBrush (item.ForeColor);
 
-#if NET_2_0
 			// Tile view renders its Text in a different fashion
 			if (control.View == View.Tile && Application.VisualStylesEnabled) {
 				// Item.Text is drawn using its first subitem's bounds
@@ -3045,14 +3006,12 @@ namespace System.Windows.Forms
 					dc.DrawString (sub_item.Text, sub_item.Font, itemBrush, sub_item.Bounds, format);
 				}
 			} else
-#endif
 			
 			if (item.Text != null && item.Text.Length > 0) {
 				Font font = item.Font;
-#if NET_2_0
+
 				if (control.HotTracking && item.Hot)
 					font = item.HotFont;
-#endif
 
 				if (item.Selected && control.Focused)
 					dc.DrawString (item.Text, font, textBrush, highlight_rect, format);
@@ -3122,12 +3081,11 @@ namespace System.Windows.Forms
 			if (item.UseItemStyleForSubItems) {
 				sub_item_back_br = ResPool.GetSolidBrush (item.BackColor);
 				sub_item_fore_br = ResPool.GetSolidBrush (item.ForeColor);
-#if NET_2_0
+
 				// Hot tracking for subitems only applies when UseStyle is true
 				if (control.HotTracking && item.Hot)
 					sub_item_font = item.HotFont;
 				else
-#endif
 					sub_item_font = item.Font;
 			} else {
 				sub_item_back_br = ResPool.GetSolidBrush (subItem.BackColor);
@@ -3161,7 +3119,6 @@ namespace System.Windows.Forms
 			format.Dispose ();
 		}
 
-#if NET_2_0
 		protected virtual bool DrawListViewSubItemOwnerDraw (Graphics dc, ListViewItem item, ListViewItemStates state, int index)
 		{
 			ListView control = item.ListView;
@@ -3210,7 +3167,6 @@ namespace System.Windows.Forms
 			pen.Dispose ();
 			brush.Dispose ();
 		}
-#endif
 
 		public override bool ListViewHasHotHeaderStyle {
 			get {
@@ -4134,9 +4090,7 @@ namespace System.Windows.Forms
 		public override void DrawPictureBox (Graphics dc, Rectangle clip, PictureBox pb) {
 			Rectangle client = pb.ClientRectangle;
 
-#if NET_2_0
 			client = new Rectangle (client.Left + pb.Padding.Left, client.Top + pb.Padding.Top, client.Width - pb.Padding.Horizontal, client.Height - pb.Padding.Vertical);
-#endif
 
 			// FIXME - instead of drawing the whole picturebox every time
 			// intersect the clip rectangle with the drawn picture and only draw what's needed,
@@ -4150,7 +4104,7 @@ namespace System.Windows.Forms
 				case PictureBoxSizeMode.CenterImage:
 					dc.DrawImage (pb.Image, (client.Width / 2) - (pb.Image.Width / 2), (client.Height / 2) - (pb.Image.Height / 2));
 					break;
-#if NET_2_0
+
 				case PictureBoxSizeMode.Zoom:
 					Size image_size;
 					
@@ -4161,7 +4115,7 @@ namespace System.Windows.Forms
 
 					dc.DrawImage (pb.Image, (client.Width / 2) - (image_size.Width / 2), (client.Height / 2) - (image_size.Height / 2), image_size.Width, image_size.Height);
 					break;
-#endif
+
 				default:
 					// Normal, AutoSize
 					dc.DrawImage (pb.Image, client.Left, client.Top, pb.Image.Width, pb.Image.Height);
@@ -4274,11 +4228,9 @@ namespace System.Windows.Forms
 			int draw_mode = 0;
 			int max_blocks = int.MaxValue;
 			int start_pixel = client_area.X;
-#if NET_2_0
 			draw_mode = (int) ctrl.Style;
-#endif
+
 			switch (draw_mode) {
-#if NET_2_0
 			case 1: { // Continuous
 				int pixels_to_draw;
 				pixels_to_draw = (int)(client_area.Width * ((double)(ctrl.Value - ctrl.Minimum) / (double)(Math.Max(ctrl.Maximum - ctrl.Minimum, 1))));
@@ -4295,7 +4247,6 @@ namespace System.Windows.Forms
 				}
 				
 				goto case 0;
-#endif
 			case 0:
 			default:  // Blocks
 				Rectangle block_rect;
@@ -4650,7 +4601,6 @@ namespace System.Windows.Forms
 			}
 		}
 
-#if NET_2_0
 		public override void DrawRadioButton (Graphics g, RadioButton rb, Rectangle glyphArea, Rectangle textBounds, Rectangle imageBounds, Rectangle clipRectangle)
 		{
 			// Draw Button Background
@@ -4752,7 +4702,6 @@ namespace System.Windows.Forms
 		{
 			CalculateCheckBoxTextAndImageLayout (b, offset, out glyphArea, out textRectangle, out imageRectangle);
 		}
-#endif
 		#endregion	// RadioButton
 
 		#region ScrollBar
@@ -5158,40 +5107,17 @@ namespace System.Windows.Forms
 				format.Alignment = StringAlignment.Center;
 			else
 				format.Alignment = StringAlignment.Near;
-#if !NET_2_0
-			if (control is PropertyGrid.PropertyToolBar) {
-				dc.FillRectangle (ResPool.GetSolidBrush(control.BackColor), clip_rectangle);
-				
-				if (clip_rectangle.X == 0) {
-					dc.DrawLine (SystemPens.ControlLightLight, clip_rectangle.X, 1, clip_rectangle.X, control.Bottom);
-				}
 
-				if (clip_rectangle.Y < 2) {
-					dc.DrawLine (SystemPens.ControlLightLight, clip_rectangle.X, 1, clip_rectangle.Right, 1);
-				}
-
-				if (clip_rectangle.Bottom == control.Bottom) {
-					dc.DrawLine (SystemPens.ControlDark, clip_rectangle.X, clip_rectangle.Bottom - 1, clip_rectangle.Right, clip_rectangle.Bottom - 1);
-				}
-
-				if (clip_rectangle.Right == control.Right) {
-					dc.DrawLine (SystemPens.ControlDark, clip_rectangle.Right - 1, 1, clip_rectangle.Right - 1, control.Bottom - 1);
-				}
-			} else {
-#endif
-				if (control.Appearance != ToolBarAppearance.Flat || control.Parent == null) {
-					dc.FillRectangle (SystemBrushes.Control, clip_rectangle);
-				}
-
-				if (control.Divider && clip_rectangle.Y < 2) {
-					if (clip_rectangle.Y < 1) {
-						dc.DrawLine (SystemPens.ControlDark, clip_rectangle.X, 0, clip_rectangle.Right, 0);
-					}
-					dc.DrawLine (SystemPens.ControlLightLight, clip_rectangle.X, 1, clip_rectangle.Right, 1);
-				}
-#if !NET_2_0
+			if (control.Appearance != ToolBarAppearance.Flat || control.Parent == null) {
+				dc.FillRectangle (SystemBrushes.Control, clip_rectangle);
 			}
-#endif
+
+			if (control.Divider && clip_rectangle.Y < 2) {
+				if (clip_rectangle.Y < 1) {
+					dc.DrawLine (SystemPens.ControlDark, clip_rectangle.X, 0, clip_rectangle.Right, 0);
+				}
+				dc.DrawLine (SystemPens.ControlLightLight, clip_rectangle.X, 1, clip_rectangle.Right, 1);
+			}
 
 			foreach (ToolBarItem item in control.items)
 				if (item.Button.Visible && clip_rectangle.IntersectsWith (item.Rectangle))
@@ -5414,7 +5340,7 @@ namespace System.Windows.Forms
 			ToolTipDrawBackground (dc, clip_rectangle, control);
 
 			TextFormatFlags flags = TextFormatFlags.HidePrefix;
-#if NET_2_0
+
 			Color foreground = control.ForeColor;
 			if (control.title.Length > 0) {
 				Font bold_font = new Font (control.Font, control.Font.Style | FontStyle.Bold);
@@ -5425,20 +5351,13 @@ namespace System.Windows.Forms
 
 			if (control.icon != null)
 				dc.DrawIcon (control.icon, control.icon_rect);
-#else
-			Color foreground = this.ColorInfoText;
-#endif
 
 			TextRenderer.DrawTextInternal (dc, control.Text, control.Font, control.text_rect, foreground, flags, false);
 		}
 
 		protected virtual void ToolTipDrawBackground (Graphics dc, Rectangle clip_rectangle, ToolTip.ToolTipWindow control)
 		{
-#if NET_2_0
-			Brush back_brush = ResPool.GetSolidBrush (control.BackColor);;
-#else
-			Brush back_brush = SystemBrushes.Info;
-#endif
+			Brush back_brush = ResPool.GetSolidBrush (control.BackColor);
 			dc.FillRectangle (back_brush, control.ClientRectangle);
 			dc.DrawRectangle (SystemPens.WindowFrame, 0, 0, control.Width - 1, control.Height - 1);
 		}
@@ -5451,7 +5370,6 @@ namespace System.Windows.Forms
 			Rectangle text_rect = new Rectangle (Point.Empty, size);
 			text_rect.Inflate (-2, -1);
 			tt.text_rect = text_rect;
-#if NET_2_0
 			tt.icon_rect = tt.title_rect = Rectangle.Empty;
 
 			Size title_size = Size.Empty;
@@ -5497,7 +5415,6 @@ namespace System.Windows.Forms
 				size.Width += padding * 2;
 				size.Height += padding * 2;
 			}
-#endif
 
 			return size;
 		}
@@ -5510,7 +5427,6 @@ namespace System.Windows.Forms
 		#endregion	// ToolTip
 
 		#region BalloonWindow
-#if NET_2_0
 		NotifyIcon.BalloonWindow balloon_window;
 		
 		public override void ShowBalloonWindow (IntPtr handle, int timeout, string title, string text, ToolTipIcon icon)
@@ -5622,7 +5538,6 @@ namespace System.Windows.Forms
 			
 			return rect;
 		}
-#endif
 		#endregion	// BalloonWindow
 
 		#region	TrackBar
@@ -6758,7 +6673,12 @@ namespace System.Windows.Forms
 
 		public override void CPDrawCheckBox (Graphics dc, Rectangle rectangle, ButtonState state)
 		{
-			Pen check_pen = Pens.Black;
+			CPDrawCheckBoxInternal (dc, rectangle, state, false /* mixed */);
+		}
+
+		private void CPDrawCheckBoxInternal (Graphics dc, Rectangle rectangle, ButtonState state, bool mixed)
+		{
+			Pen check_pen = (mixed) ? Pens.Gray : Pens.Black;
 			
 			Rectangle cb_rect = new Rectangle (rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
 			
@@ -7184,10 +7104,9 @@ namespace System.Windows.Forms
 
 		}
 
-		[MonoInternalNote ("Does not respect Mixed")]
 		public override void CPDrawMixedCheckBox (Graphics graphics, Rectangle rectangle, ButtonState state)
 		{
-			CPDrawCheckBox (graphics, rectangle, state);
+			CPDrawCheckBoxInternal (graphics, rectangle, state, true /* mixed */);
 		}
 
 		public override void CPDrawRadioButton (Graphics dc, Rectangle rectangle, ButtonState state)
@@ -7490,8 +7409,13 @@ namespace System.Windows.Forms
 
 		private void DrawStringDisabled20 (Graphics g, string s, Font font, Rectangle layoutRectangle, Color color, TextFormatFlags flags, bool useDrawString)
 		{
-			Color colorToDraw = (color.ToArgb () == SystemColors.Control.ToArgb ()) ? SystemColors.ControlDark : ResPool.GetCPColor (color).Dark;
-			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, colorToDraw, flags, useDrawString);
+			CPColor cpcolor = ResPool.GetCPColor (color);
+
+			layoutRectangle.Offset (1, 1);
+			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, cpcolor.LightLight, flags, useDrawString);
+
+			layoutRectangle.Offset (-1, -1);
+			TextRenderer.DrawTextInternal (g, s, font, layoutRectangle, cpcolor.Dark, flags, useDrawString);
 		}
 
 		public  override void CPDrawStringDisabled (Graphics dc, string s, Font font, Color color, RectangleF layoutRectangle, StringFormat format)
@@ -7504,7 +7428,6 @@ namespace System.Windows.Forms
 			dc.DrawString (s, font, ResPool.GetSolidBrush (cpcolor.Dark), layoutRectangle, format);
 		}
 
-#if NET_2_0
 		public override void CPDrawStringDisabled (IDeviceContext dc, string s, Font font, Color color, Rectangle layoutRectangle, TextFormatFlags format)
 		{
 			CPColor cpcolor = ResPool.GetCPColor (color);
@@ -7520,7 +7443,6 @@ namespace System.Windows.Forms
 		{
 			graphics.DrawRectangle (SystemPens.ControlDarkDark, bounds);
 		}
-#endif
 
 		private static void DrawBorderInternal (Graphics graphics, int startX, int startY, int endX, int endY,
 			int width, Color color, ButtonBorderStyle style, Border3DSide side) 

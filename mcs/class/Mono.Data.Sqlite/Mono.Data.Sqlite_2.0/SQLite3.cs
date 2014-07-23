@@ -49,10 +49,6 @@ namespace Mono.Data.Sqlite
     {
       if (bDisposing)
         Close();
-#if MONOTOUCH
-      if (gch.IsAllocated)
-        gch.Free ();
-#endif
     }
 
     // It isn't necessary to cleanup any functions we've registered.  If the connection
@@ -73,6 +69,10 @@ namespace Mono.Data.Sqlite
       }
 
       _sql = null;
+#if MONOTOUCH
+      if (gch.IsAllocated)
+        gch.Free ();
+#endif
     }
 
     internal override void Cancel()
@@ -127,7 +127,7 @@ namespace Mono.Data.Sqlite
 
 	try {
 		n = UnsafeNativeMethods.sqlite3_open_v2(ToUTF8(strFilename), out db, (int)flags, IntPtr.Zero);
-	} catch (EntryPointNotFoundException ex) {
+	} catch (EntryPointNotFoundException) {
 		Console.WriteLine ("Your sqlite3 version is old - please upgrade to at least v3.5.0!");
 		n = UnsafeNativeMethods.sqlite3_open (ToUTF8 (strFilename), out db);
 	}
@@ -666,10 +666,10 @@ namespace Mono.Data.Sqlite
       if (n > 0) throw new SqliteException(n, SQLiteLastError());
     }
 
-    internal override void CreateCollation(string strCollation, SQLiteCollation func, SQLiteCollation func16)
+    internal override void CreateCollation(string strCollation, SQLiteCollation func, SQLiteCollation func16, IntPtr user_data)
     {
-      int n = UnsafeNativeMethods.sqlite3_create_collation(_sql, ToUTF8(strCollation), 2, IntPtr.Zero, func16);
-      if (n == 0) UnsafeNativeMethods.sqlite3_create_collation(_sql, ToUTF8(strCollation), 1, IntPtr.Zero, func);
+      int n = UnsafeNativeMethods.sqlite3_create_collation(_sql, ToUTF8(strCollation), 2, user_data, func16);
+      if (n == 0) UnsafeNativeMethods.sqlite3_create_collation(_sql, ToUTF8(strCollation), 1, user_data, func);
       if (n > 0) throw new SqliteException(n, SQLiteLastError());
     }
 

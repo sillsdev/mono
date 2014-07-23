@@ -487,7 +487,7 @@ namespace System.Data {
 				CheckValue (this [col], col, false);
 		}
 
-		void CheckValue (object v, DataColumn col)
+		private void CheckValue (object v, DataColumn col)
 		{
 			CheckValue (v, col, true);
 		}
@@ -590,7 +590,7 @@ namespace System.Data {
 				Original = Table.RecordCache.NewRecord ();
 				
 				foreach (DataColumn col in _table.Columns)
-					col.DataContainer.CopyValue (Table.DefaultValuesRowIndex, Original); 
+					col.DataContainer.CopyValue (Table.DefaultValuesRowIndex, Original);
 			}
 
 			CheckValue (val, column);
@@ -1257,7 +1257,6 @@ namespace System.Data {
 		/// </summary>
 		public bool IsNull (DataColumn column, DataRowVersion version)
 		{
-			object o = this [column, version];
 			return column.DataContainer.IsNull (IndexFromVersion (version));
 		}
 
@@ -1366,7 +1365,7 @@ namespace System.Data {
 		/// </summary>
 		public void SetParentRow (DataRow parentRow, DataRelation relation)
 		{
-			if (_table == null || parentRow.Table == null)
+			if (_table == null || (parentRow != null && parentRow.Table == null))
 				throw new RowNotInTableException ("This row has been removed from a table and does not have any data.  BeginEdit() will allow creation of new data in this row.");
 
 			if (parentRow != null && _table.DataSet != parentRow.Table.DataSet)
@@ -1379,10 +1378,13 @@ namespace System.Data {
 			BeginEdit();
 
 			IEnumerable relations;
-			if (relation == null)
-				relations = _table.ParentRelations;
-			else
+			if (relation != null) {
+				if (parentRow != null && relation.ParentColumns [0].Table != parentRow.Table)
+					throw new InvalidConstraintException (string.Format ("Parent belongs to table {0} but relation is for table {1}", parentRow.Table, relation.ParentColumns [0].Table));
 				relations = new DataRelation [] { relation };
+			} else {
+				relations = _table.ParentRelations;
+			}
 
 			foreach (DataRelation rel in relations) {
 				DataColumn [] childCols = rel.ChildColumns;
@@ -1391,7 +1393,7 @@ namespace System.Data {
 				for (int i = 0; i < parentCols.Length; i++) {
 					if (parentRow == null) {
 						childCols [i].DataContainer [Proposed] = DBNull.Value;
-					} else {
+					} else if (parentCols [i].Table == parentRow.Table) {
 						int defaultIdx = parentRow.IndexFromVersion (DataRowVersion.Default);
 						childCols [i].DataContainer.CopyValue(parentCols [i].DataContainer, defaultIdx, Proposed);
 					}
@@ -1403,6 +1405,11 @@ namespace System.Data {
 
 		//Copy all values of this DataRow to the row parameter.
 		internal void CopyValuesToRow (DataRow row)
+		{
+			CopyValuesToRow(row, true);
+		}
+		
+		internal void CopyValuesToRow (DataRow row, bool doROCheck)
 		{
 			if (row == null)
 				throw new ArgumentNullException("row");
@@ -1458,19 +1465,19 @@ namespace System.Data {
 				if (targetColumn != null) {
 					if (HasVersion (DataRowVersion.Original)) {
 						object val = column[Original];
-						row.CheckValue (val, targetColumn);
+						row.CheckValue (val, targetColumn, doROCheck);
 						targetColumn [row.Original] = val;
 					}
 
 					if (HasVersion (DataRowVersion.Current) && Current != Original) {
 						object val = column[Current];
-						row.CheckValue (val, targetColumn);
+						row.CheckValue (val, targetColumn, doROCheck);
 						targetColumn [row.Current] = val;
 					}
 
 					if (HasVersion (DataRowVersion.Proposed)) {
 						object val = column[row.Proposed];
-						row.CheckValue (val, targetColumn);
+						row.CheckValue (val, targetColumn, doROCheck);
 						targetColumn [row.Proposed] = val;
 					}
 				}

@@ -28,16 +28,12 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
-
 using System;
 using System.IO;
 using System.Net;
 using System.Xml.Schema;
 
-#if !MOONLIGHT
 using XsValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags;
-#endif
 
 namespace System.Xml
 {
@@ -53,12 +49,10 @@ namespace System.Xml
 		private int linePositionOffset;
 		private bool prohibitDtd;
 		private XmlNameTable nameTable;
-#if !MOONLIGHT
 		private XmlSchemaSet schemas;
 		private bool schemasNeedsInitialization;
 		private XsValidationFlags validationFlags;
 		private ValidationType validationType;
-#endif
 		private XmlResolver xmlResolver;
 #if NET_4_0
 		private DtdProcessing dtdProcessing;
@@ -66,18 +60,25 @@ namespace System.Xml
 		private long maxCharactersFromEntities;
 		private long maxCharactersInDocument;
 
+#if NET_4_5
+		private bool isReadOnly;
+		private bool isAsync;
+#endif
+
 		public XmlReaderSettings ()
 		{
 			Reset ();
 		}
 
-#if !MOONLIGHT
 		public event ValidationEventHandler ValidationEventHandler;
-#endif
 
 		public XmlReaderSettings Clone ()
 		{
-			return (XmlReaderSettings) MemberwiseClone ();
+			var clone = (XmlReaderSettings) MemberwiseClone ();
+#if NET_4_5
+			clone.isReadOnly = false;
+#endif
+			return clone;
 		}
 
 		public void Reset ()
@@ -91,9 +92,6 @@ namespace System.Xml
 			lineNumberOffset = 0;
 			linePositionOffset = 0;
 			prohibitDtd = true;
-#if MOONLIGHT
-			xmlResolver = new XmlXapResolver ();
-#else
 			schemas = null;
 			schemasNeedsInitialization = true;
 			validationFlags =
@@ -101,6 +99,8 @@ namespace System.Xml
 				XsValidationFlags.AllowXmlAttributes;
 			validationType = ValidationType.None;
 			xmlResolver = new XmlUrlResolver ();
+#if NET_4_5
+			isAsync = false;
 #endif
 		}
 
@@ -163,6 +163,9 @@ namespace System.Xml
 			set { linePositionOffset = value; }
 		}
 
+#if NET_4_0
+		[ObsoleteAttribute("Use DtdProcessing property instead")]
+#endif
 		public bool ProhibitDtd {
 			get { return prohibitDtd; }
 			set { prohibitDtd = value; }
@@ -176,7 +179,6 @@ namespace System.Xml
 			set { nameTable = value; }
 		}
 
-#if !MOONLIGHT
 		public XmlSchemaSet Schemas {
 			get {
 				if (schemasNeedsInitialization) {
@@ -213,13 +215,35 @@ namespace System.Xml
 			get { return validationType; }
 			set { validationType = value; }
 		}
-#endif
 
 		public XmlResolver XmlResolver {
 			internal get { return xmlResolver; }
 			set { xmlResolver = value; }
 		}
+
+#if NET_4_5
+		internal void SetReadOnly ()
+		{
+			isReadOnly = true;
+		}
+
+		/*
+		 * FIXME: The .NET 4.5 runtime throws an exception when attempting to
+		 *        modify any of the properties after the XmlReader has been constructed.
+		 */
+		void EnsureWritability ()
+		{
+			if (isReadOnly)
+				throw new InvalidOperationException ("XmlReaderSettings in read-only");
+		}
+
+		public bool Async {
+			get { return isAsync; }
+			set {
+				EnsureWritability ();
+				isAsync = value;
+			}
+		}
+#endif
 	}
 }
-
-#endif

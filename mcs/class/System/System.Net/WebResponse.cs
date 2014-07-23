@@ -32,12 +32,8 @@ using System.Runtime.Serialization;
 
 namespace System.Net 
 {
-#if MOONLIGHT
-	internal abstract class WebResponse : MarshalByRefObject, ISerializable, IDisposable {
-#else
 	[Serializable]
 	public abstract class WebResponse : MarshalByRefObject, ISerializable, IDisposable {
-#endif
 		// Constructors
 		
 		protected WebResponse () { }
@@ -72,7 +68,9 @@ namespace System.Net
 		public virtual bool IsFromCache
 		{
 			get {
-				throw GetMustImplement ();
+				return false;
+				// Better to return false than to kill the application
+				// throw GetMustImplement ();
 			}
 		}
 		
@@ -87,7 +85,16 @@ namespace System.Net
 		public virtual Uri ResponseUri {		
 			get { throw new NotSupportedException (); }
 		}		
+#if NET_4_0
 
+		public virtual bool SupportsHeaders {
+			get {
+				// The managed stack always returns this as true, it is only
+				// the Silverlight stack that does not support this.
+				return true;
+			}
+		}
+#endif
 		// Methods
 		
 		public virtual void Close()
@@ -101,12 +108,26 @@ namespace System.Net
 		}
 #if TARGET_JVM //enable overrides for extenders
 		public virtual void Dispose()
+#elif NET_4_0
+		public void Dispose ()
 #else
 		void IDisposable.Dispose()
 #endif
 		{
+#if NET_4_0
+			Dispose (true);
+#else
 			Close ();
+#endif
 		}
+		
+#if NET_4_0
+		protected virtual void Dispose (bool disposing)
+		{
+			if (disposing)
+				Close ();
+		}
+#endif
 
 		void ISerializable.GetObjectData
 			(SerializationInfo serializationInfo,

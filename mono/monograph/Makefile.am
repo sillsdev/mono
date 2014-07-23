@@ -4,14 +4,39 @@ export HOST_CC
 endif
 
 if JIT_SUPPORTED
-runtime_lib=../mini/libmono-$(API_VER).la
+if DISABLE_EXECUTABLES
+runtime_lib=../mini/$(LIBMONO_LA) $(static_libs)
+else
+if !SHARED_MONO
+static_libs=	\
+	$(top_builddir)/mono/metadata/libmonoruntime-static.la	\
+	$(top_builddir)/mono/io-layer/libwapi.la	\
+	$(top_builddir)/mono/utils/libmonoutils.la \
+	$(GLIB_LIBS) $(LIBICONV) \
+	$(LIBGC_STATIC_LIBS)
+
+runtime_lib=../mini/$(LIBMONO_LA) $(static_libs)
+else
+runtime_lib=../mini/$(LIBMONO_LA)
+endif
+endif
 else
 runtime_lib=../interpreter/libmint.la
 endif
 
+if DISABLE_EXECUTABLES
+bin_PROGRAMS =
+else
+if DISABLE_LIBRARIES
+bin_PROGRAMS =
+else
+if SUPPORT_BOEHM
 bin_PROGRAMS = monograph
+endif
+endif
+endif
 
-INCLUDES = 				\
+AM_CPPFLAGS = 				\
 	-I$(top_srcdir)			\
 	$(GLIB_CFLAGS)
 
@@ -19,7 +44,12 @@ monograph_LDADD = \
 	$(runtime_lib)			\
 	$(GLIB_LIBS)			\
 	$(LLVM_LIBS)			\
+	$(LIBICONV)			\
 	-lm
+
+if PLATFORM_DARWIN
+monograph_LDFLAGS=-framework CoreFoundation
+endif
 
 GRAPHS=System.Object System.Enum System.Attribute System.ValueType System.Reflection.MemberInfo
 OUT=$(GRAPHS:=.jpeg)

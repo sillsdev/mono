@@ -47,6 +47,10 @@ typedef struct GC_Thread_Rep {
     				/* not need to be sent a signal to stop	*/
     				/* it.					*/
     ptr_t stack_end;		/* Cold end of the stack.		*/
+	ptr_t altstack; /* The start of the altstack if there is one, NULL otherwise */
+	int altstack_size; /* The size of the altstack if there is one */
+	ptr_t stack; /* The start of the normal stack */
+	int stack_size; /* The size of the normal stack */
 #   ifdef IA64
 	ptr_t backing_store_end;
 	ptr_t backing_store_ptr;
@@ -102,7 +106,7 @@ GC_thread GC_lookup_thread(pthread_t id);
 
 void GC_thread_deregister_foreign (void *data);
 
-void GC_stop_init();
+void GC_stop_init(void);
 
 extern GC_bool GC_in_thread_creation;
 	/* We may currently be in thread creation or destruction.	*/

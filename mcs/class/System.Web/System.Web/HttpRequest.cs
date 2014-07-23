@@ -10,6 +10,7 @@
 
 //
 // Copyright (C) 2005-2010 Novell, Inc (http://www.novell.com)
+// Copyright (C) 2011-2012 Xamarin, Inc (http://xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -112,6 +113,7 @@ namespace System.Web
 		bool lazyQueryStringValidation;
 		bool inputValidationEnabled;
 		RequestContext requestContext;
+		BufferlessInputStream bufferlessInputStream;
 		
 		static bool validateRequestNewMode;
 		internal static bool ValidateRequestNewMode {
@@ -314,8 +316,12 @@ namespace System.Web
 		public HttpBrowserCapabilities Browser {
 			get {
 				if (browser_capabilities == null)
+#if NET_4_0
+					browser_capabilities = HttpCapabilitiesBase.BrowserCapabilitiesProvider.GetBrowserCapabilities (this);
+#else
 					browser_capabilities = (HttpBrowserCapabilities)
 						HttpCapabilitiesBase.GetConfigCapabilities (null, this);
+#endif
 
 				return browser_capabilities;
 			}
@@ -983,6 +989,159 @@ namespace System.Web
 				throw new PlatformNotSupportedException ("This property is not supported.");
 			}
 		}
+
+		public Stream GetBufferlessInputStream ()
+		{
+			if (bufferlessInputStream == null) {
+				if (input_stream != null)
+					throw new HttpException ("Input stream has already been created");
+
+				// we don't need to hook up the filter here, because the raw stream should be returned
+				bufferlessInputStream = new BufferlessInputStream (this);
+			}
+
+			return bufferlessInputStream;
+		}
+
+		//
+		// Stream that returns the data as it is read, without buffering
+		//
+		class BufferlessInputStream : Stream {
+			HttpRequest request;
+
+			// cached, the request content-length
+			int content_length;
+
+			// buffer that holds preloaded data
+			byte [] preloadedBuffer;
+
+			// indicates if we already served the whole preloaded buffer
+			bool preloaded_served;
+
+			// indicates if we already checked the request content-length against httpRuntime limit
+			bool checked_maxRequestLength;
+
+			// our stream position
+			long position;
+
+			//
+			// @request: the containing request that created us, used to find out content length
+			public BufferlessInputStream (HttpRequest request)
+			{
+				this.request = request;
+				content_length = request.ContentLength;
+			}
+
+			public override bool CanRead {
+				get { return true; }
+			}
+
+			public override bool CanSeek {
+				get { return false; }
+			}
+
+			public override bool CanWrite {
+				get { return false; }
+			}
+
+			public override long Length {
+				get {
+					return content_length;
+				}
+			}
+
+			public override long Position {
+				get {
+					return position;
+				}
+				set {
+					throw new NotSupportedException ("This is a readonly stream");
+				}
+			}
+
+			public override void Flush ()
+			{
+			}
+
+			public override int Read (byte [] buffer, int offset, int count)
+			{
+				if (buffer == null)
+					throw new ArgumentNullException ("buffer");
+
+				if (offset < 0 || count < 0)
+					throw new ArgumentOutOfRangeException ("offset or count less than zero.");
+
+				if (buffer.Length - offset < count )
+					throw new ArgumentException ("offset+count",
+								     "The size of the buffer is less than offset + count.");
+
+				if (count == 0 || request.worker_request == null)
+					return 0;
+
+				if (!checked_maxRequestLength) {
+					int content_length_kb = content_length / 1024;
+					HttpRuntimeSection config = HttpRuntime.Section;
+					if (content_length_kb > config.MaxRequestLength)
+						throw HttpException.NewWithCode (400, "Upload size exceeds httpRuntime limit.", WebEventCodes.RuntimeErrorPostTooLarge);
+					else
+						checked_maxRequestLength = true;
+				}
+
+				// Serve the bytes we might have preloaded already.
+				if (!preloaded_served) {
+					if (preloadedBuffer == null)
+						preloadedBuffer = request.worker_request.GetPreloadedEntityBody ();
+
+					if (preloadedBuffer != null) {
+						long bytes_left = preloadedBuffer.Length-position;
+						int n = (int) Math.Min (count, bytes_left);
+						Array.Copy (preloadedBuffer, position, buffer, offset, n);
+						position += n;
+
+						if (n == bytes_left)
+							preloaded_served = true;
+
+						return n;
+					}
+					else
+						preloaded_served = true;
+				}
+
+				// serve bytes from worker request if available
+				if (position < content_length) {
+					long bytes_left = content_length-position;
+					int n = count;
+
+					if (bytes_left < count)
+						n = (int) bytes_left;
+
+					int bytes_read = request.worker_request.ReadEntityBody (buffer, offset, n);
+					position += bytes_read;
+					return bytes_read;
+				}
+
+				return 0;
+			}
+
+			public override long Seek (long offset, SeekOrigin origin)
+			{
+				throw new NotSupportedException ("Can not seek on the HttpRequest.BufferlessInputStream");
+			}
+
+			public override void SetLength (long value)
+			{
+				throw new NotSupportedException ("Can not set length on the HttpRequest.BufferlessInputStream");
+			}
+
+			public override void Write (byte [] buffer, int offset, int count)
+			{
+				throw new NotSupportedException ("Can not write on the HttpRequest.BufferlessInputStream");
+			}
+
+			//
+			// TODO: explicitly support the async methods if there is a convenient way of doing it
+			//
+		}
 #endif
 		public Stream InputStream {
 			get {
@@ -1057,7 +1216,7 @@ namespace System.Web
 		public string Path {
 			get {
 				if (unescaped_path == null) {
-					unescaped_path = Uri.UnescapeDataString (PathNoValidation);
+					unescaped_path = PathNoValidation;
 #if NET_4_0
 					if (validateRequestNewMode) {
 						RequestValidator validator = RequestValidator.Current;
@@ -1172,8 +1331,10 @@ namespace System.Web
 				} else
 #endif
 					if (validate_query_string && !checked_query_string) {
-						ValidateNameValueCollection ("QueryString", query_string_nvc);
+						// Setting this before calling the validator prevents
+						// possible endless recursion
 						checked_query_string = true;
+						ValidateNameValueCollection ("QueryString", query_string_nvc);
 					}
 				
 				return query_string_nvc;
@@ -1779,7 +1940,7 @@ namespace System.Web
 #endregion
 
 #region Helper classes
-	
+
 	//
 	// Stream-based multipart handling.
 	//

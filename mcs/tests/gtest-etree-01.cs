@@ -239,6 +239,8 @@ class MemberAccessData
 			return "alo";
 		}
 	}
+	
+	public object SetOnly { set { } }
 }
 
 enum MyEnum : byte
@@ -292,6 +294,8 @@ class Indexer
 	public string this [params string[] i] { get { return string.Concat (i); } }
 }
 
+class A { }
+class B : A { }
 
 // TODO: Add more nullable tests, follow AddTest pattern.
 
@@ -1553,6 +1557,15 @@ class Tester
 		Assert (false, e8.Compile ().Invoke (MyEnum.Value_2, MyEnum.Value_2));
 	}
 
+	void LessThanTest_9 ()
+	{
+		Expression<Func<object, int?, bool>> e = (a, b) => (int) a < b;
+		AssertNodeType (e, ExpressionType.LessThan);
+		Assert (false, e.Compile ().Invoke (1, null));
+		Assert (false, e.Compile ().Invoke (3, 3));
+		Assert (true, e.Compile ().Invoke (1, 3));
+	}
+
 	void LessThanOrEqualTest ()
 	{
 		Expression<Func<int, int, bool>> e = (int a, int b) => a <= b;
@@ -1751,6 +1764,14 @@ class Tester
 		var r = e.Compile ().Invoke ();
 		Assert (0, r);
 	}	
+
+	void MemberInitTest_5 ()
+	{
+		Expression<Func<MemberAccessData>> e = () => new MemberAccessData { SetOnly = new object { } };
+
+		AssertNodeType (e, ExpressionType.MemberInit);
+		e.Compile () ();
+	}
 
 	void ModuloTest ()
 	{
@@ -2579,7 +2600,6 @@ class Tester
 		Assert (1, e9.Compile ().Invoke (MyEnum.Value_2, MyEnum.Value_1));
 	}
 
-	// CSC bug
 	void SubtractTest_10 ()
 	{
 		Expression<Func<MyEnum?, byte?, MyEnum?>> e10 = (a, b) => a - b;
@@ -2687,6 +2707,13 @@ class Tester
 		Expression<Func<object, bool>> e3 = (object a) => null is object;
 		AssertNodeType (e3, ExpressionType.TypeIs);
 		Assert (false, e3.Compile ().Invoke (null));
+	}
+	
+	void TypeIsTest_4 ()
+	{
+		Expression<Func<B, bool>> e = l => l is A;
+		AssertNodeType (e, ExpressionType.TypeIs);
+		Assert (false, e.Compile ().Invoke (null));
 	}
 	
 	void TypeIsTest_5 ()

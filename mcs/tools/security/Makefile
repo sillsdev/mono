@@ -5,7 +5,7 @@ include ../../build/rules.make
 
 LOCAL_MCS_FLAGS = /lib:$(topdir)/class/lib/$(PROFILE) -r:Mono.Security.dll
 
-SECURITY_PROGRAMS = secutil.exe cert2spc.exe sn.exe makecert.exe chktrust.exe \
+SECURITY_PROGRAMS = secutil.exe cert2spc.exe sn.exe makecert.exe chktrust.exe crlupdate.exe \
 	signcode.exe setreg.exe certmgr.exe caspol.exe permview.exe mozroots.exe
 SECURITY_PROGRAMS_2_0 = httpcfg.exe
 
@@ -14,7 +14,7 @@ SN_SOURCES = sn.cs StrongNameManager.cs $(HELPER_SOURCES)
 
 SECURITY_SOURCES = $(HELPER_SOURCES) $(SN_SOURCES) $(SECURITY_PROGRAMS:.exe=.cs) $(SECURITY_PROGRAMS_2_0:.exe=.cs)
 
-ifeq (net_4_0, $(PROFILE))
+ifeq ($(DEFAULT_PROFILE), $(PROFILE))
 SECURITY_TARGETS = $(SECURITY_PROGRAMS) $(SECURITY_PROGRAMS_2_0)
 endif
 
@@ -22,7 +22,7 @@ PROGRAM_INSTALL_DIR = $(mono_libdir)/mono/$(FRAMEWORK_VERSION)
 
 DISTFILES = README TESTS $(SECURITY_SOURCES)
 
-ifeq (basic, $(PROFILE))
+ifeq (build, $(PROFILE))
 all-local: $(topdir)/class/lib/$(PROFILE)/sn.exe
 else
 all-local: $(SECURITY_TARGETS)

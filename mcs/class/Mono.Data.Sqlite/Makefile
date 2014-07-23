@@ -23,6 +23,8 @@ EXTRA_DISTFILES = Test/SqliteTest.cs \
 	resources/MetaDataCollections.xml \
 	$(PREBUILT) \
 	$(wildcard resources/*.bmp)
+	
+CLEAN_FILES += $(RESX_RESOURCES)
 
 CLEAN_FILES = $(RESX_RESOURCES)
 

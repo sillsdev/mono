@@ -102,8 +102,96 @@
       <Docs>
         <summary>To be added.</summary>
         <remarks>To be added.</remarks>
-        <exception cref="T:System.ArgumentException">To be added; from: <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />, <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />, <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" /></exception>
-        <exception cref="T:System.MulticastNotSupportedException">To be added; from: <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />, <see cref="M:System.Delegate.CombineImpl(System.Delegate)" /></exception>
+        <exception cref="T:System.ArgumentException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.ArgumentNullException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.ArgumentOutOfRangeException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.FormatException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.IndexOutOfRangeException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.MulticastNotSupportedException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.OutOfMemoryException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
       </Docs>
     </Member>
     <Member MemberName="array1">
@@ -151,6 +239,48 @@
         <remarks>To be added.</remarks>
       </Docs>
     </Member>
+    <Member MemberName="Default">
+      <MemberSignature Language="C#" Value="public void Default (int a = 1, int b = 2);" />
+      <MemberSignature Language="ILAsm" Value=".method public hidebysig instance void Default(int32 a, int32 b) cil managed" />
+      <MemberType>Method</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Void</ReturnType>
+      </ReturnValue>
+      <Parameters>
+        <Parameter Name="a" Type="System.Int32" />
+        <Parameter Name="b" Type="System.Int32" />
+      </Parameters>
+      <Docs>
+        <param name="a">To be added.</param>
+        <param name="b">To be added.</param>
+        <summary>To be added.</summary>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
+    <Member MemberName="Default">
+      <MemberSignature Language="C#" Value="public void Default (string a = &quot;a&quot;, char b = 'b');" />
+      <MemberSignature Language="ILAsm" Value=".method public hidebysig instance void Default(string a, char b) cil managed" />
+      <MemberType>Method</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Void</ReturnType>
+      </ReturnValue>
+      <Parameters>
+        <Parameter Name="a" Type="System.String" />
+        <Parameter Name="b" Type="System.Char" />
+      </Parameters>
+      <Docs>
+        <param name="a">To be added.</param>
+        <param name="b">To be added.</param>
+        <summary>To be added.</summary>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
     <Member MemberName="defaultColor">
       <MemberSignature Language="C#" Value="protected static Mono.DocTest.Color defaultColor;" />
       <MemberSignature Language="ILAsm" Value=".field family static valuetype Mono.DocTest.Color defaultColor" />
@@ -163,6 +293,246 @@
       </ReturnValue>
       <Docs>
         <summary>To be added.</summary>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
+    <Member MemberName="Dynamic0">
+      <MemberSignature Language="C#" Value="public dynamic Dynamic0 (dynamic a, dynamic b);" />
+      <MemberSignature Language="ILAsm" Value=".method public hidebysig instance object Dynamic0(object a, object b) cil managed" />
+      <MemberType>Method</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Object</ReturnType>
+      </ReturnValue>
+      <Parameters>
+        <Parameter Name="a" Type="System.Object" />
+        <Parameter Name="b" Type="System.Object" />
+      </Parameters>
+      <Docs>
+        <param name="a">To be added.</param>
+        <param name="b">To be added.</param>
+        <summary>To be added.</summary>
+        <returns>To be added.</returns>
+        <remarks>To be added.</remarks>
+        <exception cref="T:System.ArgumentException">To be added; from:
+          <see cref="M:System.Linq.Expressions.Error.TypeMustBeDerivedFromSystemDelegate" /></exception>
+      </Docs>
+    </Member>
+    <Member MemberName="Dynamic1">
+      <MemberSignature Language="C#" Value="public System.Collections.Generic.Dictionary&lt;dynamic,string&gt; Dynamic1 (System.Collections.Generic.Dictionary&lt;dynamic,string&gt; value);" />
+      <MemberSignature Language="ILAsm" Value=".method public hidebysig instance class System.Collections.Generic.Dictionary`2&lt;object, string&gt; Dynamic1(class System.Collections.Generic.Dictionary`2&lt;object, string&gt; value) cil managed" />
+      <MemberType>Method</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Collections.Generic.Dictionary&lt;System.Object,System.String&gt;</ReturnType>
+      </ReturnValue>
+      <Parameters>
+        <Parameter Name="value" Type="System.Collections.Generic.Dictionary&lt;System.Object,System.String&gt;" />
+      </Parameters>
+      <Docs>
+        <param name="value">To be added.</param>
+        <summary>To be added.</summary>
+        <returns>To be added.</returns>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
+    <Member MemberName="Dynamic2">
+      <MemberSignature Language="C#" Value="public Func&lt;string,dynamic&gt; Dynamic2 (Func&lt;string,dynamic&gt; value);" />
+      <MemberSignature Language="ILAsm" Value=".method public hidebysig instance class System.Func`2&lt;string, object&gt; Dynamic2(class System.Func`2&lt;string, object&gt; value) cil managed" />
+      <MemberType>Method</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Func&lt;System.String,System.Object&gt;</ReturnType>
+      </ReturnValue>
+      <Parameters>
+        <Parameter Name="value" Type="System.Func&lt;System.String,System.Object&gt;" />
+      </Parameters>
+      <Docs>
+        <param name="value">To be added.</param>
+        <summary>To be added.</summary>
+        <returns>To be added.</returns>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
+    <Member MemberName="Dynamic3">
+      <MemberSignature Language="C#" Value="public Func&lt;Func&lt;string,dynamic&gt;,Func&lt;dynamic,string&gt;&gt; Dynamic3 (Func&lt;Func&lt;string,dynamic&gt;,Func&lt;dynamic,string&gt;&gt; value);" />
+      <MemberSignature Language="ILAsm" Value=".method public hidebysig instance class System.Func`2&lt;class System.Func`2&lt;string, object&gt;, class System.Func`2&lt;object, string&gt;&gt; Dynamic3(class System.Func`2&lt;class System.Func`2&lt;string, object&gt;, class System.Func`2&lt;object, string&gt;&gt; value) cil managed" />
+      <MemberType>Method</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Func&lt;System.Func&lt;System.String,System.Object&gt;,System.Func&lt;System.Object,System.String&gt;&gt;</ReturnType>
+      </ReturnValue>
+      <Parameters>
+        <Parameter Name="value" Type="System.Func&lt;System.Func&lt;System.String,System.Object&gt;,System.Func&lt;System.Object,System.String&gt;&gt;" />
+      </Parameters>
+      <Docs>
+        <param name="value">To be added.</param>
+        <summary>To be added.</summary>
+        <returns>To be added.</returns>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
+    <Member MemberName="DynamicE1">
+      <MemberSignature Language="C#" Value="public event Func&lt;dynamic&gt; DynamicE1;" />
+      <MemberSignature Language="ILAsm" Value=".event class System.Func`1&lt;object&gt; DynamicE1" />
+      <MemberType>Event</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <Attributes>
+        <Attribute>
+          <AttributeName>System.Obsolete("why not")</AttributeName>
+        </Attribute>
+      </Attributes>
+      <ReturnValue>
+        <ReturnType>System.Func&lt;System.Object&gt;</ReturnType>
+      </ReturnValue>
+      <Docs>
+        <summary>To be added.</summary>
+        <remarks>To be added.</remarks>
+        <exception cref="T:System.ArgumentException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.ArgumentNullException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.ArgumentOutOfRangeException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.FormatException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.IndexOutOfRangeException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.MulticastNotSupportedException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+        <exception cref="T:System.OutOfMemoryException">To be added; from:
+          <see cref="M:System.Delegate.Combine(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.Delegate.CombineImpl(System.Delegate)" />,
+          <see cref="M:System.Delegate.Remove(System.Delegate,System.Delegate)" />,
+          <see cref="M:System.String.Concat(System.String,System.String)" />,
+          <see cref="M:System.String.FormatHelper(System.Text.StringBuilder,System.IFormatProvider,System.String,System.Object[])" />,
+          <see cref="M:System.String.get_Chars(System.Int32)" />,
+          <see cref="M:System.String.InternalSetChar(System.Int32,System.Char)" />,
+          <see cref="M:System.String.ParseFormatSpecifier(System.String,System.Int32@,System.Int32@,System.Int32@,System.Boolean@,System.String@)" />,
+          <see cref="M:System.String.Substring(System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.Char,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.Append(System.String,System.Int32,System.Int32)" />,
+          <see cref="M:System.Text.StringBuilder.InternalEnsureCapacity(System.Int32)" /></exception>
+      </Docs>
+    </Member>
+    <Member MemberName="DynamicE2">
+      <MemberSignature Language="C#" Value="public event Func&lt;dynamic&gt; DynamicE2;" />
+      <MemberSignature Language="ILAsm" Value=".event class System.Func`1&lt;object&gt; DynamicE2" />
+      <MemberType>Event</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Func&lt;System.Object&gt;</ReturnType>
+      </ReturnValue>
+      <Docs>
+        <summary>To be added.</summary>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
+    <Member MemberName="DynamicF">
+      <MemberSignature Language="C#" Value="public Func&lt;Func&lt;string,dynamic,string&gt;,Func&lt;dynamic,Func&lt;dynamic&gt;,string&gt;&gt; DynamicF;" />
+      <MemberSignature Language="ILAsm" Value=".field public class System.Func`2&lt;class System.Func`3&lt;string, object, string&gt;, class System.Func`3&lt;object, class System.Func`1&lt;object&gt;, string&gt;&gt; DynamicF" />
+      <MemberType>Field</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Func&lt;System.Func&lt;System.String,System.Object,System.String&gt;,System.Func&lt;System.Object,System.Func&lt;System.Object&gt;,System.String&gt;&gt;</ReturnType>
+      </ReturnValue>
+      <Docs>
+        <summary>To be added.</summary>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
+    <Member MemberName="DynamicP">
+      <MemberSignature Language="C#" Value="public Func&lt;Func&lt;string,dynamic,string&gt;,Func&lt;dynamic,Func&lt;dynamic&gt;,string&gt;&gt; DynamicP { get; }" />
+      <MemberSignature Language="ILAsm" Value=".property instance class System.Func`2&lt;class System.Func`3&lt;string, object, string&gt;, class System.Func`3&lt;object, class System.Func`1&lt;object&gt;, string&gt;&gt; DynamicP" />
+      <MemberType>Property</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>System.Func&lt;System.Func&lt;System.String,System.Object,System.String&gt;,System.Func&lt;System.Object,System.Func&lt;System.Object&gt;,System.String&gt;&gt;</ReturnType>
+      </ReturnValue>
+      <Docs>
+        <summary>To be added.</summary>
+        <value>To be added.</value>
         <remarks>To be added.</remarks>
       </Docs>
     </Member>
@@ -188,7 +558,7 @@
       </Docs>
     </Member>
     <Member MemberName="Item">
-      <MemberSignature Language="C#" Value="public int this[int i] { set; get; }" />
+      <MemberSignature Language="C#" Value="public int this[int i] { get; set; }" />
       <MemberSignature Language="ILAsm" Value=".property instance int32 Item(int32)" />
       <MemberType>Property</MemberType>
       <AssemblyInfo>
@@ -216,7 +586,7 @@
       </Docs>
     </Member>
     <Member MemberName="Item">
-      <MemberSignature Language="C#" Value="public int this[string s, int i] { set; get; }" />
+      <MemberSignature Language="C#" Value="public int this[string s, int i] { get; set; }" />
       <MemberSignature Language="ILAsm" Value=".property instance int32 Item(string, int32)" />
       <MemberType>Property</MemberType>
       <AssemblyInfo>
@@ -488,6 +858,21 @@
         <remarks>To be added.</remarks>
       </Docs>
     </Member>
+    <Member MemberName="op_Division">
+      <MemberSignature Language="C#" Value="public static Mono.DocTest.Widget op_Division;" />
+      <MemberSignature Language="ILAsm" Value=".field public static class Mono.DocTest.Widget op_Division" />
+      <MemberType>Field</MemberType>
+      <AssemblyInfo>
+        <AssemblyVersion>0.0.0.0</AssemblyVersion>
+      </AssemblyInfo>
+      <ReturnValue>
+        <ReturnType>Mono.DocTest.Widget</ReturnType>
+      </ReturnValue>
+      <Docs>
+        <summary>To be added.</summary>
+        <remarks>To be added.</remarks>
+      </Docs>
+    </Member>
     <Member MemberName="op_Explicit">
       <MemberSignature Language="C#" Value="public static int op_Explicit (Mono.DocTest.Widget x);" />
       <MemberSignature Language="ILAsm" Value=".method public static hidebysig specialname int32 op_Explicit(class Mono.DocTest.Widget x) cil managed" />
@@ -595,7 +980,7 @@
       </Docs>
     </Member>
     <Member MemberName="Width">
-      <MemberSignature Language="C#" Value="public int Width { protected set; get; }" />
+      <MemberSignature Language="C#" Value="public int Width { get; protected set; }" />
       <MemberSignature Language="ILAsm" Value=".property instance int32 Width" />
       <MemberType>Property</MemberType>
       <AssemblyInfo>
@@ -638,7 +1023,7 @@
       </Docs>
     </Member>
     <Member MemberName="Y">
-      <MemberSignature Language="C#" Value="protected double Y { set; get; }" />
+      <MemberSignature Language="C#" Value="protected double Y { get; set; }" />
       <MemberSignature Language="ILAsm" Value=".property instance float64 Y" />
       <MemberType>Property</MemberType>
       <AssemblyInfo>

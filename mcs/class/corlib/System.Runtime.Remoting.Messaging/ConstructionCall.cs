@@ -154,8 +154,8 @@ namespace System.Runtime.Remoting.Messaging
 		public override IDictionary Properties 
 		{
 			get { return base.Properties; }
-		}
-		
+		}	
+
 		internal RemotingProxy SourceProxy
 		{
 			get { return _sourceProxy; }

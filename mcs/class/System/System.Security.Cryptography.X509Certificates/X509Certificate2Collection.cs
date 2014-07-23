@@ -29,7 +29,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if SECURITY_DEP || MOONLIGHT
+#if SECURITY_DEP
 
 using System.Collections;
 using System.Globalization;
@@ -124,22 +124,18 @@ namespace System.Security.Cryptography.X509Certificates {
 		{
 			switch (contentType) {
 			case X509ContentType.Cert:
-#if !MOONLIGHT
 			case X509ContentType.Pfx: // this includes Pkcs12
 			case X509ContentType.SerializedCert:
-#endif
 				// if multiple certificates are present we only export the last one
 				if (Count > 0)
 					return this [Count - 1].Export (contentType, password);
 				break;
-#if !MOONLIGHT
 			case X509ContentType.Pkcs7:
 				// TODO
 				break;
 			case X509ContentType.SerializedStore:
 				// TODO
 				break;
-#endif
 			default:
 				// this includes Authenticode, Unknown and bad values
 				string msg = Locale.GetText ("Cannot export certificate(s) to the '{0}' format", contentType);
@@ -148,6 +144,8 @@ namespace System.Security.Cryptography.X509Certificates {
 			return null;
 		}
 
+		static string[] newline_split = new string[] { Environment.NewLine };
+		
 		[MonoTODO ("Does not support X509FindType.FindByTemplateName, FindByApplicationPolicy and FindByCertificatePolicy")]
 		public X509Certificate2Collection Find (X509FindType findType, object findValue, bool validOnly) 
 		{
@@ -238,8 +236,13 @@ namespace System.Security.Cryptography.X509Certificates {
 						(String.Compare (str, x.GetCertHashString (), true, cinv) == 0));
 					break;
 				case X509FindType.FindBySubjectName:
-					string sname = x.GetNameInfo (X509NameType.SimpleName, false);
-					value_match = (sname.IndexOf (str, StringComparison.InvariantCultureIgnoreCase) >= 0);
+					string [] names = x.SubjectName.Format (true).Split (newline_split, StringSplitOptions.RemoveEmptyEntries);
+					foreach (string name in names) {
+						int pos = name.IndexOf ('=');
+						value_match = (name.IndexOf (str, pos, StringComparison.InvariantCultureIgnoreCase) >= 0);
+						if (value_match)
+							break;
+					}
 					break;
 				case X509FindType.FindBySubjectDistinguishedName:
 					value_match = (String.Compare (str, x.Subject, true, cinv) == 0);

@@ -24,9 +24,14 @@ namespace MonoTests.Mono.Security.Cryptography {
 
 	// MD4 is a abstract class - so ALL of the test included here wont be tested
 	// on the abstract class but should be tested in ALL its descendants.
-	public class MD4Test : Assertion {
+	public abstract class MD4Test {
 
 		protected MD4 hash;
+
+		static void AssertEquals (string msg, int expected, int actual)
+		{
+			Assert.AreEqual (expected, actual, msg);
+		}
 
 		// because most crypto stuff works with byte[] buffers
 		static public void AssertEquals (string msg, byte[] array1, byte[] array2) 
@@ -34,9 +39,9 @@ namespace MonoTests.Mono.Security.Cryptography {
 			if ((array1 == null) && (array2 == null))
 				return;
 			if (array1 == null)
-				Assertion.Fail (msg + " -> First array is NULL");
+				Assert.Fail (msg + " -> First array is NULL");
 			if (array2 == null)
-				Assertion.Fail (msg + " -> Second array is NULL");
+				Assert.Fail (msg + " -> Second array is NULL");
 
 			bool a = (array1.Length == array2.Length);
 			if (a) {
@@ -51,7 +56,7 @@ namespace MonoTests.Mono.Security.Cryptography {
 				msg += " -> Expected " + BitConverter.ToString (array1, 0);
 				msg += " is different than " + BitConverter.ToString (array2, 0);
 			}
-			Assertion.Assert (msg, a);
+			Assert.IsTrue (a, msg);
 		}
 
 		// MD4 ("") = 31d6cfe0d16ae931b73c59d7e0c089c0
@@ -211,7 +216,7 @@ namespace MonoTests.Mono.Security.Cryptography {
 			for (int i=0; i < input.Length - 1; i++)
 				hash.TransformBlock (input, i, 1, copy, i);
 			byte[] output = hash.TransformFinalBlock (input, input.Length - 1, 1);
-			TestCase.AssertEquals (testName + ".e.1", input [input.Length - 1], output [0]);
+			AssertEquals (testName + ".e.1", input [input.Length - 1], output [0]);
 			AssertEquals (testName + ".e.2", result, hash.Hash);
 			// required or next operation will still return old hash
 			hash.Initialize ();
@@ -222,9 +227,9 @@ namespace MonoTests.Mono.Security.Cryptography {
 		public virtual void StaticInfo () 
 		{
 			string className = hash.ToString ();
-			TestCase.AssertEquals (className + ".HashSize", 128, hash.HashSize);
-			TestCase.AssertEquals (className + ".InputBlockSize", 1, hash.InputBlockSize);
-			TestCase.AssertEquals (className + ".OutputBlockSize", 1, hash.OutputBlockSize);
+			AssertEquals (className + ".HashSize", 128, hash.HashSize);
+			AssertEquals (className + ".InputBlockSize", 1, hash.InputBlockSize);
+			AssertEquals (className + ".OutputBlockSize", 1, hash.OutputBlockSize);
 		}
 		
 		[Test]
@@ -232,7 +237,7 @@ namespace MonoTests.Mono.Security.Cryptography {
 		{
 			// create the default implementation
 			HashAlgorithm h = MD4.Create ();
-			Assert ("MD4Managed", (h is MD4Managed));
+			Assert.IsTrue ((h is MD4Managed), "MD4Managed");
 			// Note: will fail is default is changed in machine.config
 		}
 	}

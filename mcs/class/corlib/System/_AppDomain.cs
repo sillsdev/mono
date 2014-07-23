@@ -31,7 +31,9 @@ using System.Security.Permissions;
 using System.Security.Policy;
 using System.Security.Principal;
 using System.Reflection;
+#if !FULL_AOT_RUNTIME
 using System.Reflection.Emit;
+#endif
 using System.Globalization;
 using System.Runtime.Remoting;
 using System.Runtime.InteropServices;
@@ -72,6 +74,7 @@ namespace System
 			BindingFlags bindingAttr, Binder binder, object[] args, CultureInfo culture,
 			object[] activationAttributes, Evidence securityAttributes);
 
+#if !FULL_AOT_RUNTIME
 		AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access);
 		AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, Evidence evidence);
 		AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, string dir);
@@ -89,6 +92,7 @@ namespace System
 		AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, string dir,
 			Evidence evidence, PermissionSet requiredPermissions, PermissionSet optionalPermissions,
 			PermissionSet refusedPermissions, bool isSynchronized);
+#endif
 
 		void DoCallBack (CrossAppDomainDelegate theDelegate);
 		bool Equals (object other);
@@ -134,6 +138,7 @@ namespace System
 		void SetShadowCopyPath (string s);
 
 		void SetThreadPrincipal (IPrincipal principal);
+
 		string ToString ();
 
 		[method: SecurityPermission (SecurityAction.LinkDemand, ControlAppDomain = true)]
@@ -157,6 +162,7 @@ namespace System
 		[method: SecurityPermission (SecurityAction.LinkDemand, ControlAppDomain = true)]
 		event UnhandledExceptionEventHandler UnhandledException;
 
+#if !NET_2_1
 		void GetIDsOfNames ([In] ref Guid riid, IntPtr rgszNames, uint cNames, uint lcid, IntPtr rgDispId);
 
 		void GetTypeInfo (uint iTInfo, uint lcid, IntPtr ppTInfo);
@@ -165,5 +171,6 @@ namespace System
 
 		void Invoke (uint dispIdMember, [In] ref Guid riid, uint lcid, short wFlags, IntPtr pDispParams,
 			IntPtr pVarResult, IntPtr pExcepInfo, IntPtr puArgErr);
+#endif
 	}
 }

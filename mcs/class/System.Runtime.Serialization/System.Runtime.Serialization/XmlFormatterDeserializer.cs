@@ -104,19 +104,16 @@ namespace System.Runtime.Serialization
 			get { return references; }
 		}
 
-#if !MOONLIGHT
 		XmlDocument document;
 		
 		XmlDocument XmlDocument {
 			get { return (document = document ?? new XmlDocument ()); }
 		}
-#endif
 
 		// This method handles z:Ref, xsi:nil and primitive types, and then delegates to DeserializeByMap() for anything else.
 
 		public object Deserialize (Type type, XmlReader reader)
 		{
-#if !MOONLIGHT
 			if (type == typeof (XmlElement))
 				return XmlDocument.ReadNode (reader);
 			else if (type == typeof (XmlNode [])) {
@@ -127,9 +124,19 @@ namespace System.Runtime.Serialization
 				reader.ReadEndElement ();
 				return l.ToArray ();
 			}
-#endif
-
-			QName graph_qname = types.GetQName (type);
+			QName graph_qname = null;
+			
+			if (type.IsGenericType && type.GetGenericTypeDefinition () == typeof (Nullable<>)) {
+				Type internal_type = type.GetGenericArguments () [0];
+				
+				if (types.FindUserMap(internal_type) != null) {
+					graph_qname = types.GetQName (internal_type);
+				}
+			}
+			
+			if (graph_qname == null)
+				graph_qname = types.GetQName (type);
+				
 			string itype = reader.GetAttribute ("type", XmlSchema.InstanceNamespace);
 			if (itype != null) {
 				string [] parts = itype.Split (':');
@@ -189,8 +196,14 @@ namespace System.Runtime.Serialization
 
 		object DeserializePrimitive (Type type, XmlReader reader, QName qname)
 		{
+			bool isDateTimeOffset = false;
+			// Handle DateTimeOffset type and DateTimeOffset?.
+			if (type == typeof (DateTimeOffset))
+				isDateTimeOffset = true;
+			else if(type.IsGenericType && type.GetGenericTypeDefinition () == typeof (Nullable<>)) 
+				isDateTimeOffset = type.GetGenericArguments () [0] == typeof (DateTimeOffset);	
 			// It is the only exceptional type that does not serialize to string but serializes into complex element.
-			if (type == typeof (DateTimeOffset)) {
+			if (isDateTimeOffset) {
 				if (reader.IsEmptyElement) {
 					reader.Read ();
 					return default (DateTimeOffset);
@@ -220,7 +233,12 @@ namespace System.Runtime.Serialization
 
 		object DeserializeByMap (QName name, Type type, XmlReader reader)
 		{
-			SerializationMap map = resolved_qnames.ContainsKey (name) ? types.FindUserMap (type) : types.FindUserMap (name); // use type when the name is "resolved" one. Otherwise use name (there are cases that type cannot be resolved by type).
+			SerializationMap map = null;
+			// List<T> and T[] have the same QName, use type to find map work better.
+			if(name.Name.StartsWith ("ArrayOf", StringComparison.Ordinal) || resolved_qnames.ContainsKey (name))
+				map = types.FindUserMap (type);
+			else
+				map = types.FindUserMap (name); // use type when the name is "resolved" one. Otherwise use name (there are cases that type cannot be resolved by type).
 			if (map == null && (name.Name.StartsWith ("ArrayOf", StringComparison.Ordinal) ||
 			    name.Namespace == KnownTypeCollection.MSArraysNamespace ||
 			    name.Namespace.StartsWith (KnownTypeCollection.DefaultClrNamespaceBase, StringComparison.Ordinal))) {
@@ -243,7 +261,7 @@ namespace System.Runtime.Serialization
 			if (name.StartsWith ("ArrayOf", StringComparison.Ordinal)) {
 				name = name.Substring (7); // strip "ArrayOf"
 				if (ns == KnownTypeCollection.MSArraysNamespace)
-					return GetTypeFromNamePair (name, String.Empty).MakeArrayType ();
+					return GetTypeFromNamePair (name, KnownTypeCollection.MSSimpleNamespace).MakeArrayType ();
 				makeArray = true;
 			}
 
@@ -253,15 +271,7 @@ namespace System.Runtime.Serialization
 			foreach (var ass in AppDomain.CurrentDomain.GetAssemblies ()) {
 				Type [] types;
 
-#if MOONLIGHT
-				try  {
-					types = ass.GetTypes ();
-				} catch (System.Reflection.ReflectionTypeLoadException rtle) {
-					types = rtle.Types;
-				}
-#else
 				types = ass.GetTypes ();
-#endif
 				if (types == null)
 					continue;
 

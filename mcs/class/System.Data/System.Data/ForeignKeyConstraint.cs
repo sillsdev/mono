@@ -116,13 +116,14 @@ namespace System.Data {
 			// Keep a copy of parentColumnNames to resolve later
 			_parentColumnNames = new string [parentColumnNames.Length];
 			for (i = 0; i < parentColumnNames.Length; i++)
-				_parentColumnNames[i] = parentColumnNames[i];
+			       _parentColumnNames[i] = parentColumnNames[i];
 			
 			// Keep a copy of childColumnNames to resolve later
 			_childColumnNames = new string [childColumnNames.Length];
 			for (i = 0; i < childColumnNames.Length; i++)
-				_childColumnNames[i] = childColumnNames[i];
-			
+			       _childColumnNames[i] = childColumnNames[i];
+                       
+
 			_acceptRejectRule = acceptRejectRule;
 			_deleteRule = deleteRule;
 			_updateRule = updateRule;
@@ -201,7 +202,6 @@ namespace System.Data {
 		private void _foreignKeyConstraint(string constraintName, DataColumn[] parentColumns,
 				DataColumn[] childColumns)
 		{
-
 			int i;
 			//Validate 
 			_validateColumns(parentColumns, childColumns);
@@ -212,11 +212,11 @@ namespace System.Data {
 			//copy the columns - Do not keep reference #672113
 			_parentColumns = new DataColumn [parentColumns.Length];
 			for (i = 0; i < parentColumns.Length; i++)
-				_parentColumns[i] = parentColumns[i];
-
-			_childColumns = new DataColumn [childColumns.Length];			
+			       _parentColumns[i] = parentColumns[i];
+			
+			_childColumns = new DataColumn [childColumns.Length];                   
 			for (i = 0; i < childColumns.Length; i++)
-				_childColumns[i] = childColumns[i];
+			       _childColumns[i] = childColumns[i];
 		}
 
 #endregion // Constructors
@@ -509,7 +509,10 @@ namespace System.Data {
 			
 			bool hasErrors = false;
 			foreach (DataRow row in Table.Rows) {
-				// first we check if all values in _childColumns place are nulls.
+				if (row.RowState == DataRowState.Deleted)
+					continue;
+				
+				// we check if all values in _childColumns place are nulls.
 				// if yes we return.
 				if (row.IsNullColumns(_childColumns))
 					continue;

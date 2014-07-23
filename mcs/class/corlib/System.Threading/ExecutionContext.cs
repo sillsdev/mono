@@ -4,8 +4,10 @@
 // Authors:
 //	Lluis Sanchez (lluis@novell.com)
 //	Sebastien Pouliot  <sebastien@ximian.com>
+//  Marek Safar (marek.safar@gmail.com)
 //
 // Copyright (C) 2004-2005 Novell, Inc (http://www.novell.com)
+// Copyright (C) 2014 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -31,31 +33,37 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Security;
 using System.Security.Permissions;
+using System.Runtime.Remoting.Messaging;
+using System.Collections.Generic;
 
 namespace System.Threading {
-
 	[Serializable]
 	public sealed class ExecutionContext : ISerializable
 #if NET_4_0
 		, IDisposable
 #endif
 	{
-#if !MOONLIGHT
+#if !MOBILE
 		private SecurityContext _sc;
 #endif
+		private LogicalCallContext _lcc;
 		private bool _suppressFlow;
 		private bool _capture;
+		Dictionary<string, object> local_data;
 
 		internal ExecutionContext ()
 		{
 		}
 
-		internal ExecutionContext (ExecutionContext ec)
+		private ExecutionContext (ExecutionContext ec)
 		{
-#if !MOONLIGHT
+#if !MOBILE
 			if (ec._sc != null)
 				_sc = new SecurityContext (ec._sc);
 #endif
+			if (ec._lcc != null)
+				_lcc = (LogicalCallContext) ec._lcc.Clone ();
+
 			_suppressFlow = ec._suppressFlow;
 			_capture = true;
 		}
@@ -65,15 +73,27 @@ namespace System.Threading {
 		{
 			throw new NotImplementedException ();
 		}
-		
+
 		public static ExecutionContext Capture ()
 		{
-			ExecutionContext ec = Thread.CurrentThread.ExecutionContext;
+			return Capture (true, false);
+		}
+		
+		internal static ExecutionContext Capture (bool captureSyncContext, bool nullOnEmpty)
+		{
+			ExecutionContext ec = Current;
 			if (ec.FlowSuppressed)
 				return null;
 
+			if (nullOnEmpty
+#if !MOBILE
+			 && ec._sc == null
+#endif
+				&& (ec._lcc == null || !ec._lcc.HasInfo))
+				return null;
+
 			ExecutionContext capture = new ExecutionContext (ec);
-#if !MOONLIGHT
+#if !MOBILE
 			if (SecurityManager.SecurityEnabled)
 				capture.SecurityContext = SecurityContext.Capture ();
 #endif
@@ -91,8 +111,10 @@ namespace System.Threading {
 #if NET_4_0
 		public void Dispose ()
 		{
+#if !MOBILE
 			if (_sc != null)
 				_sc.Dispose ();
+#endif
 		}
 #endif
 
@@ -106,7 +128,30 @@ namespace System.Threading {
 		}
 		
 		// internal stuff
-#if !MOONLIGHT
+
+		internal LogicalCallContext LogicalCallContext {
+			get {
+				if (_lcc == null)
+					_lcc = new LogicalCallContext ();
+				return _lcc;
+			}
+			set {
+				_lcc = value;
+			}
+		}
+
+		internal Dictionary<string, object> DataStore {
+			get {
+				if (local_data == null)
+					local_data = new Dictionary<string, object> ();
+				return local_data;
+			}
+			set {
+				local_data = value;
+			}
+		}
+
+#if !MOBILE
 		internal SecurityContext SecurityContext {
 			get {
 				if (_sc == null)
@@ -116,31 +161,26 @@ namespace System.Threading {
 			set { _sc = value; }
 		}
 #endif
+
 		internal bool FlowSuppressed {
 			get { return _suppressFlow; }
 			set { _suppressFlow = value; }
 		}
 
-		// Note: Previous to version 2.0 only the CompressedStack and (sometimes!) the WindowsIdentity
-		// were propagated to new threads. This is why ExecutionContext is internal in before NET_2_0.
-		// It also means that all newer context classes should be here (i.e. inside the #if NET_2_0).
-
 		public static bool IsFlowSuppressed ()
 		{
-			return Thread.CurrentThread.ExecutionContext.FlowSuppressed;
+			return Current.FlowSuppressed;
 		}
 
 		public static void RestoreFlow ()
 		{
-			ExecutionContext ec = Thread.CurrentThread.ExecutionContext;
+			ExecutionContext ec = Current;
 			if (!ec.FlowSuppressed)
 				throw new InvalidOperationException ();
 
 			ec.FlowSuppressed = false;
 		}
 
-#if !MOONLIGHT
-		[MonoTODO ("only the SecurityContext is considered")]
 		[SecurityPermission (SecurityAction.LinkDemand, Infrastructure = true)]
 		public static void Run (ExecutionContext executionContext, ContextCallback callback, object state)
 		{
@@ -149,10 +189,13 @@ namespace System.Threading {
 					"Null ExecutionContext"));
 			}
 
-			// FIXME: supporting more than one context (the SecurityContext)
-			// will requires a rewrite of this method
-
-			SecurityContext.Run (executionContext.SecurityContext, callback, state);
+			var prev = Current;
+			try {
+				Thread.CurrentThread.ExecutionContext = executionContext;
+				callback (state);
+			} finally {
+				Thread.CurrentThread.ExecutionContext = prev;
+			}
 		}
 
 		public static AsyncFlowControl SuppressFlow ()
@@ -161,6 +204,33 @@ namespace System.Threading {
 			t.ExecutionContext.FlowSuppressed = true;
 			return new AsyncFlowControl (t, AsyncFlowControlType.Execution);
 		}
-#endif
+
+		internal static LogicalCallContext CreateLogicalCallContext (bool createEmpty)
+		{
+			var lcc = Current._lcc;
+			if (lcc == null) {
+				if (createEmpty)
+					lcc = new LogicalCallContext ();
+
+				return lcc;
+			}
+
+			return (LogicalCallContext) lcc.Clone ();
+		}
+
+		internal void FreeNamedDataSlot (string name)
+		{
+			if (_lcc != null)
+				_lcc.FreeNamedDataSlot (name);
+
+			if (local_data != null)
+				local_data.Remove (name);
+		}
+
+		internal static ExecutionContext Current {
+			get {
+				return Thread.CurrentThread.ExecutionContext;
+			}
+		}
 	}
 }

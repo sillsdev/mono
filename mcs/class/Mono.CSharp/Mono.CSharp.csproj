@@ -10,7 +10,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Mono.CSharp</RootNamespace>
     <AssemblyName>Mono.CSharp</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
@@ -31,13 +31,14 @@
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>TRACE;DEBUG;NET_1_1;NET_2_0</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;NET_4_0</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
@@ -46,7 +47,7 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;NET_4_0</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
@@ -71,6 +72,9 @@
     <Compile Include="..\..\class\Mono.CompilerServices.SymbolWriter\MonoSymbolWriter.cs">
       <Link>MonoSymbolWriter.cs</Link>
     </Compile>
+    <Compile Include="..\..\class\Mono.CompilerServices.SymbolWriter\SourceMethodBuilder.cs">
+      <Link>SourceMethodBuilder.cs</Link>
+    </Compile>
     <Compile Include="..\..\mcs\anonymous.cs">
       <Link>anonymous.cs</Link>
     </Compile>
@@ -82,6 +86,9 @@
     </Compile>
     <Compile Include="..\..\mcs\assign.cs">
       <Link>assign.cs</Link>
+    </Compile>
+    <Compile Include="..\..\mcs\async.cs">
+      <Link>async.cs</Link>
     </Compile>
     <Compile Include="..\..\mcs\attribute.cs">
       <Link>attribute.cs</Link>
@@ -200,20 +207,17 @@
     <Compile Include="..\..\mcs\report.cs">
       <Link>report.cs</Link>
     </Compile>
-    <Compile Include="..\..\mcs\rootcontext.cs">
-      <Link>rootcontext.cs</Link>
+    <Compile Include="..\..\mcs\settings.cs">
+      <Link>settings.cs</Link>
     </Compile>
-    <Compile Include="..\..\mcs\roottypes.cs">
-      <Link>roottypes.cs</Link>
+    <Compile Include="..\..\mcs\module.cs">
+      <Link>module.cs</Link>
     </Compile>
     <Compile Include="..\..\mcs\statement.cs">
       <Link>statement.cs</Link>
     </Compile>
     <Compile Include="..\..\mcs\support.cs">
       <Link>support.cs</Link>
-    </Compile>
-    <Compile Include="..\..\mcs\symbolwriter.cs">
-      <Link>symbolwriter.cs</Link>
     </Compile>
     <Compile Include="..\..\mcs\typemanager.cs">
       <Link>typemanager.cs</Link>

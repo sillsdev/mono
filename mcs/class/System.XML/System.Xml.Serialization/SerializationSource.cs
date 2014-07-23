@@ -34,7 +34,6 @@ using System.Text;
 
 namespace System.Xml.Serialization 
 {
-#if !MOONLIGHT
 	internal abstract class SerializationSource 
 	{
 		Type[] includedTypes;
@@ -149,7 +148,7 @@ namespace System.Xml.Serialization
 		string elementName;
 		bool hasWrapperElement;
 		string membersHash;
-		bool writeAccessors;
+//		bool writeAccessors;
 		bool literalFormat;
 		
 		public MembersSerializationSource (string elementName, bool hasWrapperElement, XmlReflectionMember [] members, bool writeAccessors, 
@@ -158,7 +157,7 @@ namespace System.Xml.Serialization
 		{
 			this.elementName = elementName;
 			this.hasWrapperElement = hasWrapperElement;
-			this.writeAccessors = writeAccessors;
+//			this.writeAccessors = writeAccessors;
 			this.literalFormat = literalFormat;
 			
 			StringBuilder sb = new StringBuilder ();
@@ -187,7 +186,5 @@ namespace System.Xml.Serialization
 			return membersHash.GetHashCode ();
 		}
 	}
-#endif
-	
 }
 

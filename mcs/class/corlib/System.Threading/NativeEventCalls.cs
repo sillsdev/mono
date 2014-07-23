@@ -34,14 +34,14 @@
 using System;
 using System.Runtime.CompilerServices;
 
-#if !NET_2_1
+#if !MOBILE
 using System.Security.AccessControl;
 using System.IO;
 #endif
 
 namespace System.Threading 
 {
- 	internal sealed class NativeEventCalls
+ 	internal static class NativeEventCalls
 	{
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public static extern IntPtr CreateEvent_internal(bool manual,bool initial,string name, out bool created);
@@ -55,7 +55,7 @@ namespace System.Threading
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public static extern void CloseEvent_internal (IntPtr handle);
 
-#if !NET_2_1
+#if !MOBILE
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		public static extern IntPtr OpenEvent_internal (string name, EventWaitHandleRights rights, out MonoIOError error);
 #endif

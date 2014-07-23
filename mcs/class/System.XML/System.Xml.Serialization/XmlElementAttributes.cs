@@ -29,15 +29,14 @@
 //
 
 using System.Collections;
-using System;
+using System.Collections.Generic;
 
 namespace System.Xml.Serialization
 {
 	/// <summary>
 	/// Summary description for XmlElementAttributes.
 	/// </summary>
-	public class XmlElementAttributes : CollectionBase
-	{
+	public class XmlElementAttributes : CollectionBase {
 		public XmlElementAttribute this [int index] {
 			get {
 				return (XmlElementAttribute)List [index];
@@ -49,7 +48,7 @@ namespace System.Xml.Serialization
 
 		public int Add (XmlElementAttribute attribute)
 		{
-			return List.Add (attribute);
+			return (List as IList).Add (attribute);
 		}
 
 		public bool Contains(XmlElementAttribute attribute)

@@ -185,7 +185,9 @@ namespace MonoTests.System.Linq.Expressions {
 			Assert.IsNull (c.Method);
 		}
 
-		enum EineEnum { }
+		enum EineEnum {
+			EineValue,
+		}
 
 		[Test]
 		public void ConvertEnumToInt32 ()
@@ -363,6 +365,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void CompileNullableToNotNullable ()
 		{
 			var p = Expression.Parameter (typeof (int?), "i");
@@ -455,6 +458,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void ConvertImplicitToShortToNullableInt ()
 		{
 			var a = Expression.Parameter (typeof (ImplicitToShort?), "a");
@@ -480,6 +484,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void NullableImplicitToShort ()
 		{
 			var i = Expression.Parameter (typeof (ImplicitToShort?), "i");
@@ -515,6 +520,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void ConvertNullableULongToNullableDecimal ()
 		{
 			var p = Expression.Parameter (typeof (ulong?), "l");
@@ -559,6 +565,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void ConvertNullableImplictToIntToNullableLong ()
 		{
 			var i = Expression.Parameter (typeof (ImplicitToInt?), "i");
@@ -583,6 +590,17 @@ namespace MonoTests.System.Linq.Expressions {
 				Expression.Constant ((int?) 0),
 				typeof (string),
 				typeof (Convert).GetMethod ("ToString", new [] { typeof (object) }));
+		}
+
+		[Test] // #678897
+		public void ConvertEnumValueToEnum ()
+		{
+			var node = Expression.Convert (
+				Expression.Constant (EineEnum.EineValue, typeof (EineEnum)),
+				typeof (Enum));
+
+			Assert.IsNotNull (node);
+			Assert.AreEqual (typeof (Enum), node.Type);
 		}
 	}
 }

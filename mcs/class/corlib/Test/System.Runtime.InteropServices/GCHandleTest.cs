@@ -125,11 +125,11 @@ namespace MonoTests.System.Runtime.InteropServices
 				gch.Free ();
 			}
 		}
-
+#if !MONOTOUCH
 		[Test]
 		public void WeakHandleWorksOnNonRootDomain ()
 		{
-			Console.WriteLine("current app domain: " + AppDomain.CurrentDomain.Id);
+			//Console.WriteLine("current app domain: " + AppDomain.CurrentDomain.Id);
 			AppDomain domain = AppDomain.CreateDomain("testdomain");
 
 			Assembly ea = Assembly.GetExecutingAssembly ();
@@ -192,6 +192,7 @@ namespace MonoTests.System.Runtime.InteropServices
 			private readonly string _assemblyFile;
 			private readonly string _assemblyName;
 		}
+#endif
 	}
 
 }

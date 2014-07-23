@@ -40,7 +40,10 @@ namespace System.Security {
 	{
 		private bool _capture;
 		private IntPtr _winid;
+
+#if !MOBILE	
 		private CompressedStack _stack;
+#endif
 		private bool _suppressFlowWindowsIdentity;
 		private bool _suppressFlow;
 
@@ -52,9 +55,11 @@ namespace System.Security {
 		internal SecurityContext (SecurityContext sc)
 		{
 			_capture = true;
+#if !MOBILE
 			_winid = sc._winid;
 			if (sc._stack != null)
 				_stack = sc._stack.CreateCopy ();
+#endif
 		}
 
 		public SecurityContext CreateCopy ()
@@ -69,14 +74,18 @@ namespace System.Security {
 
 		static public SecurityContext Capture ()
 		{
+#if !MOBILE			
 			SecurityContext sc = Thread.CurrentThread.ExecutionContext.SecurityContext;
 			if (sc.FlowSuppressed)
 				return null;
+#endif
 
 			SecurityContext capture = new SecurityContext ();
 			capture._capture = true;
+#if !MOBILE
 			capture._winid = WindowsIdentity.GetCurrentToken ();
 			capture._stack = CompressedStack.Capture ();
+#endif
 			return capture;
 		}
 		
@@ -98,10 +107,12 @@ namespace System.Security {
 			set { _suppressFlowWindowsIdentity = value; }
 		}
 
+#if !MOBILE	
 		internal CompressedStack CompressedStack {
 			get { return _stack; }
 			set { _stack = value; }
 		}
+#endif
 
 		internal IntPtr IdentityToken {
 			get { return _winid; }
@@ -112,16 +123,25 @@ namespace System.Security {
 
 		static public bool IsFlowSuppressed ()
 		{
+#if MOBILE
+			return false;
+#else
 			return Thread.CurrentThread.ExecutionContext.SecurityContext.FlowSuppressed;
+#endif
 		} 
 
 		static public bool IsWindowsIdentityFlowSuppressed ()
 		{
+#if MOBILE
+			return false;
+#else
 			return Thread.CurrentThread.ExecutionContext.SecurityContext.WindowsIdentityFlowSuppressed;
+#endif
 		}
 
 		static public void RestoreFlow ()
 		{
+#if !MOBILE
 			SecurityContext sc = Thread.CurrentThread.ExecutionContext.SecurityContext;
 			// if nothing is suppressed then throw
 			if (!sc.FlowSuppressed && !sc.WindowsIdentityFlowSuppressed)
@@ -129,6 +149,7 @@ namespace System.Security {
 
 			sc.FlowSuppressed = false;
 			sc.WindowsIdentityFlowSuppressed = false;
+#endif
 		}
 
 		// if you got the context then you can use it
@@ -140,7 +161,9 @@ namespace System.Security {
 				throw new InvalidOperationException (Locale.GetText (
 					"Null SecurityContext"));
 			}
-
+#if MOBILE
+			callback (state);
+#else
 			SecurityContext sc = Thread.CurrentThread.ExecutionContext.SecurityContext;
 			IPrincipal original = Thread.CurrentPrincipal;
 			try {
@@ -159,23 +182,32 @@ namespace System.Security {
 				if ((original != null) && (sc.IdentityToken != IntPtr.Zero))
 					Thread.CurrentPrincipal = original;
 			}
+#endif
 		}
 
 		[SecurityPermission (SecurityAction.LinkDemand, Infrastructure = true)]
 		static public AsyncFlowControl SuppressFlow ()
 		{
+#if MOBILE
+			throw new NotSupportedException ();
+#else			
 			Thread t = Thread.CurrentThread;
 			// suppress both flows
 			t.ExecutionContext.SecurityContext.FlowSuppressed = true;
 			t.ExecutionContext.SecurityContext.WindowsIdentityFlowSuppressed = true;
 			return new AsyncFlowControl (t, AsyncFlowControlType.Security);
+#endif
 		}
 
 		static public AsyncFlowControl SuppressFlowWindowsIdentity ()
 		{
+#if MOBILE
+			throw new NotSupportedException ();
+#else			
 			Thread t = Thread.CurrentThread;
 			t.ExecutionContext.SecurityContext.WindowsIdentityFlowSuppressed = true;
 			return new AsyncFlowControl (t, AsyncFlowControlType.Security);
+#endif
 		}
 	}
 }

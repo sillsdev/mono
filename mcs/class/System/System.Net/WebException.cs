@@ -30,12 +30,8 @@ using System.Runtime.Serialization;
 
 namespace System.Net 
 {
-#if MOONLIGHT && INSIDE_SYSTEM
-	internal class WebException : InvalidOperationException, ISerializable {
-#else
 	[Serializable]
 	public class WebException : InvalidOperationException, ISerializable {
-#endif
 		private WebResponse response;
 		private WebExceptionStatus status = WebExceptionStatus.UnknownError;
 
@@ -49,9 +45,8 @@ namespace System.Net
 		{
 		}
 
-		protected WebException (SerializationInfo info,
-		   			StreamingContext context)
-			: base (info, context)
+		protected WebException (SerializationInfo serializationInfo, StreamingContext streamingContext)
+			: base (serializationInfo, streamingContext)
 		{
 		}
 

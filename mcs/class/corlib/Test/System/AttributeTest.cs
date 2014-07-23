@@ -12,7 +12,9 @@
 
 using System;
 using System.Reflection;
+#if !MONOTOUCH
 using System.Reflection.Emit;
+#endif
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -82,6 +84,17 @@ namespace MonoTests.System
 			{
 			}
 		}
+
+		class MyDerivedClassNoAttribute : MyClass
+		{
+		}
+
+		internal class AttributeWithTypeId : Attribute
+		{
+			public override object TypeId {
+				get { return this; }
+			}
+		}
 	}
 
 	[TestFixture]
@@ -100,6 +113,7 @@ namespace MonoTests.System
 			Assert.IsFalse (Attribute.IsDefined (typeof (MyDerivedClass), typeof (YourCustomAttribute), false), "#8");
 			Assert.IsFalse (Attribute.IsDefined (typeof (MyDerivedClass), typeof (UnusedAttribute), false), "#9");
 			Assert.IsTrue (Attribute.IsDefined (typeof (MyClass).GetMethod ("ParamsMethod").GetParameters () [0], typeof (ParamArrayAttribute), false), "#10");
+			Assert.IsFalse (Attribute.IsDefined (typeof (MyDerivedClassNoAttribute), typeof (MyCustomAttribute)), "#11");
 		}
 
 		[Test]
@@ -134,17 +148,9 @@ namespace MonoTests.System
 		public void IsDefined_PropertyInfo_Override ()
 		{
 			PropertyInfo pi = typeof (TestSub).GetProperty ("PropBase3");
-#if NET_2_0
 			Assert.IsTrue (Attribute.IsDefined (pi, typeof (PropTestAttribute)), "#B1");
-#else
-			Assert.IsFalse (Attribute.IsDefined (pi, typeof (PropTestAttribute)), "#B1");
-#endif
 			Assert.IsFalse (Attribute.IsDefined (pi, typeof (PropTestAttribute), false), "#B2");
-#if NET_2_0
 			Assert.IsTrue (Attribute.IsDefined (pi, typeof (PropTestAttribute), true), "#B3");
-#else
-			Assert.IsFalse (Attribute.IsDefined (pi, typeof (PropTestAttribute), true), "#B3");
-#endif
 			Assert.IsFalse (Attribute.IsDefined (pi, typeof (ComVisibleAttribute)), "#B4");
 			Assert.IsFalse (Attribute.IsDefined (pi, typeof (ComVisibleAttribute), false), "#B5");
 			Assert.IsFalse (Attribute.IsDefined (pi, typeof (ComVisibleAttribute), true), "#B6");
@@ -816,6 +822,14 @@ namespace MonoTests.System
 		}
 
 		[Test]
+		public void IsDefinedForPseudoAttribute ()
+		{			
+			Assert.IsTrue (Attribute.IsDefined (typeof (object), typeof(SerializableAttribute), true), "#1");
+			Assert.IsFalse (Attribute.IsDefined (typeof (AttributeTest), typeof(SerializableAttribute), true), "#2");
+		}
+
+#if !MONOTOUCH
+		[Test]
 		public void GetCustomAttributeOnNewSreTypes ()
 		{
 			AssemblyName assemblyName = new AssemblyName ();
@@ -862,7 +876,7 @@ namespace MonoTests.System
 				Assert.Fail ("#1");
 			} catch (NotSupportedException) {}
 		}
-
+#endif
 		[Test] //Regression test for #499569
 		public void GetCattrOnPropertyAndInheritance ()
 		{
@@ -990,6 +1004,14 @@ namespace MonoTests.System
 
 			MyOwnCustomAttribute b1 = new MyOwnCustomAttribute (null);
 			Assert.AreNotEqual (a1.GetHashCode (), b1.GetHashCode (), "non-identical-types");
+		}
+
+		[Test]
+		public void GetHashCodeWithOverriddenTypeId ()
+		{
+			//check for not throwing stack overflow exception
+			AttributeWithTypeId a = new AttributeWithTypeId ();
+			a.GetHashCode ();
 		}
 	}
 

@@ -44,10 +44,8 @@ namespace System.Windows.Forms.Layout
 				Control child = controls[i];
 				Size child_size = child.Size;
 
-#if NET_2_0
 				if (child.AutoSize)
 					child_size = GetPreferredControlSize (child);
-#endif
 
 				if (!child.VisibleInternal
 				    || child.ControlLayoutType == Control.LayoutType.Anchor)
@@ -158,7 +156,6 @@ namespace System.Windows.Forms.Layout
 			}
 		}
 		
-#if NET_2_0
 		void LayoutAutoSizedChildren (Control parent, Control[] controls)
 		{
 			for (int i = 0; i < controls.Length; i++) {
@@ -228,7 +225,6 @@ namespace System.Windows.Forms.Layout
 
 			container.SetBoundsInternal (left, top, width, height, BoundsSpecified.None);
 		}
-#endif
 
 		public override bool Layout (object container, LayoutEventArgs args)
 		{
@@ -238,15 +234,12 @@ namespace System.Windows.Forms.Layout
 
 			LayoutDockedChildren (parent, controls);
 			LayoutAnchoredChildren (parent, controls);
-#if NET_2_0
 			LayoutAutoSizedChildren (parent, controls);
 			if (parent is Form) LayoutAutoSizeContainer (parent);
-#endif
 
 			return false;
 		}
 
-#if NET_2_0
 		private Size GetPreferredControlSize (Control child)
 		{
 			int width;
@@ -264,22 +257,20 @@ namespace System.Windows.Forms.Layout
 				if (preferredsize.Height > height)
 					height = preferredsize.Height;
 			}
-
 			if (child.AutoSize && child is FlowLayoutPanel && child.Dock != DockStyle.None) {
 				switch (child.Dock) {
-					case DockStyle.Left:
-					case DockStyle.Right:
-						if (preferredsize.Width < child.ExplicitBounds.Width && preferredsize.Height < child.Parent.PaddingClientRectangle.Height)
-							width = preferredsize.Width;
-						break;
-					case DockStyle.Top:
-					case DockStyle.Bottom:
-						if (preferredsize.Height < child.ExplicitBounds.Height && preferredsize.Width < child.Parent.PaddingClientRectangle.Width)
-							height = preferredsize.Height;
-						break;
+				case DockStyle.Left:
+				case DockStyle.Right:
+					if (preferredsize.Width < child.ExplicitBounds.Width && preferredsize.Height < child.Parent.PaddingClientRectangle.Height)
+						width = preferredsize.Width;
+					break;
+				case DockStyle.Top:
+				case DockStyle.Bottom:
+					if (preferredsize.Height < child.ExplicitBounds.Height && preferredsize.Width < child.Parent.PaddingClientRectangle.Width)
+						height = preferredsize.Height;
+					break;
 				}
 			}
-
 			// Sanity
 			if (width < child.MinimumSize.Width)
 				width = child.MinimumSize.Width;
@@ -295,6 +286,5 @@ namespace System.Windows.Forms.Layout
 				
 			return new Size (width, height);
 		}
-#endif
 	}
 }

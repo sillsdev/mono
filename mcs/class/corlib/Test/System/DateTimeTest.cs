@@ -1,4 +1,4 @@
-//
+﻿//
 // DateTimeTest.cs - NUnit Test Cases for the System.DateTime struct
 //
 // author:
@@ -356,6 +356,18 @@ namespace MonoTests.System
 		}
 
 		[Test]
+		public void TestToStringGenitive ()
+		{
+			DateTime dt = new DateTime (2010, 1, 2, 3, 4, 5);
+			var dtf = new CultureInfo ("cs-cz").DateTimeFormat;
+
+			Assert.AreEqual ("2 ledna", dt.ToString ("d MMMM", dtf), "#A1");
+			Assert.AreEqual ("2. ledna", dt.ToString ("d. MMMM", dtf), "#A2");
+			Assert.AreEqual ("leden", dt.ToString ("MMMM", dtf), "#A4");
+			Assert.AreEqual ("leden", dt.ToString ("MMMMMMM", dtf), "#A5");
+		}
+
+		[Test]
 		public void ParseExact_Format_Empty ()
 		{
 			try {
@@ -550,11 +562,32 @@ namespace MonoTests.System
 		[Test]
 		public void TestParseExact4 ()
 		{
-			// bug #60912, modified hour as 13:00
+			// Checks 24hours format used together with the AM/PM designator
 			string s = "6/28/2004 13:00:00 AM";
 			string f = "M/d/yyyy HH':'mm':'ss tt";
+			try {
+				DateTime.ParseExact (s, f, CultureInfo.InvariantCulture);
+				Assert.Fail ("#1");
+			} catch (FormatException) {
+			}
+
+			s = "6/28/2004 04:00:00 AM";
 			DateTime.ParseExact (s, f, CultureInfo.InvariantCulture);
 
+			s = "6/28/2004 06:00:00 PM";
+			try {
+				DateTime.ParseExact (s, f, CultureInfo.InvariantCulture);
+				Assert.Fail ("#2");
+			} catch (FormatException) {
+			}
+
+			s = "6/28/2004 17:00:00 PM";
+			DateTime.ParseExact (s, f, CultureInfo.InvariantCulture);
+		}
+		
+		[Test]
+		public void TestParseExact4_2 ()
+		{
 			// bug #63137
 			DateTime.ParseExact ("Wed, 12 May 2004 20:51:09 +0200",
 				@"ddd, d MMM yyyy H:m:s zzz",
@@ -572,6 +605,22 @@ namespace MonoTests.System
 			dt = dt.ToUniversalTime ();
 			Assert.AreEqual (23, dt.Hour, "Hour");
 			Assert.AreEqual (21, dt.Minute, "Minute");
+		}
+
+		[Test]
+		public void TestParseExactMiliseconds ()
+		{
+			string s = "1984-09-17T09:00:00.6Z";
+			DateTime dt = DateTime.ParseExact (s, "yyyy-MM-dd'T'HH:mm:ss.FFF'Z'", CultureInfo.InvariantCulture);
+			Assert.AreEqual (new DateTime (1984, 9, 17, 9, 0, 0, 600), dt, "#1");
+
+			s = "1984-09-17T09:00:00Z";
+			dt = DateTime.ParseExact (s, "yyyy-MM-dd'T'HH:mm:ss.FFF'Z'", CultureInfo.InvariantCulture);
+			Assert.AreEqual (new DateTime (1984, 9, 17, 9, 0, 0, 0), dt, "#2");
+
+			s = "1984-09-17T09:00:00Z";
+			dt = DateTime.ParseExact (s, "yyyy-MM-dd'T'HH:mm:ssFFF'Z'", CultureInfo.InvariantCulture);
+			Assert.AreEqual (new DateTime (1984, 9, 17, 9, 0, 0, 0), dt, "#3");
 		}
 
 		[Test]
@@ -815,12 +864,23 @@ namespace MonoTests.System
 		}
 
 		[Test]
-		[Ignore ("need to fix tests that run on different timezones")]
 		public void TestParse2 ()
 		{
 			DateTime t1 = DateTime.Parse ("Mon, 25 Feb 2002 04:25:13 GMT");
 			t1 = TimeZone.CurrentTimeZone.ToUniversalTime(t1);
-			Assert.AreEqual (04 - TimeZone.CurrentTimeZone.GetUtcOffset (t1).Hours, t1.Hour);
+			Assert.AreEqual (4, t1.Hour);
+		}
+
+		[Test]
+		public void TestUtcOffset_Novell710512 ()
+		{
+			// test for bug Novell #710512
+			if (TimeZoneInfo.Local.BaseUtcOffset == TimeSpan.Zero)
+				Assert.Ignore("Test doesn't apply with current time zone");
+
+			var localTime = DateTime.Parse ("Mon, 25 Feb 2002 04:25:13 GMT");
+			var utcTime = TimeZone.CurrentTimeZone.ToUniversalTime(localTime);
+			Assert.AreEqual (TimeSpan.Zero, TimeZone.CurrentTimeZone.GetUtcOffset (utcTime));
 		}
 
 		[Test]
@@ -867,10 +927,9 @@ namespace MonoTests.System
 			Assert.AreEqual (13, t1.Second, "#C6");
 
 			// Some date 'T' time formats
-#if NET_2_0 // Net_1_1 requires hh:mm:ss
 			t1 = DateTime.Parse ("2002-02-25T05:25");
 			Assert.AreEqual (myTicks [3], t1.Ticks, "#D1");
-#endif
+
 			t1 = DateTime.Parse ("2002-02-25T05:25:13");
 			Assert.AreEqual (myTicks [4], t1.Ticks, "#D1");
 			t1 = DateTime.Parse ("2002-02-25T05:25:13.008");
@@ -934,7 +993,7 @@ namespace MonoTests.System
 			Assert.AreEqual (myTicks[3], t1.Ticks + hourTicks/2 - offset, "#F3");
 			t1 = DateTime.Parse ("02-2002-25 05:25:13+02", USCultureInfo);
 			Assert.AreEqual (myTicks[4], t1.Ticks + 2*hourTicks - offset, "#F4");
-#if NET_2_0
+
 			// NET 1.0 doesn't accept second fractions and time zone.
 			t1 = DateTime.Parse ("2002-02-25 05:25:13.008-02");
 			Assert.AreEqual (myTicks[2], t1.Ticks - 2*hourTicks - offset, "#F5");
@@ -943,7 +1002,6 @@ namespace MonoTests.System
 			Assert.AreEqual (myTicks[4], t1.Ticks - 2*hourTicks - offset, "#F6");
 			t1 = DateTime.Parse ("25 Feb 2002 05:25:13-02 AM", USCultureInfo);
 			Assert.AreEqual (myTicks[4], t1.Ticks - 2*hourTicks - offset, "#F6");
-#endif
 		}
 
 		[Test]
@@ -1054,13 +1112,10 @@ namespace MonoTests.System
 			Assert.AreEqual (myTicks[7], t1.Ticks, "#E1");
 			t1 = DateTime.Parse ("01/02/2003", cultureInfo);
 			Assert.AreEqual (myTicks[7], t1.Ticks, "#E2");
-#if NET_2_0
+
 			t1 = DateTime.Parse ("2003/01/02", cultureInfo);
 			Assert.AreEqual (myTicks[7], t1.Ticks, "#E3");
-#else
-			t1 = DateTime.Parse ("2003/02/01", cultureInfo);
-			Assert.AreEqual (myTicks[7], t1.Ticks, "#E3");
-#endif
+
 			// For some reason the following throws an exception on .Net
 			// t1 = DateTime.Parse ("03/Feb/01", cultureInfo);
 			// Assert.AreEqual (myTicks[7], t1.Ticks, "#E4");
@@ -1081,16 +1136,12 @@ namespace MonoTests.System
 
 			// Day month behaviour
 			dateFormatInfo.MonthDayPattern = "dd/MM";
-#if NET_2_0
+
 			t1 = DateTime.Parse ("Feb 03", cultureInfo);
 			Assert.AreEqual (2, t1.Month, "#B1");
 			Assert.AreEqual (1, t1.Day, "#B2");
 			Assert.AreEqual (2003, t1.Year, "#B3");
-#else // In .Net 1.0 "Feb 03" is always Feb 3rd (and not Feb 2003).
-			t1 = DateTime.Parse ("Feb 03", cultureInfo);
-			Assert.AreEqual (2, t1.Month, "#B4");
-			Assert.AreEqual (3, t1.Day, "#B5");
-#endif
+
 			t1 = DateTime.Parse ("03/02", cultureInfo);
 			Assert.AreEqual (2, t1.Month, "#B6");
 			Assert.AreEqual (3, t1.Day, "#B7");
@@ -1165,7 +1216,6 @@ namespace MonoTests.System
 			DateTime.Parse ("Sat,,, 01,,, Oct,,, ,,,1994 03:00:00", CultureInfo.InvariantCulture);
 		}
 
-#if NET_2_0
 		[Test]
 		[ExpectedException (typeof (FormatException))]
 		public void Parse_CommaAfterHours ()
@@ -1173,7 +1223,6 @@ namespace MonoTests.System
 			// ',' after 03 is not allowed.
 			DateTime.Parse ("Sat,,, 01,,, Oct,,, ,,,1994 03,:00:00", CultureInfo.InvariantCulture);
 		}
-#endif
 
 		[Test] // bug #72788
 		public void Parse_Bug72788 ()
@@ -1210,63 +1259,6 @@ namespace MonoTests.System
 		}
 
 		[Test]
-		// FIXME: This test doesn't work on cultures like es-DO which have patterns
-		// for both dd/MM/yyyy & MM/dd/yyyy
-		[Category ("NotWorking")]
-		public void Parse_Bug53023a ()
-		{
-			foreach (CultureInfo ci in CultureInfo.GetCultures (CultureTypes.SpecificCultures)) {
-				FormatException e = null;
-				try {
-					// this fails for MOST culture under MS 1.1 SP1
-					DateTime.Parse ("8/16/2005", ci);
-				}
-				catch (FormatException fe) {
-					e = fe;
-				}
-				string c = ci.ToString ();
-				switch (c) {
-				case "af-ZA":
-				case "en-CB":
-				case "en-PH":
-				case "en-US":
-				case "en-ZA":
-				case "en-ZW":
-				case "es-PA":
-				case "eu-ES":
-				case "fa-IR":
-				case "fr-CA":
-				case "hu-HU":
-				case "ja-JP":
-				case "ko-KR":
-				case "lv-LV":
-				case "lt-LT":
-				case "mn-MN":
-				case "pl-PL":
-				case "sq-AL":
-				case "sv-SE":
-				case "sw-KE":
-				case "zh-CN":
-				case "zh-TW":
-#if NET_2_0
-				case "ns-ZA":
-				case "se-SE":
-				case "sma-SE":
-				case "smj-SE":
-				case "tn-ZA":
-				case "xh-ZA":
-				case "zu-ZA":
-#endif
-					Assert.IsNull (e, c);
-					break;
-				default:
-					Assert.IsNotNull (e, c);
-					break;
-				}
-			}
-		}
-
-		[Test]
 		public void Parse_Bug53023b ()
 		{
 			foreach (CultureInfo ci in CultureInfo.GetCultures (CultureTypes.SpecificCultures)) {
@@ -1277,7 +1269,6 @@ namespace MonoTests.System
 
 		[Test]
 		[ExpectedException (typeof (FormatException))]
-		[Category ("NotWorking")]
 		public void Parse_RequireSpaceSeparator ()
 		{
 			DateTime.Parse ("05:25:132002-02-25", CultureInfo.InvariantCulture);
@@ -1338,11 +1329,7 @@ namespace MonoTests.System
 		}
 	
 		[Test]
-#if NET_2_0
 		[ExpectedException(typeof (FormatException))]
-#else
-		[ExpectedException(typeof (ArgumentOutOfRangeException))]
-#endif
 		public void ParseFormatExceptionForInvalidYear ()
 		{
 			// Bug #77633.  In .NET 1..1, the expected exception is ArgumentOutOfRangeException
@@ -1519,6 +1506,7 @@ namespace MonoTests.System
 		}
 
 		[Test]
+		[Ignore ("This test is probably geo location dependent, at least fails on .NET 4.0 in Japan")]
 		public void ToOADate_MaxValue ()
 		{
 			Assert.AreEqual (2958465.99999999d, DateTime.MaxValue.ToOADate ());
@@ -1548,30 +1536,20 @@ namespace MonoTests.System
 		{
 			// if this test fails then *ALL* or *MOST* X509Certificate tests will also fails
 			DateTime dt = DateTime.ParseExact ("19960312183847Z", "yyyyMMddHHmmssZ", null);
-#if NET_2_0
 			Assert.AreEqual (DateTimeKind.Local, dt.Kind, "#1");
 			dt = dt.ToUniversalTime ();
 			Assert.AreEqual (DateTimeKind.Utc, dt.Kind, "#2");
-#else
-			dt = dt.ToUniversalTime ();
-#endif
 			Assert.AreEqual ("03/12/1996 18:38:47", dt.ToString (), "#3");
 
 			// technically this is invalid (PKIX) because of the missing seconds but it exists so...
 			dt = DateTime.ParseExact ("9602231915Z", "yyMMddHHmmZ", null);
-#if NET_2_0
 			Assert.AreEqual (DateTimeKind.Local, dt.Kind, "#4");
 			dt = dt.ToUniversalTime ();
 			Assert.AreEqual (DateTimeKind.Utc, dt.Kind, "#5");
-#else
-			dt = dt.ToUniversalTime ();
-#endif
 			Assert.AreEqual ("02/23/1996 19:15:00", dt.ToString (), "#6");
 
-#if NET_2_0
 			dt = DateTime.ParseExact ("19960312183847Z", "yyyyMMddHHmmssZ", null, DateTimeStyles.AdjustToUniversal);
 			Assert.AreEqual (DateTimeKind.Utc, dt.Kind, "#7");
-#endif
 		}
 
 		[Test]
@@ -1580,14 +1558,10 @@ namespace MonoTests.System
 			// However, "Z" and "'Z'" are different.
 			DateTime dt = DateTime.ParseExact ("19960312183847Z", "yyyyMMddHHmmss'Z'", null);
 			DateTime dtz = DateTime.ParseExact ("19960312183847Z", "yyyyMMddHHmmssZ", null);
-#if NET_2_0
 			Assert.AreEqual (DateTimeKind.Unspecified, dt.Kind, "#1");
 			dt = dt.ToLocalTime ();
 			Assert.AreEqual (DateTimeKind.Local, dt.Kind, "#2");
 			Assert.AreEqual (DateTimeKind.Local, dtz.Kind, "#3");
-#else
-			dt = dt.ToLocalTime ();
-#endif
 			Assert.AreEqual (dt, dtz, "#4");
 		}
 
@@ -1621,16 +1595,22 @@ namespace MonoTests.System
 					Thread.CurrentThread.CurrentCulture = ci;
 					DateTime dt;
 
+					switch (ci.LCID) {
+					case 1025: // ar-SA
+					case 2559: // qps-plocm
+						continue; // fails too many tests below on .NET.
+					}
+
 					// Common patterns
 					// X509Certificate pattern is _always_ accepted.
 					stage = "1";
 					dt = DateTime.ParseExact ("19960312183847Z", "yyyyMMddHHmmssZ", null);
-#if NET_1_1
+
 					stage = "2";
-					// culture 1025 ar-SA fails
+					// fails with many cultures on .NET.
 	//				if (i != 127)
 	//					dt = DateTime.Parse ("19960312183847Z");
-#endif
+
 					stage = "3";
 					dt = DateTime.Parse ("2004-05-26T03:29:01.1234567");
 					stage = "4";
@@ -1641,7 +1621,11 @@ namespace MonoTests.System
 					// "th-TH" locale rejects them since in
 					// ThaiBuddhistCalendar the week of a day is different.
 					// (and also for years).
-					if (ci.LCID != 1054) {
+					switch (ci.LCID) {
+					case 1054:
+					case 1128: // ha-Latn-NG
+						break;
+					default:
 						try {
 							stage = "5";
 							dt = DateTime.Parse ("Sat, 29 Oct 1994 12:00:00 GMT", ci);
@@ -1662,12 +1646,14 @@ namespace MonoTests.System
 						}
 						stage = "7";
 						Assert.AreEqual (3, dt.Hour, String.Format ("stage 7.1 RFC1123 variant on culture {0} {1}", ci.LCID, ci));
+						break;
 					}
 
 					switch (ci.LCID) {
-					case 1025: // ar-SA
 					case 1054: // th-TH
+					case 1123: // ps-AF
 					case 1125: // div-MV
+					case 1164: // prs-AF
 						break;
 					default:
 						stage = "8";
@@ -1679,7 +1665,7 @@ namespace MonoTests.System
 						break;
 					}
 
-#if NET_1_1
+
 					// ka-GE rejects these formats under MS.NET. 
 					// I wonder why. Also, those tests fail under .NET 1.0.
 					if (ci.LCID != 1079) {
@@ -1695,24 +1681,10 @@ namespace MonoTests.System
 						case 1078: // MS does not pass this culture. Dunno why.
 							break;
 						default:
-#if ONLY_1_1
-							// bug #58938
-							stage = "12";
-							dt = DateTime.Parse ("2002#02#25 19:20:00");
-							// this stage fails under MS 2.0
-							stage = "13";
-							Assert.AreEqual (19, dt.Hour, String.Format ("bug #58938 on culture {0} {1}", ci.LCID, ci));
-#endif
 							break;
 						}
 						stage = "14";
 						dt = DateTime.Parse ("2002-02-25 12:01:03");
-#if ONLY_1_1
-						stage = "15";
-						dt = DateTime.Parse ("2002#02#25 12:01:03");
-						stage = "16";
-						dt = DateTime.Parse ("2002%02%25 12:01:03");
-#endif
 						stage = "17";
 						if (ci.DateTimeFormat.TimeSeparator != ".")
 							dt = DateTime.Parse ("2002.02.25 12:01:03");
@@ -1731,7 +1703,6 @@ namespace MonoTests.System
 						if (i != 1078)
 							Assert.AreEqual (12, dt.Hour, String.Format ("stage 18.1 RFC1123 UTC {0} {1}", i, ci));
 					}
-#endif
 				} catch (FormatException ex) {
 					Assert.Fail (String.Format ("stage {3}: Culture {0} {1} failed: {2}", i, ci, ex.Message, stage));
 				}
@@ -1779,6 +1750,49 @@ namespace MonoTests.System
 			DateTime.FromFileTimeUtc (-1);
 		}
 
+		[Test]
+		public void ToFileTimeUtc ()
+		{
+			// Randomly generated time outside DST.
+			var utc = new DateTime (1993, 01, 28, 08, 49, 48, DateTimeKind.Utc);
+			var local = utc.ToLocalTime ();
+			var unspecified = new DateTime (1993, 01, 28, 08, 49, 48);
+
+			Assert.AreEqual (DateTimeKind.Utc, utc.Kind);
+			Assert.AreEqual (DateTimeKind.Local, local.Kind);
+			Assert.AreEqual (DateTimeKind.Unspecified, unspecified.Kind);
+
+			Assert.AreEqual (628638077880000000, utc.Ticks);
+			Console.WriteLine (local.Ticks - utc.Ticks);
+
+			var offset = TimeZone.CurrentTimeZone.GetUtcOffset (local);
+
+			var utcFt = utc.ToFileTime ();
+			var localFt = local.ToFileTime ();
+			var unspecifiedFt = unspecified.ToFileTime ();
+
+			var utcUft = utc.ToFileTimeUtc ();
+			var localUft = local.ToFileTimeUtc ();
+			var unspecifiedUft = unspecified.ToFileTimeUtc ();
+
+			Assert.AreEqual (123726845880000000, utcFt);
+			Assert.AreEqual (utcFt, localFt);
+
+			Assert.AreEqual (offset.Ticks, utcFt - unspecifiedFt);
+
+			Assert.AreEqual (utcFt, utcUft);
+			Assert.AreEqual (utcFt, localUft);
+			Assert.AreEqual (utcFt, unspecifiedUft);
+		}
+		
+		[Test]
+		public void FromFileTimeUtcTest ()
+		{
+			DateTime dt = DateTime.FromFileTimeUtc (123456);
+			Assert.AreEqual (dt.Kind, DateTimeKind.Utc, "#Kind");
+			Assert.AreEqual (dt.Ticks, 504911232000123456, "#Ticks");
+		}
+
  		[Test]
 		public void Milliseconds ()
 		{
@@ -1788,11 +1802,7 @@ namespace MonoTests.System
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (FormatException))]
-#else
-		[Ignore ("Works only under MS 1.x (not Mono or MS 2.0).")]
-#endif
 		public void ParseNotExact ()
 		{
 			// The error reported is:
@@ -1820,7 +1830,6 @@ namespace MonoTests.System
 			Assert.AreEqual (0, date.Millisecond, "#7");
 		}
 
-#if NET_2_0
 		[Test]
 		public void ParseExact_Bug324845 ()
 		{
@@ -1837,7 +1846,6 @@ namespace MonoTests.System
 			Assert.AreEqual (45, t.Second);
 
 		}
-#endif
 
 		[Test]
 		[ExpectedException (typeof (FormatException))]
@@ -2016,9 +2024,7 @@ namespace MonoTests.System
 		{
 			DateTime dt = DateTime.ParseExact ("2007-06-15T10:30:10.5", "yyyy-MM-ddTHH:mm:ss.f", null);
 			Assert.AreEqual (633175002105000000, dt.Ticks, "#1");
-#if NET_2_0
 			Assert.AreEqual (DateTimeKind.Unspecified, dt.Kind, "#2");
-#endif
 		}
 
 		[Test]
@@ -2031,19 +2037,14 @@ namespace MonoTests.System
 
 			// Should return same time with Unspecified kind
 			dt = DateTime.ParseExact ("2008-02-05 02:38:26", "yyyy-MM-dd HH:mm:ss", ci);
-#if NET_2_0
 			Assert.AreEqual (DateTimeKind.Unspecified, dt.Kind, "A1");
-#endif
 			Assert.AreEqual (ticksUTC, dt.Ticks, "A2");
 
 			// Should return same time with Unspecified kind
 			dt = DateTime.ParseExact ("2008-02-05 02:38:26Z", "u", ci);
-#if NET_2_0
 			Assert.AreEqual (DateTimeKind.Unspecified, dt.Kind, "B1");
-#endif
 			Assert.AreEqual (ticksUTC, dt.Ticks, "B2");
 
-#if NET_2_0
 			// Should adjust to local time with Local kind
 			dt = DateTime.ParseExact ("2008-02-05 00:38:26-02:00", "yyyy-MM-dd HH:mm:ssK", ci);
 			Assert.AreEqual (DateTimeKind.Local, dt.Kind, "C1");
@@ -2054,14 +2055,11 @@ namespace MonoTests.System
 			dt = DateTime.ParseExact ("2008-02-05 00:38:26 -2", "yyyy-MM-dd HH:mm:ss z", ci, DateTimeStyles.AssumeUniversal);
 			Assert.AreEqual (DateTimeKind.Local, dt.Kind, "D1");
 			Assert.AreEqual (ticksLocal, dt.Ticks, "D2");
-#endif
 
 			try {
 				// GMT in format string can be used to specify time zone
 				dt = DateTime.ParseExact ("2008-02-05 02:38:26 GMT", "yyyy-MM-dd HH:mm:ss GMT", ci);
-#if NET_2_0
 				Assert.AreEqual (DateTimeKind.Local, dt.Kind, "E1");
-#endif
 				Assert.AreEqual (ticksLocal, dt.Ticks, "E2");
 			}
 			catch {
@@ -2071,9 +2069,7 @@ namespace MonoTests.System
 			try {
 				// Same as above even when surrounded with other characters
 				dt = DateTime.ParseExact ("2008-02-05 02:38:26 qqGMTqq", "yyyy-MM-dd HH:mm:ss qqGMTqq", ci);
-#if NET_2_0
 				Assert.AreEqual (DateTimeKind.Local, dt.Kind, "F1");
-#endif
 				Assert.AreEqual (ticksLocal, dt.Ticks, "F2");
 			}
 			catch {
@@ -2083,30 +2079,16 @@ namespace MonoTests.System
 			try {
 				// But single quoted GMT in format string should not specify time zone
 				dt = DateTime.ParseExact ("2008-02-05 02:38:26 GMT", "yyyy-MM-dd HH:mm:ss 'GMT'", ci);
-#if NET_2_0
 				Assert.AreEqual (DateTimeKind.Unspecified, dt.Kind, "G1");
-#endif
 				Assert.AreEqual (ticksUTC, dt.Ticks, "G2");
 			}
 			catch {
 				Assert.Fail ("G3");
 			}
 
-			try {
-				// GMT in Parse can occur before time in 2.0 but not in 1.0
-				dt = DateTime.Parse ("GMT 2008-02-05 02:38:26", ci);
-#if NET_2_0
-				Assert.AreEqual (DateTimeKind.Local, dt.Kind, "H1");
-				Assert.AreEqual (ticksLocal, dt.Ticks, "H2");
-#else
-				Assert.Fail ("H3");
-#endif
-			}
-			catch {
-#if NET_2_0
-				Assert.Fail ("H4");
-#endif
-			}
+			dt = DateTime.Parse ("GMT 2008-02-05 02:38:26", ci);
+			Assert.AreEqual (DateTimeKind.Local, dt.Kind, "H1");
+			Assert.AreEqual (ticksLocal, dt.Ticks, "H2");
 		}
 
 		[Test]
@@ -2118,11 +2100,81 @@ namespace MonoTests.System
 				"yyyy-MM-dd"
 				};
 			DateTimeStyles dts = DateTimeStyles.AdjustToUniversal;
-#if NET_2_0
 			dts |= DateTimeStyles.AssumeUniversal;
-#endif
 			DateTime result = DateTime.ParseExact ("2005-01-01T01:11:11+8:00", f, new DateTimeFormatInfo (), dts);
 		}
+
+        [Test]
+        public void TestParseExactXmlTimeFormats()
+        {
+            //Xamarin Bug 16742
+            string[] xmlTimeFormats = {
+                "HH:mm:ss", "HH:mm:ss.FFFFFFF",
+                "HH:mm:sszzz", "HH:mm:ss.FFFFFFFzzz",
+                "HH:mm:ssZ", "HH:mm:ss.FFFFFFFZ"
+            };
+            DateTimeStyles style = DateTimeStyles.AllowLeadingWhite | DateTimeStyles.AllowTrailingWhite;
+
+            //time local
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000).Ticks,
+                DateTime.ParseExact("13:30:44", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000).Ticks,
+                DateTime.ParseExact("13:30:44.0", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000).Ticks,
+                DateTime.ParseExact("13:30:44.00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000).Ticks,
+                DateTime.ParseExact("13:30:44.000", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000).Ticks,
+                DateTime.ParseExact("13:30:44.0000", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000).Ticks,
+                DateTime.ParseExact("13:30:44.00000", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000).Ticks,
+                DateTime.ParseExact("13:30:44.000000", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000).Ticks,
+                DateTime.ParseExact("13:30:44.0000000", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 123).Ticks,
+                DateTime.ParseExact("13:30:44.123", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+
+            //time with zero timezone
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.0Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.00Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.000Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.0000Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.00000Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.000000Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.0000000Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 123, DateTimeKind.Utc).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.123Z", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+
+            //time with timezone
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.0+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.00+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.000+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.0000+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.00000+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.000000+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 000, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.0000000+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+            Assert.AreEqual(new DateTimeOffset(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 13, 30, 44, 123, new TimeSpan(13, 0, 0)).ToLocalTime().Ticks,
+                DateTime.ParseExact("13:30:44.123+13:00", xmlTimeFormats, DateTimeFormatInfo.InvariantInfo, style).Ticks);
+        }
 
 		[Test]
 		[ExpectedException (typeof (FormatException))]
@@ -2130,7 +2182,7 @@ namespace MonoTests.System
 		{
 			DateTime.Parse ("");
 		}
-#if NET_2_0
+
 		[Test]
 		public void TryEmptyString ()
 		{
@@ -2142,10 +2194,10 @@ namespace MonoTests.System
 		public void Kind ()
 		{
 			if (DateTime.Now == DateTime.UtcNow)
-				return; // This test does not make sense.
+				Assert.Ignore (); // This test does not make sense.
 			if (TimeZone.CurrentTimeZone.GetUtcOffset (DateTime.UtcNow)
 				!= TimeZone.CurrentTimeZone.GetUtcOffset (DateTime.Now))
-				return; // In this case it does not satisfy the test premises.
+				Assert.Ignore (); // In this case it does not satisfy the test premises.
 
 			Assert.AreEqual (DateTimeKind.Local, DateTime.Now.Kind, "#A1");
 			Assert.AreEqual (DateTimeKind.Local, DateTime.Today.Kind, "#A2");
@@ -2285,11 +2337,13 @@ namespace MonoTests.System
 			Assert.AreEqual ("2000-01-01T00:00:00.0000000Z", DateTime.SpecifyKind (new DateTime (2000, 1, 1), DateTimeKind.Utc).ToString ("o"), "#2");
 			Assert.AreEqual ("2000-01-01T00:00:00.0000000+09:00".Length, DateTime.SpecifyKind (
 				new DateTime (2000, 1, 1), DateTimeKind.Local).ToString ("o").Length, "#3");
+
+			var culture = new CultureInfo ("ps-AF");
+			Assert.AreEqual ("1976-06-19T00:00:00.0000000", new DateTime(1976, 6, 19).ToString ("O", culture), "#4");
+			Assert.AreEqual ("1976-06-19T00:00:00.0000000", new DateTime(1976, 6, 19).ToString ("o", culture), "#5");
 		}
 
 		[Test]
-		[Category ("NotDotNet")]
-		[Category ("NotWorking")] // wrt bug #352210
 		public void KindPattern ()
 		{
 			// no matter how the format string contains 'K' and the
@@ -2304,7 +2358,7 @@ namespace MonoTests.System
 			DateTime d1 = DateTime.ParseExact (s, format, ci); // d1 is parsed as a local time.
 			Assert.AreEqual (dt.Ticks, d1.ToUniversalTime ().Ticks, "#1");
 			// .NET expects Local here, while s ends with 'Z' and should be parsed as UTC.
-			Assert.AreEqual (DateTimeKind.Utc, d1.Kind, "#2");
+			Assert.AreEqual (DateTimeKind.Local, d1.Kind, "#2");
 
 			format = "yyyy-MM-dd'T'HH:mm:ssK";
 			ci = CultureInfo.CurrentCulture;
@@ -2446,6 +2500,71 @@ namespace MonoTests.System
 						DateTimeStyles.None, out dt))
 				Assert.Fail ("Failed");
 		}
+
+		[Test]
+		public void Parse_InvalidShortDate ()
+		{
+			DateTime expected = new DateTime (2011, 03, 22, 07, 32, 00, DateTimeKind.Utc).ToLocalTime();
+			DateTime expected2 = new DateTime (2011, 03, 22, 08, 32, 00, DateTimeKind.Utc);
+
+			string [] cultures = new string [] {"es-ES", "en-US", "en-GB", "de-DE", "fr-FR"
+#if NET_4_0
+				,"es", "en", "de", "fr"
 #endif
+				};
+			
+			foreach (string culture in cultures) {
+				CultureInfo ci = new CultureInfo (culture);
+				ci.DateTimeFormat.ShortDatePattern = "d";
+
+				Assert.AreEqual (expected,  DateTime.Parse ("2011-03-22 08:32:00+01:00", ci, DateTimeStyles.RoundtripKind), "#a01 - " + culture);
+				Assert.AreEqual (expected,  DateTime.Parse ("2011/03/22 08:32:00+01:00", ci, DateTimeStyles.RoundtripKind), "#a02 - " + culture);
+				Assert.AreEqual (expected2, DateTime.Parse ("2011-03-22T08:32:00", ci, DateTimeStyles.RoundtripKind), "#a03 - " + culture);
+				Assert.AreEqual (expected2, DateTime.Parse ("2011/03/22T08:32:00", ci, DateTimeStyles.RoundtripKind), "#a04 - " + culture);
+				Assert.AreEqual (expected2, DateTime.Parse ("03/2011/22T08:32:00", ci, DateTimeStyles.RoundtripKind), "#a05 - " + culture);
+				Assert.AreEqual (expected2, DateTime.Parse ("03-2011-22T08:32:00", ci, DateTimeStyles.RoundtripKind), "#a06 - " + culture);
+				Assert.AreEqual (expected,  DateTime.Parse ("03/2011/22 08:32:00+01:00", ci, DateTimeStyles.RoundtripKind), "#a07 - " + culture);
+				ci.DateTimeFormat.DateSeparator = "%";
+				Assert.AreEqual (expected,  DateTime.Parse ("2011-03-22 08:32:00+01:00", ci, DateTimeStyles.RoundtripKind), "#b01 - " + culture);
+				Assert.AreEqual (expected,  DateTime.Parse ("2011/03/22 08:32:00+01:00", ci, DateTimeStyles.RoundtripKind), "#b02 - " + culture);
+				Assert.AreEqual (expected2, DateTime.Parse ("2011-03-22T08:32:00", ci, DateTimeStyles.RoundtripKind), "#b03 - " + culture);
+				Assert.AreEqual (expected2, DateTime.Parse ("2011/03/22T08:32:00", ci, DateTimeStyles.RoundtripKind), "#b04 - " + culture);
+				Assert.AreEqual (expected2, DateTime.Parse ("03/2011/22T08:32:00", ci, DateTimeStyles.RoundtripKind), "#b05 - " + culture);
+				Assert.AreEqual (expected2, DateTime.Parse ("03-2011-22T08:32:00", ci, DateTimeStyles.RoundtripKind), "#b06 - " + culture);
+				Assert.AreEqual (expected,  DateTime.Parse ("03/2011/22 08:32:00+01:00", ci, DateTimeStyles.RoundtripKind), "#b07 - " + culture);
+			}
+		}
+
+		// Bug 3392
+		[Test]
+		public void Parse_DateWithTimeZone_TimeZoneShouldBeCorrectlyRead ()
+		{
+			string testDateWithTimeZoneInfo  = "2012-01-14T15:09:42.692875+03:00";
+			long expectedUtcTics = 634621397826928750;
+
+			DateTimeOffset result = DateTimeOffset.Parse (testDateWithTimeZoneInfo, null, DateTimeStyles.RoundtripKind);
+
+			Assert.AreEqual (expectedUtcTics, result.UtcTicks);
+		}
+		
+		[Test]
+		public void GenitiveMonth ()
+		{
+			var ci = new CultureInfo ("ru-RU");
+			var dt = new DateTime (2012, 9, 15);
+			Assert.AreEqual ("15 сентября", dt.ToString ("m", ci));
+		}
+
+		[Test]
+		public void Parse_ThaiCalendar ()
+		{
+			var culture = CultureInfo.GetCultureInfo ("th-TH");
+			Assert.IsTrue (culture.Calendar is ThaiBuddhistCalendar);
+			var dt = DateTime.Now.Date;
+			var s = dt.ToString (culture);
+			var parsed = DateTime.Parse (s, culture);
+
+			Assert.AreEqual (dt, parsed, "#1");
+		}
 	}
 }

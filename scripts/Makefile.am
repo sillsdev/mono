@@ -36,11 +36,17 @@ bin_SCRIPTS = \
 	mono-test-install	\
 	peverify			\
 	mcs					\
+	gmcs				\
 	mono-heapviz		\
 	$(scripts_mono_configuration_crypto)
 
 if INSTALL_4_0
 bin_SCRIPTS += $(scripts_4_0)
+bin_SCRIPTS += dmcs
+endif
+
+if INSTALL_4_5
+bin_SCRIPTS += xbuild
 endif
 
 scripts_4_0_umask = \
@@ -53,22 +59,19 @@ deprecated = 					\
 
 scripts_2_0 = \
 	al2$(SCRIPT_SUFFIX)			\
-	csharp2$(SCRIPT_SUFFIX)			\
 	gacutil2$(SCRIPT_SUFFIX)		\
-	gmcs$(SCRIPT_SUFFIX)			\
-	mdoc$(SCRIPT_SUFFIX)                    \
 	monop2$(SCRIPT_SUFFIX) 			\
 	resgen2$(SCRIPT_SUFFIX)			\
 	wsdl2$(SCRIPT_SUFFIX)
 
 scripts_4_0 = \
-	dmcs$(SCRIPT_SUFFIX)			\
 	disco$(SCRIPT_SUFFIX)			\
 	dtd2xsd$(SCRIPT_SUFFIX)			\
 	dtd2rng$(SCRIPT_SUFFIX)			\
 	installvst$(SCRIPT_SUFFIX)		\
 	genxs$(SCRIPT_SUFFIX)			\
 	macpack$(SCRIPT_SUFFIX)			\
+	mdoc$(SCRIPT_SUFFIX)                    \
 	mono-cil-strip$(SCRIPT_SUFFIX)		\
 	prj2make$(SCRIPT_SUFFIX)		\
 	soapsuds$(SCRIPT_SUFFIX)		\
@@ -76,6 +79,7 @@ scripts_4_0 = \
 	cert2spc$(SCRIPT_SUFFIX)		\
 	certmgr$(SCRIPT_SUFFIX)			\
 	chktrust$(SCRIPT_SUFFIX)		\
+	crlupdate$(SCRIPT_SUFFIX)		\
 	csharp$(SCRIPT_SUFFIX)			\
 	httpcfg$(SCRIPT_SUFFIX)			\
 	lc$(SCRIPT_SUFFIX)			\
@@ -96,8 +100,9 @@ scripts_4_0 = \
 	sqlmetal$(SCRIPT_SUFFIX)		\
 	sqlsharp$(SCRIPT_SUFFIX)		\
 	svcutil$(SCRIPT_SUFFIX)			\
-	xbuild$(SCRIPT_SUFFIX)			\
-	ccrewrite$(SCRIPT_SUFFIX)
+	ccrewrite$(SCRIPT_SUFFIX)		\
+	cccheck$(SCRIPT_SUFFIX)			\
+	mdbrebase$(SCRIPT_SUFFIX)
 
 MDOC_SUBCOMMANDS = \
 	mdoc-assemble \
@@ -130,11 +135,11 @@ scripts_defaults = 		\
 	wsdl$(SCRIPT_SUFFIX)
 
 scripts_service = mono-service mono-service2
-scripts_nunit = nunit-console$(SCRIPT_SUFFIX) nunit-console2$(SCRIPT_SUFFIX)
+scripts_nunit = nunit-console$(SCRIPT_SUFFIX) nunit-console2$(SCRIPT_SUFFIX) nunit-console4$(SCRIPT_SUFFIX)
 scripts_rpmhelpers = mono-find-provides mono-find-requires
 scripts_mono_configuration_crypto = mono-configuration-crypto$(SCRIPT_SUFFIX)
 
-CLEANFILES = $(scripts_mono_configuration_crypto) $(scripts_4_0_umask) $(scripts_2_0) $(scripts_defaults) $(scripts_4_0) mono-service mono-service2 nunit-console nunit-console2 mono-find-provides mono-find-requires mod $(MDOC_SUBCOMMANDS)
+CLEANFILES = $(scripts_mono_configuration_crypto) $(scripts_4_0_umask) $(scripts_2_0) $(scripts_defaults) $(scripts_4_0) mono-service mono-service2 nunit-console nunit-console2 nunit-console4 mono-find-provides mono-find-requires mod $(MDOC_SUBCOMMANDS)
 DISTCLEANFILES = $(pkgconfig_DATA) $(scripts_rpmhelpers)
 
 EXTRA_DIST =			\
@@ -147,11 +152,14 @@ EXTRA_DIST =			\
 	mono-find-provides.in	\
 	mono-find-requires.in	\
 	peverify.in			\
+	xbuild.in			\
+	update_submodules		\
 	mcs.in				\
+	gmcs.in				\
+	dmcs.in				\
 	mono-test-install	\
 	mono-heapviz		\
 	$(MDOC_COMPAT)		\
-	patch-quiet.sh		\
 	get-cygwin-deps.sh	\
 	mono-configuration-crypto.in
 
@@ -183,15 +191,22 @@ REWRITE_COMMON = sed \
 
 REWRITE = $(REWRITE_COMMON) -e 's,@''mono_interp@,$(mono_interp),g'
 REWRITE_DEBUG = $(REWRITE_COMMON) -e 's,@''mono_interp@,$(mono_interp) --debug,g'
+REWRITE2_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,2.0,g'
 
 REWRITE2 = $(REWRITE) -e 's,@''framework_version@,2.0,g'
 REWRITE2_1 = $(REWRITE) -e 's,@''framework_version@,2.1,g'
-if INSTALL_4_0
-REWRITE4 = $(REWRITE) -e 's,@''framework_version@,4.0,g'
-else
-REWRITE4 = $(REWRITE) -e 's,@''framework_version@,2.0,g'
+if INSTALL_4_5
+REWRITE4 = $(REWRITE) -e 's,@''framework_version@,4.5,g'
+REWRITE4_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,4.5,g'
+else 
+	if INSTALL_4_0
+	REWRITE4 = $(REWRITE) -e 's,@''framework_version@,4.0,g'
+	REWRITE4_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,4.0,g'
+	else
+	REWRITE4 = $(REWRITE) -e 's,@''framework_version@,2.0,g'
+	REWRITE4_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,2.0,g'
+	endif
 endif
-REWRITE2_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,2.0,g'
 
 peverify: peverify.in Makefile
 	$(REWRITE_COMMON) $(srcdir)/peverify.in > $@.tmp
@@ -199,6 +214,14 @@ peverify: peverify.in Makefile
 
 mcs: mcs.in Makefile
 	$(REWRITE_COMMON) $(srcdir)/mcs.in > $@.tmp
+	mv -f $@.tmp $@
+
+gmcs: gmcs.in Makefile
+	$(REWRITE_COMMON) $(srcdir)/gmcs.in > $@.tmp
+	mv -f $@.tmp $@
+
+dmcs: dmcs.in Makefile
+	$(REWRITE_COMMON) $(srcdir)/dmcs.in > $@.tmp
 	mv -f $@.tmp $@
 
 mono-service: mono-service.in Makefile
@@ -215,6 +238,14 @@ nunit-console$(SCRIPT_SUFFIX): $(SCRIPT_IN) Makefile
 
 nunit-console2$(SCRIPT_SUFFIX): $(SCRIPT_IN) Makefile
 	$(REWRITE2_DEBUG) -e 's,@''exe_name@,nunit-console,g' $(srcdir)/$(SCRIPT_IN) | $(FILTER) > $@.tmp
+	mv -f $@.tmp $@
+
+nunit-console4$(SCRIPT_SUFFIX): $(SCRIPT_IN) Makefile
+	$(REWRITE4_DEBUG) -e 's,@''exe_name@,nunit-console,g' $(srcdir)/$(SCRIPT_IN) | $(FILTER) > $@.tmp
+	mv -f $@.tmp $@
+
+xbuild: xbuild.in Makefile
+	$(REWRITE_COMMON) $(srcdir)/xbuild.in > $@.tmp
 	mv -f $@.tmp $@
 
 #FIXME: this is not the correct rule for mod.bat.

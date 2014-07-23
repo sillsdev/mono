@@ -25,7 +25,6 @@
 // Authors:
 //	Jonathan Pobst (monkey@jpobst.com)
 //
-#if NET_2_0
 
 using System;
 using System.Drawing;
@@ -174,14 +173,15 @@ namespace System.Windows.Forms
 		protected override void Dispose (bool disposing)
 		{
 			if (!IsDisposed) {
-				if (this.HasDropDownItems)
-					foreach (ToolStripItem tsi in this.DropDownItems)
-						if (tsi is ToolStripMenuItem)
-							ToolStripManager.RemoveToolStripMenuItem ((ToolStripMenuItem)tsi);
-					
-				if (drop_down != null)
-					ToolStripManager.RemoveToolStrip (drop_down);
-				
+				if(disposing) {
+					if (this.HasDropDownItems)
+						foreach (ToolStripItem tsi in this.DropDownItems)
+							if (tsi is ToolStripMenuItem)
+								ToolStripManager.RemoveToolStripMenuItem ((ToolStripMenuItem)tsi);
+
+					if (drop_down != null)
+						ToolStripManager.RemoveToolStrip (drop_down);
+				}
 				base.Dispose (disposing);
 			}
 		}
@@ -346,4 +346,3 @@ namespace System.Windows.Forms
 		#endregion
 	}
 }
-#endif

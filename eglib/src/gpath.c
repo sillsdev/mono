@@ -41,46 +41,69 @@
 gchar *
 g_build_path (const gchar *separator, const gchar *first_element, ...)
 {
-	GString *result;
-	const char *s, *p, *next;
-	size_t slen;
+	const char *elem, *next, *endptr;
+	gboolean trimmed;
+	GString *path;
 	va_list args;
+	size_t slen;
 	
 	g_return_val_if_fail (separator != NULL, NULL);
-
-	if (first_element == NULL)
-		return g_strdup ("");
-
-	result = g_string_sized_new (48);
-
+	
+	path = g_string_sized_new (48);
 	slen = strlen (separator);
 	
 	va_start (args, first_element);
-	for (s = first_element; s != NULL; s = next){
-		next = va_arg (args, char *);
-		p = (s + strlen (s));
-
-		if (next && p - slen > s){
-			for (; strncmp (p-slen, separator, slen) == 0; ){
-				p -= slen;
-			}
-		}
-		g_string_append_len (result, s, p - s);
-
-		if (next && *next){
-			int reslen = strlen (result->str);
+	for (elem = first_element; elem != NULL; elem = next) {
+		/* trim any trailing separators from @elem */
+		endptr = elem + strlen (elem);
+		trimmed = FALSE;
+		
+		while (endptr >= elem + slen) {
+			if (strncmp (endptr - slen, separator, slen) != 0)
+				break;
 			
-			if (reslen >= slen && strncmp (separator, result->str + reslen - slen, slen))
-				g_string_append (result, separator);
-
-			for (; strncmp (next, separator, slen) == 0; )
-				next += slen;
+			endptr -= slen;
+			trimmed = TRUE;
 		}
+		
+		/* append elem, not including any trailing separators */
+		if (endptr > elem)
+			g_string_append_len (path, elem, endptr - elem);
+		
+		/* get the next element */
+		do {
+			if (!(next = va_arg (args, char *)))
+				break;
+			
+			/* remove leading separators */
+			while (!strncmp (next, separator, slen))
+				next += slen;
+		} while (*next == '\0');
+		
+		if (next || trimmed)
+			g_string_append_len (path, separator, slen);
 	}
-	g_string_append_c (result, 0);
 	va_end (args);
+	
+	return g_string_free (path, FALSE);
+}
 
-	return g_string_free (result, FALSE);
+static gchar*
+strrchr_seperator (const gchar* filename)
+{
+#ifdef G_OS_WIN32
+	char *p2;
+#endif
+	char *p;
+
+	p = strrchr (filename, G_DIR_SEPARATOR);
+#ifdef G_OS_WIN32
+	p2 = strrchr (filename, '/');
+	if (p2 > p)
+		p = p2;
+#endif
+
+	return p;
 }
 
 gchar *
@@ -90,7 +113,7 @@ g_path_get_dirname (const gchar *filename)
 	size_t count;
 	g_return_val_if_fail (filename != NULL, NULL);
 
-	p = strrchr (filename, G_DIR_SEPARATOR);
+	p = strrchr_seperator (filename);
 	if (p == NULL)
 		return g_strdup (".");
 	if (p == filename)
@@ -114,7 +137,7 @@ g_path_get_basename (const char *filename)
 		return g_strdup (".");
 
 	/* No separator -> filename */
-	r = strrchr (filename, G_DIR_SEPARATOR);
+	r = strrchr_seperator (filename);
 	if (r == NULL)
 		return g_strdup (filename);
 
@@ -122,7 +145,7 @@ g_path_get_basename (const char *filename)
 	if (r [1] == 0){
 		char *copy = g_strdup (filename);
 		copy [r-filename] = 0;
-		r = strrchr (copy, G_DIR_SEPARATOR);
+		r = strrchr_seperator (copy);
 
 		if (r == NULL){
 			g_free (copy);			
@@ -193,10 +216,10 @@ cont:
 gchar *
 g_find_program_in_path (const gchar *program)
 {
-	char *p = g_strdup (g_getenv ("PATH"));
-	char *x = p, *l;
+	char *p;
+	char *x, *l;
 	gchar *curdir = NULL;
-	char *save;
+	char *save = NULL;
 #ifdef G_OS_WIN32
 	char *program_exe;
 	char *suffix_list[5] = {".exe",".cmd",".bat",".com",NULL};
@@ -205,6 +228,7 @@ g_find_program_in_path (const gchar *program)
 #endif
 
 	g_return_val_if_fail (program != NULL, NULL);
+	x = p = g_strdup (g_getenv ("PATH"));
 
 	if (x == NULL || *x == '\0') {
 		curdir = g_get_current_dir ();

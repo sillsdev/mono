@@ -4,11 +4,34 @@
 
 using System;
 
+struct S
+{
+}
+
+class C2
+{
+	S s;
+	
+	void Foo ()
+	{
+		Func<string> f = s.ToString;
+		Console.WriteLine (f);
+	}
+}
+
 [Foo (Product = "Mono")]
 class Program
 {
-	static void Main ()
+	S s;
+	
+	void Test ()
 	{
+		s.ToString ();
+	}
+	
+	public static void Main ()
+	{
+		new Program ().Test ();
 	}
 }
 

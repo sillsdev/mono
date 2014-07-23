@@ -128,14 +128,12 @@ public abstract class Calendar : ICloneable
 	[NonSerialized]
 	bool m_isReadOnly;
 
-#if !MOONLIGHT
 	[System.Runtime.InteropServices.ComVisible(false)]
 	public virtual CalendarAlgorithmType AlgorithmType {
 		get {
 			return CalendarAlgorithmType.Unknown;
 		}
 	}
-#endif
 
 	[System.Runtime.InteropServices.ComVisible(false)]
 	public virtual DateTime MaxSupportedDateTime {
@@ -1008,12 +1006,10 @@ public abstract class Calendar : ICloneable
 	/// </value>
 	internal string[] EraNames {
 		get {
-			if (M_EraNames == null ||
-			    M_EraNames.Length != Eras.Length)
-				throw new Exception(
-					"Internal: M_EraNames " +
-					"not initialized!");
-			return (string[])M_EraNames.Clone();
+			if (M_EraNames == null || M_EraNames.Length != Eras.Length)
+				throw new Exception ("Internal: M_EraNames not initialized!");
+
+			return M_EraNames;
 		}
 		set {
 			CheckReadOnly ();
@@ -1028,8 +1024,17 @@ public abstract class Calendar : ICloneable
 		}
 	}
 
+#pragma warning disable 649
 	internal int m_currentEraValue; // Unused, by MS serializes this
+#pragma warning restore 649
 
-} // class Calendar
+#if NET_4_5
+	protected virtual int DaysInYearBeforeMinSupportedYear {
+		get{
+			return 365;
+		}
+	}
+#endif
+}
 	
-} // namespace System.Globalization
+}

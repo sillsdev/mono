@@ -28,8 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
-
 using System;
 
 namespace System.Configuration
@@ -119,11 +117,11 @@ namespace System.Configuration
                         if (!(element is ConnectionStringSettings))
                                 base.BaseAdd (element);
                         if (IndexOf ((ConnectionStringSettings) element) >= 0)
-                                throw new ConfigurationException (String.Format ("The element {0} already exist!",
+                                throw new ConfigurationErrorsException (String.Format ("The element {0} already exist!",
                                                                                  ((ConnectionStringSettings) element).Name));
                         this [index] = (ConnectionStringSettings) element;
                 }
         }
 
 }
-#endif // NET_2_0
+

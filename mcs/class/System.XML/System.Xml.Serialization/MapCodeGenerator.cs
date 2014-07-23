@@ -44,9 +44,9 @@ namespace System.Xml.Serialization {
 	internal class MapCodeGenerator {
 
 		CodeNamespace codeNamespace;
-		CodeCompileUnit codeCompileUnit;
+//		CodeCompileUnit codeCompileUnit;
 		CodeAttributeDeclarationCollection includeMetadata;
-		XmlTypeMapping exportedAnyType = null;
+		XmlTypeMapping exportedAnyType;
 		protected bool includeArrayTypes;
 #if NET_2_0		
 		CodeDomProvider codeProvider;
@@ -59,7 +59,7 @@ namespace System.Xml.Serialization {
 
 		public MapCodeGenerator (CodeNamespace codeNamespace, CodeCompileUnit codeCompileUnit, CodeGenerationOptions options)
 		{
-			this.codeCompileUnit = codeCompileUnit;
+//			this.codeCompileUnit = codeCompileUnit;
 			this.codeNamespace = codeNamespace;
 			this.options = options;
 			this.identifiers = new CodeIdentifiers ();
@@ -67,7 +67,7 @@ namespace System.Xml.Serialization {
 
 		public MapCodeGenerator (CodeNamespace codeNamespace, CodeCompileUnit codeCompileUnit, CodeDomProvider codeProvider, CodeGenerationOptions options, Hashtable mappings)
 		{
-			this.codeCompileUnit = codeCompileUnit;
+//			this.codeCompileUnit = codeCompileUnit;
 			this.codeNamespace = codeNamespace;
 			this.options = options;
 #if NET_2_0
@@ -691,6 +691,7 @@ namespace System.Xml.Serialization {
 			}
 			else
 			{
+				defaultValue = defaultValue is decimal ? (object) ('"' + ((decimal) defaultValue).ToString (CultureInfo.InvariantCulture) + '"') : defaultValue;
 				AddCustomAttribute (externalField, "System.ComponentModel.DefaultValue", GetArg (defaultValue));
 				//internalField.InitExpression = new CodePrimitiveExpression (defaultValue);
 			}

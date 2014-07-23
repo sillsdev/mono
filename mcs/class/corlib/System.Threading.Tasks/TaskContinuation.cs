@@ -27,7 +27,9 @@
 //
 //
 
-#if NET_4_0 || MOBILE
+#if NET_4_0
+
+using System.Collections.Generic;
 
 namespace System.Threading.Tasks
 {
@@ -53,7 +55,7 @@ namespace System.Threading.Tasks
 				return true;
 
 			int kindCode = (int) kind;
-			var status = task.Parent.Status;
+			var status = task.ContinuationAncestor.Status;
 
 			if (kindCode >= ((int) TaskContinuationOptions.NotOnRanToCompletion)) {
 				// Remove other options
@@ -97,25 +99,52 @@ namespace System.Threading.Tasks
 				return;
 			}
 
+			// The task may have been canceled externally
+			if (task.IsCompleted)
+				return;
+
 			if ((continuationOptions & TaskContinuationOptions.ExecuteSynchronously) != 0)
-				task.RunSynchronously (task.scheduler);
+				task.RunSynchronouslyCore (task.scheduler, false);
 			else
-				task.Schedule ();
+				task.Schedule (false);
 		}
 	}
 
-	class ActionContinuation : IContinuation
+	class AwaiterActionContinuation : IContinuation
 	{
 		readonly Action action;
 
-		public ActionContinuation (Action action)
+		public AwaiterActionContinuation (Action action)
 		{
 			this.action = action;
 		}
 
 		public void Execute ()
 		{
-			action ();
+			//
+			// Continuation can be inlined only when the current context allows it. This is different to awaiter setup
+			// because the context where the awaiter task is set to completed can be anywhere (due to TaskCompletionSource)
+			//
+			if ((SynchronizationContext.Current == null || SynchronizationContext.Current.GetType () == typeof (SynchronizationContext)) && TaskScheduler.IsDefault) {
+				action ();
+			} else {
+				ThreadPool.UnsafeQueueUserWorkItem (l => ((Action) l) (), action);
+			}
+		}
+	}
+
+	class SchedulerAwaitContinuation : IContinuation
+	{
+		readonly Task task;
+
+		public SchedulerAwaitContinuation (Task task)
+		{
+			this.task = task;
+		}
+
+		public void Execute ()
+		{
+			task.RunSynchronouslyCore (task.scheduler, true);
 		}
 	}
 
@@ -133,6 +162,225 @@ namespace System.Threading.Tasks
 		public void Execute ()
 		{
 			ctx.Post (l => ((Action) l) (), action);
+		}
+	}
+
+	sealed class WhenAllContinuation : IContinuation
+	{
+		readonly Task owner;
+		readonly IList<Task> tasks;
+		int counter;
+
+		public WhenAllContinuation (Task owner, IList<Task> tasks)
+		{
+			this.owner = owner;
+			this.counter = tasks.Count;
+			this.tasks = tasks;
+		}
+
+		public void Execute ()
+		{
+			if (Interlocked.Decrement (ref counter) != 0)
+				return;
+
+			owner.Status = TaskStatus.Running;
+
+			bool canceled = false;
+			List<Exception> exceptions = null;
+			foreach (var task in tasks) {
+				if (task.IsFaulted) {
+					if (exceptions == null)
+						exceptions = new List<Exception> ();
+
+					exceptions.AddRange (task.Exception.InnerExceptions);
+					continue;
+				}
+
+				if (task.IsCanceled) {
+					canceled = true;
+				}
+			}
+
+			if (exceptions != null) {
+				owner.TrySetException (new AggregateException (exceptions), false, false);
+				return;
+			}
+
+			if (canceled) {
+				owner.CancelReal ();
+				return;
+			}
+
+			owner.Finish ();
+		}
+	}
+
+	sealed class WhenAllContinuation<TResult> : IContinuation
+	{
+		readonly Task<TResult[]> owner;
+		readonly IList<Task<TResult>> tasks;
+		int counter;
+
+		public WhenAllContinuation (Task<TResult[]> owner, IList<Task<TResult>> tasks)
+		{
+			this.owner = owner;
+			this.counter = tasks.Count;
+			this.tasks = tasks;
+		}
+
+		public void Execute ()
+		{
+			if (Interlocked.Decrement (ref counter) != 0)
+				return;
+
+			bool canceled = false;
+			List<Exception> exceptions = null;
+			TResult[] results = null;
+			for (int i = 0; i < tasks.Count; ++i) {
+				var task = tasks [i];
+				if (task.IsFaulted) {
+					if (exceptions == null)
+						exceptions = new List<Exception> ();
+
+					exceptions.AddRange (task.Exception.InnerExceptions);
+					continue;
+				}
+
+				if (task.IsCanceled) {
+					canceled = true;
+					continue;
+				}
+
+				if (results == null) {
+					if (canceled || exceptions != null)
+						continue;
+
+					results = new TResult[tasks.Count];
+				}
+
+				results[i] = task.Result;
+			}
+
+			if (exceptions != null) {
+				owner.TrySetException (new AggregateException (exceptions), false, false);
+				return;
+			}
+
+			if (canceled) {
+				owner.CancelReal ();
+				return;
+			}
+
+			owner.TrySetResult (results);
+		}
+	}
+
+	sealed class WhenAnyContinuation<T> : IContinuation where T : Task
+	{
+		readonly Task<T> owner;
+		readonly IList<T> tasks;
+		AtomicBooleanValue executed;
+
+		public WhenAnyContinuation (Task<T> owner, IList<T> tasks)
+		{
+			this.owner = owner;
+			this.tasks = tasks;
+			executed = new AtomicBooleanValue ();
+		}
+
+		public void Execute ()
+		{
+			if (!executed.TryRelaxedSet ())
+				return;
+
+			bool owner_notified = false;
+			for (int i = 0; i < tasks.Count; ++i) {
+				var task = tasks[i];
+				if (!task.IsCompleted) {
+					task.RemoveContinuation (this);
+					continue;
+				}
+
+				if (owner_notified)
+					continue;
+
+				owner.TrySetResult (task);
+				owner_notified = true;
+			}
+		}
+	}
+
+	sealed class ManualResetContinuation : IContinuation, IDisposable
+	{
+		readonly ManualResetEventSlim evt;
+
+		public ManualResetContinuation ()
+		{
+			this.evt = new ManualResetEventSlim ();
+		}
+
+		public ManualResetEventSlim Event {
+			get {
+				return evt;
+			}
+		}
+
+		public void Dispose ()
+		{
+			evt.Dispose ();
+		}
+
+		public void Execute ()
+		{
+			evt.Set ();
+		}
+	}
+
+	sealed class CountdownContinuation : IContinuation, IDisposable
+	{
+		readonly CountdownEvent evt;
+		bool disposed;
+
+		public CountdownContinuation (int initialCount)
+		{
+			this.evt = new CountdownEvent (initialCount);
+		}
+
+		public CountdownEvent Event {
+			get {
+				return evt;
+			}
+		}
+
+		public void Dispose ()
+		{
+			disposed = true;
+			Thread.MemoryBarrier ();
+	
+			evt.Dispose ();
+		}
+
+		public void Execute ()
+		{
+			// Guard against possible race when continuation is disposed and some tasks may still
+			// execute it (removal was late and the execution is slower than the Dispose thread)
+			if (!disposed)
+				evt.Signal ();
+		}
+	}
+
+	sealed class DisposeContinuation : IContinuation
+	{
+		readonly IDisposable instance;
+
+		public DisposeContinuation (IDisposable instance)
+		{
+			this.instance = instance;
+		}
+
+		public void Execute ()
+		{
+			instance.Dispose ();
 		}
 	}
 }

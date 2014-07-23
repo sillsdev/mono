@@ -40,6 +40,15 @@ using System.Runtime.InteropServices;
 
 namespace System.Windows.Forms {
 
+	public enum XLookupStatus
+	{
+		XBufferOverflow = -1,
+		XLookupNone = 1,
+		XLookupChars = 2,
+		XLookupKeySym = 3,
+		XLookupBoth = 4
+	}
+
 	internal class X11Keyboard : IDisposable {
 		internal static object XlibLock;
 
@@ -194,7 +203,7 @@ namespace System.Windows.Forms {
 		{
 			if (XplatUI.key_filters.Count == 0)
 				return false;
-			IntPtr status;
+			XLookupStatus status;
 			XKeySym ks;
 			KeyFilterData data;
 			data.Down = (e.type == XEventName.KeyPress);
@@ -219,6 +228,8 @@ namespace System.Windows.Forms {
 				XSetICFocus (xic);
 		}
 
+		private bool have_Xutf8ResetIC = true;
+
 		public void FocusOut (IntPtr window)
 		{
 			this.client_window = IntPtr.Zero;
@@ -227,7 +238,13 @@ namespace System.Windows.Forms {
 
 			IntPtr xic = GetXic (window);
 			if (xic != IntPtr.Zero) {
-				Xutf8ResetIC (xic);
+				if (have_Xutf8ResetIC) {
+					try {
+						Xutf8ResetIC (xic);
+					} catch (EntryPointNotFoundException) {
+						have_Xutf8ResetIC = false;
+					}
+				}
 				XUnsetICFocus (xic);
 			}
 		}
@@ -279,7 +296,7 @@ namespace System.Windows.Forms {
 			XKeySym keysym;
 			int ascii_chars;
 
-			IntPtr status = IntPtr.Zero;
+			XLookupStatus status;
 			ascii_chars = LookupString (ref xevent, 24, out keysym, out status);
 
 			if (((int) keysym >= (int) MiscKeys.XK_ISO_Lock && 
@@ -294,7 +311,7 @@ namespace System.Windows.Forms {
 
 			int event_time = (int)xevent.KeyEvent.time;
 
-			if (status == (IntPtr) 2) {
+			if (status == XLookupStatus.XLookupChars) {
 				// do not ignore those inputs. They are mostly from XIM.
 				msg = SendImeComposition (lookup_buffer.ToString (0, lookup_buffer.Length));
 				msg.hwnd = hwnd;
@@ -452,7 +469,7 @@ namespace System.Windows.Forms {
 			}
 
 			XKeySym t;
-			IntPtr status;
+			XLookupStatus status;
 			int res = LookupString (ref e, 24, out t, out status);
 			int keysym = (int) t;
 
@@ -657,7 +674,7 @@ namespace System.Windows.Forms {
 
 		public int EventToVkey (XEvent e)
 		{
-			IntPtr status;
+			XLookupStatus status;
 			XKeySym ks;
 
 			LookupString (ref e, 0, out ks, out status);
@@ -690,7 +707,7 @@ namespace System.Windows.Forms {
 				e2.KeyEvent.keycode = keyc;
 				XKeySym t;
 
-				IntPtr status;
+				XLookupStatus status;
 				LookupString (ref e2, 0, out t, out status);
 
 				keysym = (uint) t;
@@ -1184,17 +1201,26 @@ namespace System.Windows.Forms {
 			}
 		}
 
-		private int LookupString (ref XEvent xevent, int len, out XKeySym keysym, out IntPtr status)
+		private bool have_Xutf8LookupString = true;
+
+		private int LookupString (ref XEvent xevent, int len, out XKeySym keysym, out XLookupStatus status)
 		{
 			IntPtr keysym_res;
 			int res;
 
-			status = IntPtr.Zero;
+			status = XLookupStatus.XLookupNone;
 			IntPtr xic = GetXic (client_window);
-			if (xic != IntPtr.Zero && xevent.type == XEventName.KeyPress) {
+			if (xic != IntPtr.Zero && have_Xutf8LookupString && xevent.type == XEventName.KeyPress) {
 				do {
-					res = Xutf8LookupString (xic, ref xevent, lookup_byte_buffer, 100, out keysym_res,  out status);
-					if ((int) status != -1) // XLookupBufferOverflow
+					try {
+						res = Xutf8LookupString (xic, ref xevent, lookup_byte_buffer, 100, out keysym_res,  out status);
+					} catch (EntryPointNotFoundException) {
+						have_Xutf8LookupString = false;
+
+						// call again, this time we'll go through the non-xic clause
+						return LookupString (ref xevent, len, out keysym, out status);
+					}
+					if (status != XLookupStatus.XBufferOverflow)
 						break;
 					lookup_byte_buffer = new byte [lookup_byte_buffer.Length << 1];
 				} while (true);
@@ -1274,7 +1300,7 @@ namespace System.Windows.Forms {
 		[DllImport ("libX11")]
 		internal extern static int XLookupString(ref XEvent xevent, StringBuilder buffer, int num_bytes, out IntPtr keysym, out IntPtr status);
 		[DllImport ("libX11")]
-		internal extern static int Xutf8LookupString(IntPtr xic, ref XEvent xevent, byte [] buffer, int num_bytes, out IntPtr keysym, out IntPtr status);
+		internal extern static int Xutf8LookupString(IntPtr xic, ref XEvent xevent, byte [] buffer, int num_bytes, out IntPtr keysym, out XLookupStatus status);
 
 		[DllImport ("libX11")]
 		private static extern IntPtr XGetKeyboardMapping (IntPtr display, byte first_keycode, int keycode_count, 

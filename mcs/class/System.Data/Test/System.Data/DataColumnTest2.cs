@@ -910,7 +910,6 @@ namespace MonoTests.System.Data
 			} catch (ArgumentOutOfRangeException e) { }
 		}
 #endif
-		[Category ("NotWorking")]
 		[Test]
 		public void bug672113_MulpleColConstraint ()
 		{

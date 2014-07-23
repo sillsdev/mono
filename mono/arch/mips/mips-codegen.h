@@ -197,17 +197,13 @@ enum {
 
 /* Load always using lui/addiu pair (for later patching) */
 #define mips_load(c,D,v) do {	\
-		if (!mips_is_imm16 ((v)))	{	\
-			if (((guint32)(v)) & (1 << 15)) {		\
-				mips_lui ((c), (D), mips_zero, (((guint32)(v))>>16)+1); \
-			} \
-			else {			\
-				mips_lui ((c), (D), mips_zero, (((guint32)(v))>>16)); \
-			}						\
-			mips_addiu ((c), (D), (D), ((guint32)(v)) & 0xffff); \
-		}							\
-		else							\
-			mips_addiu ((c), (D), mips_zero, ((guint32)(v)) & 0xffff); \
+		if (((guint32)(v)) & (1 << 15)) {								\
+			mips_lui ((c), (D), mips_zero, (((guint32)(v))>>16)+1);		\
+		}																\
+		else {															\
+			mips_lui ((c), (D), mips_zero, (((guint32)(v))>>16));		\
+		}																\
+		mips_addiu ((c), (D), (D), ((guint32)(v)) & 0xffff);			\
 	} while (0)
 
 /* load constant - no patch-up */
@@ -338,7 +334,7 @@ enum {
 /* misc and coprocessor ops */
 #define mips_move(c,dest,src) mips_addu(c,dest,src,mips_zero)
 #define mips_dmove(c,dest,src) mips_daddu(c,dest,src,mips_zero)
-#define mips_nop(c) mips_sll(c,0,0,0)
+#define mips_nop(c) mips_or(c,mips_at,mips_at,0)
 #define mips_break(c,code) mips_emit32(c, ((code)<<6)|13)
 #define mips_mfhi(c,dest) mips_format_r(c,0,0,0,dest,0,16)
 #define mips_mflo(c,dest) mips_format_r(c,0,0,0,dest,0,18)

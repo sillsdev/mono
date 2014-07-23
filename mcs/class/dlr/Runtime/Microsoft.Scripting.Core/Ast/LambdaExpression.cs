@@ -19,15 +19,13 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Dynamic.Utils;
 using System.Reflection;
+#if FEATURE_REFEMIT
 using System.Reflection.Emit;
+#endif
 using System.Threading;
 using System.Runtime.CompilerServices;
 
-#if SILVERLIGHT
-using System.Core;
-#endif
-
-#if CLR2
+#if !FEATURE_CORE_DLR
 namespace Microsoft.Scripting.Ast {
 #else
 namespace System.Linq.Expressions {
@@ -41,9 +39,7 @@ namespace System.Linq.Expressions {
     /// <remarks>
     /// Lambda expressions take input through parameters and are expected to be fully bound. 
     /// </remarks>
-#if !SILVERLIGHT
     [DebuggerTypeProxy(typeof(Expression.LambdaExpressionProxy))]
-#endif
     public abstract class LambdaExpression : Expression {
         private readonly string _name;
         private readonly Expression _body;
@@ -67,7 +63,9 @@ namespace System.Linq.Expressions {
             _delegateType = delegateType;
             _tailCall = tailCall;
         }
-
+#if FEATURE_REFEMIT
+        internal abstract LambdaExpression Accept(StackSpiller spiller);
+#endif
         /// <summary>
         /// Gets the static type of the expression that this <see cref="Expression" /> represents. (Inherited from <see cref="Expression"/>.)
         /// </summary>
@@ -139,6 +137,7 @@ namespace System.Linq.Expressions {
             return LambdaCompiler.Compile(this, debugInfoGenerator);
         }
 
+#if FEATURE_REFEMIT
         /// <summary>
         /// Compiles the lambda into a method definition.
         /// </summary>
@@ -165,8 +164,7 @@ namespace System.Linq.Expressions {
 
             LambdaCompiler.Compile(this, method, debugInfoGenerator);
         }
-
-        internal abstract LambdaExpression Accept(StackSpiller spiller);
+#endif
     }
 
     /// <summary>
@@ -221,11 +219,11 @@ namespace System.Linq.Expressions {
         protected internal override Expression Accept(ExpressionVisitor visitor) {
             return visitor.VisitLambda(this);
         }
-
+#if FEATURE_REFEMIT
         internal override LambdaExpression Accept(StackSpiller spiller) {
             return spiller.Rewrite(this);
         }
-
+#endif
         internal static LambdaExpression Create(Expression body, string name, bool tailCall, ReadOnlyCollection<ParameterExpression> parameters) {
             return new Expression<TDelegate>(body, name, tailCall, parameters);
         }

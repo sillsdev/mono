@@ -65,7 +65,11 @@ namespace System.Security.Cryptography {
 			get;
 		}
 
+#if NET_4_0
+		public void Dispose ()
+#else
 		void IDisposable.Dispose () 
+#endif
 		{
 			Dispose (true);
 			GC.SuppressFinalize (this);  // Finalization is now unnecessary
@@ -76,15 +80,24 @@ namespace System.Security.Cryptography {
 			Dispose (false);
 		}
 
+#if NET_4_0
+		protected virtual void Dispose (bool disposing)
+		{
+		}
+#else
 		protected abstract void Dispose (bool disposing);
-
+#endif
 		public abstract void FromXmlString (string xmlString);
 		
 		public abstract string ToXmlString (bool includePrivateParameters);		
 		
 		public static AsymmetricAlgorithm Create () 
 		{
+#if FULL_AOT_RUNTIME
+			return new RSACryptoServiceProvider ();
+#else
 			return Create ("System.Security.Cryptography.AsymmetricAlgorithm");
+#endif
 		}
 	
 		public static AsymmetricAlgorithm Create (string algName) 

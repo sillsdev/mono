@@ -71,7 +71,7 @@ namespace MonoTests.System.Net.Mime
 		}
 
 		[Test]
-		public void GetHashCode ()
+		public void GetHashCodeTest ()
 		{
 			Assert.IsTrue (ct.GetHashCode () == new ContentType ().GetHashCode ());
 		}
@@ -161,6 +161,13 @@ namespace MonoTests.System.Net.Mime
 		{
 			ct.Parameters.Add ("start", "urn:foo\"bar\"");
 			Assert.AreEqual ("application/octet-stream; start=\"urn:foo\\\"bar\\\"\"", ct.ToString ());
+		}
+
+		[Test]
+		public void EncodedChars ()
+		{
+			ContentType ct = new ContentType ();
+			ct.Parameters.Add ("ASCII", "This is ASCII");
 		}
 	}
 }

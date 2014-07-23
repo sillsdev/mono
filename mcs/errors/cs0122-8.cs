@@ -1,23 +1,11 @@
-// cs0122-8.cs: `A.member' is inaccessible due to its protection level
-// Line: 17
-// NOTE: if `member' were a field or a property, this'd be CS1540
+// CS0122: `A.AA.Foo()' is inaccessible due to its protection level
+// Line: 16
+// Compiler options: -r:CS0122-8-lib.dll
 
-using System;
-
-class A
+public class Test
 {
-       protected event EventHandler member;
+	public static void Main ()
+	{
+		new B.BB ().Foo ();
+	}
 }
-
-class B : A
-{
-       static void Main ()
-       {
-               A a = new A ();
-               a.member += Handler;
-       }
-       
-       static void Handler (object sender, EventArgs args) {}
-}
-
-

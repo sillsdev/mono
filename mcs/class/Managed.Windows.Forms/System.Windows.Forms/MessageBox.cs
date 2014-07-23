@@ -42,11 +42,7 @@ namespace System.Windows.Forms
 	public class MessageBox
 	{
 		#region Private MessageBoxForm class
-#if NET_2_0 // UIA Framework
 		internal class MessageBoxForm : Form
-#else
-		private class MessageBoxForm : Form
-#endif
 		{
 			#region MessageBoxFrom Local Variables
 			const int space_border = 10;
@@ -229,7 +225,8 @@ namespace System.Windows.Forms
 				int iconImageWidth = 0;
 				if (icon_image != null)
 					iconImageWidth = icon_image.Width + 10;
-				Drawing.SizeF tsize = TextRenderer.MeasureString (msgbox_text, this.Font, max_width - iconImageWidth);
+				Drawing.SizeF tsize = TextRenderer.MeasureText (msgbox_text, this.Font, new Size (max_width - iconImageWidth, int.MaxValue), TextFormatFlags.WordBreak);
+				text_rect = new RectangleF ();
 				text_rect.Height = tsize.Height;
 
 				if (icon_image != null) {
@@ -246,6 +243,7 @@ namespace System.Windows.Forms
 					text_rect.Location = new Point (space_border + button_space, space_border);
 				}
 				tsize.Height += space_border * 2;
+				text_rect.Height += space_border;
 
 				// Now we want to know the amount of buttons
 				int buttoncount;
@@ -425,7 +423,6 @@ namespace System.Windows.Forms
 						}
 					}
 
-#if NET_2_0
 					if (show_help) {
 						for (int i = 0; i <= 3; i++) {
 							if (buttons [i] == null) {
@@ -434,7 +431,7 @@ namespace System.Windows.Forms
 							}
 						}
 					}
-#endif
+
 					buttons_placed = true;
 				}
 			}
@@ -496,14 +493,12 @@ namespace System.Windows.Forms
 				return AddButton ("No", left, new EventHandler (NoClick));
 			}
 
-#if NET_2_0
 			private Button AddHelpButton (int left)
 			{
 				Button button = AddButton ("Help", left, null);
 				button.Click += delegate { Owner.RaiseHelpRequested (new HelpEventArgs (Owner.Location)); };
 				return button;
 			}
-#endif
 			#endregion
 
 			#region Button click handlers
@@ -550,8 +545,6 @@ namespace System.Windows.Forms
 			}
 			#endregion
 
-#if NET_2_0
-		
 			#region UIA Framework: Methods, Properties and Events
 
 			internal string UIAMessage {
@@ -577,8 +570,6 @@ namespace System.Windows.Forms
 			}
 
 			#endregion
-
-#endif
 		}
 		#endregion	// Private MessageBoxForm class
 
@@ -690,7 +681,6 @@ namespace System.Windows.Forms
 		}
 		#endregion	// Public Static Methods
 
-#if NET_2_0
 		public static DialogResult Show (string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon,
 						 MessageBoxDefaultButton defaultButton, MessageBoxOptions options,
 						 bool displayHelpButton)
@@ -787,7 +777,6 @@ namespace System.Windows.Forms
 			form.SetHelpData (helpFilePath, null, navigator, param);
 			return form.RunDialog ();
 		}
-#endif
 	}
 }
 

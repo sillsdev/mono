@@ -16,6 +16,7 @@
  * OF THIS SOFTWARE OR ITS FITNESS FOR ANY PARTICULAR PURPOSE.
  *
  ***************************************************************/
+#include "config.h"
 #include "strtod.h"
 #include <glib.h>
 #define freedtoa __freedtoa
@@ -172,11 +173,11 @@
  * #define NO_ERRNO if strtod should not assign errno = ERANGE when
  *	the result overflows to +-Infinity or underflows to 0.
  */
-#if defined(i386) || defined(mips) && defined(MIPSEL) || defined (__arm__)
+#if defined(TARGET_X86) || defined(mips) && defined(MIPSEL) || defined (__arm__)
 
 #   define IEEE_8087
 
-#elif defined(__x86_64__) || defined(__alpha__)
+#elif defined(TARGET_AMD64) || defined(__alpha__)
 
 #   define IEEE_8087
 
@@ -2443,6 +2444,7 @@ mono_strtod
 	return sign ? -dval(rv) : dval(rv);
 	}
 
+#if 0
  static int
 quorem
 #ifdef KR_headers
@@ -2560,11 +2562,13 @@ quorem
 		}
 	return q;
 	}
+#endif
 
 #ifndef MULTIPLE_THREADS
  static char *dtoa_result;
 #endif
 
+#if 0
  static char *
 #ifdef KR_headers
 rv_alloc(i) int i;
@@ -2628,7 +2632,6 @@ freedtoa(char *s)
 #endif
 	}
 
-#if 0
 /* dtoa for IEEE arithmetic (dmg): convert double to ASCII string.
  *
  * Inspired by "How to Print Floating-Point Numbers Accurately" by

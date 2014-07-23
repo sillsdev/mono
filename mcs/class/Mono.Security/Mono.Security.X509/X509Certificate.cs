@@ -2,10 +2,11 @@
 // X509Certificates.cs: Handles X.509 certificates.
 //
 // Author:
-//	Sebastien Pouliot  <sebastien@ximian.com>
+//	Sebastien Pouliot  <sebastien@xamarin.com>
 //
 // (C) 2002, 2003 Motus Technologies Inc. (http://www.motus.com)
 // Copyright (C) 2004-2006 Novell, Inc (http://www.novell.com)
+// Copyright 2013 Xamarin Inc. (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -33,6 +34,7 @@ using System.Security.Cryptography;
 using SSCX = System.Security.Cryptography.X509Certificates;
 using System.Security.Permissions;
 using System.Text;
+using Mono.Security.Cryptography;
 
 namespace Mono.Security.X509 {
 
@@ -285,31 +287,14 @@ namespace Mono.Security.X509 {
 		public byte[] Hash {
 			get {
 				if (certhash == null) {
-					HashAlgorithm hash = null;
-					switch (m_signaturealgo) {
-						case "1.2.840.113549.1.1.2":	// MD2 with RSA encryption 
-							// maybe someone installed MD2 ?
-#if INSIDE_CORLIB
-							hash = HashAlgorithm.Create ("MD2");
-#else
-							hash = Mono.Security.Cryptography.MD2.Create ();
-#endif
-							break;
-						case "1.2.840.113549.1.1.4":	// MD5 with RSA encryption 
-							hash = MD5.Create ();
-							break;
-						case "1.2.840.113549.1.1.5":	// SHA-1 with RSA Encryption 
-						case "1.3.14.3.2.29":		// SHA1 with RSA signature 
-						case "1.2.840.10040.4.3":	// SHA1-1 with DSA
-							hash = SHA1.Create ();
-							break;
-						default:
-							return null;
-					}
 					if ((decoder == null) || (decoder.Count < 1))
 						return null;
+					string algo = PKCS1.HashNameFromOid (m_signaturealgo, false);
+					if (algo == null)
+						return null;
 					byte[] toBeSigned = decoder [0].GetBytes ();
-					certhash = hash.ComputeHash (toBeSigned, 0, toBeSigned.Length);
+					using (var hash = PKCS1.CreateFromName (algo))
+						certhash = hash.ComputeHash (toBeSigned, 0, toBeSigned.Length);
 				}
 				return (byte[]) certhash.Clone ();
 			}
@@ -397,9 +382,14 @@ namespace Mono.Security.X509 {
 
 				switch (m_signaturealgo) {
 					case "1.2.840.113549.1.1.2":	// MD2 with RSA encryption 
+					case "1.2.840.113549.1.1.3":	// MD4 with RSA encryption 
 					case "1.2.840.113549.1.1.4":	// MD5 with RSA encryption 
 					case "1.2.840.113549.1.1.5":	// SHA-1 with RSA Encryption 
 					case "1.3.14.3.2.29":		// SHA1 with RSA signature
+					case "1.2.840.113549.1.1.11":	// SHA-256 with RSA Encryption
+					case "1.2.840.113549.1.1.12":	// SHA-384 with RSA Encryption
+					case "1.2.840.113549.1.1.13":	// SHA-512 with RSA Encryption
+					case "1.3.36.3.3.1.2":			// RIPEMD160 with RSA Encryption
 						return (byte[]) signature.Clone ();
 
 					case "1.2.840.10040.4.3":	// SHA-1 with DSA
@@ -491,25 +481,11 @@ namespace Mono.Security.X509 {
 
 		internal bool VerifySignature (RSA rsa) 
 		{
+			// SHA1-1 with DSA
+			if (m_signaturealgo == "1.2.840.10040.4.3")
+				return false;
 			RSAPKCS1SignatureDeformatter v = new RSAPKCS1SignatureDeformatter (rsa);
-			switch (m_signaturealgo) {
-				// MD2 with RSA encryption 
-				case "1.2.840.113549.1.1.2":
-					// maybe someone installed MD2 ?
-					v.SetHashAlgorithm ("MD2");
-					break;
-				// MD5 with RSA encryption 
-				case "1.2.840.113549.1.1.4":
-					v.SetHashAlgorithm ("MD5");
-					break;
-				// SHA-1 with RSA Encryption 
-				case "1.2.840.113549.1.1.5":
-				case "1.3.14.3.2.29":
-					v.SetHashAlgorithm ("SHA1");
-					break;
-				default:
-					throw new CryptographicException ("Unsupported hash algorithm: " + m_signaturealgo);
-			}
+			v.SetHashAlgorithm (PKCS1.HashNameFromOid (m_signaturealgo));
 			return v.VerifySignature (this.Hash, this.Signature);
 		}
 
@@ -534,10 +510,20 @@ namespace Mono.Security.X509 {
 
 		public bool IsSelfSigned {
 			get { 
-				if (m_issuername == m_subject)
-					return VerifySignature (RSA); 
-				else
+				if (m_issuername != m_subject)
 					return false;
+
+				try {
+					if (RSA != null)
+						return VerifySignature (RSA);
+					else if (DSA != null)
+						return VerifySignature (DSA);
+					else
+						return false; // e.g. a certificate with only DSA parameters
+				}
+				catch (CryptographicException) {
+					return false;
+				}
 			}
 		}
 

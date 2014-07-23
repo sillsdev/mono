@@ -14,16 +14,6 @@ using System.Security;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-// General Information about the System.DirectoryServices.Protocols assembly
-
-using System;
-using System.Reflection;
-using System.Resources;
-using System.Security;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-
 // General Information about the system assembly
 
 [assembly: AssemblyTitle ("System.DirectoryServices.Protocols.dll")]
@@ -47,16 +37,6 @@ using System.Runtime.InteropServices;
 	[assembly: AssemblyKeyFile ("../msfinal.pub")]
 #endif
 
-#if NET_2_0
-	[assembly: AssemblyFileVersion (Consts.FxFileVersion)]
-	[assembly: AllowPartiallyTrustedCallers]
-	[assembly: RuntimeCompatibility (WrapNonExceptionThrows = true)]
-	[assembly: CompilationRelaxations (CompilationRelaxations.NoStringInterning)]
-	[assembly: Debuggable (DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints)]
-#elif NET_1_1
-	[assembly: AssemblyTrademark ("")]
-	[assembly: AssemblyConfiguration ("")]
-#elif NET_1_0
-	[assembly: AssemblyTrademark ("")]
-	[assembly: AssemblyConfiguration ("")]
-#endif
+[assembly: AssemblyFileVersion (Consts.FxFileVersion)]
+[assembly: AllowPartiallyTrustedCallers]
+[assembly: CompilationRelaxations (CompilationRelaxations.NoStringInterning)]

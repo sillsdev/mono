@@ -28,22 +28,22 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !FULL_AOT_RUNTIME || IOS_REFLECTION
 using System.Runtime.InteropServices;
 
 namespace System.Reflection.Emit
 {
 	[ComVisible (true)]
 	[Serializable]
-  [Flags]
-  public enum AssemblyBuilderAccess
-  {
-    Run = 1,
-    Save = 2,
-    RunAndSave = 3,
-    ReflectionOnly = 6
+	[Flags]
+	public enum AssemblyBuilderAccess {
+		Run = 1,
+		Save = 2,
+		RunAndSave = 3,
+		ReflectionOnly = 6,
 #if NET_4_0
-	,
-	RunAndCollect = 9
+		RunAndCollect = 9
 #endif
   }
 }
+#endif

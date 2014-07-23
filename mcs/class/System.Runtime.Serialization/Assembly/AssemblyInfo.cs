@@ -63,7 +63,6 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyKeyFile ("../ecma.pub")]
 [assembly: AllowPartiallyTrustedCallers]
 [assembly: ComCompatibleVersion (1, 0, 3300, 0)]
-[assembly: Debuggable (DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints)]
 [assembly: SecurityCritical (SecurityCriticalScope.Explicit)]
 #if NET_4_0
 // for SyndicationElementExtension
@@ -76,7 +75,3 @@ using System.Runtime.InteropServices;
 #endif
 
 [assembly: ComVisible (false)]
-
-[assembly: CompilationRelaxations (CompilationRelaxations.NoStringInterning)]
-[assembly: RuntimeCompatibility (WrapNonExceptionThrows = true)]
-[assembly: SecurityPermission (SecurityAction.RequestMinimum, SkipVerification = true)]

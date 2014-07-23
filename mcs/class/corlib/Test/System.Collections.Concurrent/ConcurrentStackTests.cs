@@ -28,6 +28,7 @@ using System.Threading;
 using System.Linq;
 using System.Collections.Concurrent;
 using NUnit.Framework;
+using NUnit.Framework.Constraints;
 
 namespace MonoTests.System.Collections.Concurrent
 {
@@ -124,7 +125,6 @@ namespace MonoTests.System.Collections.Concurrent
 			Assert.IsTrue(stack.IsEmpty, "#4");
 		}
 		
-		//[Ignore]
 		[Test()]
 		public void EnumerateTestCase()
 		{
@@ -188,6 +188,118 @@ namespace MonoTests.System.Collections.Concurrent
 				s += i;
 			}
 			Assert.IsTrue(s == "9876543210", "#1 : " + s);
+		}
+
+		[Test, ExpectedException (typeof (ArgumentNullException))]
+		public void ToExistingArray_Null ()
+		{
+			stack.CopyTo (null, 0);
+		}
+
+		[Test, ExpectedException (typeof (ArgumentOutOfRangeException))]
+		public void ToExistingArray_OutOfRange ()
+		{
+			stack.CopyTo (new int[3], -1);
+		}
+
+		[Test, ExpectedException (typeof (ArgumentException))]
+		public void ToExistingArray_IndexOverflow ()
+		{
+			stack.CopyTo (new int[3], 4);
+		}
+
+		[Test, ExpectedException (typeof (ArgumentException))]
+		public void ToExistingArray_Overflow ()
+		{
+			stack.CopyTo (new int[3], 0);
+		}
+
+		[Test]
+		public void TryPopRangeTest ()
+		{
+			int[] values = new int[3];
+			Assert.AreEqual (3, stack.TryPopRange (values));
+			Assert.That (values, new CollectionEquivalentConstraint (new int[] { 9, 8, 7 }));
+			Assert.AreEqual (10 - values.Length, stack.Count);
+			for (int i = 9 - values.Length; i >= 0; i--) {
+				int outValue;
+				Assert.IsTrue (stack.TryPop (out outValue));
+				Assert.AreEqual (i, outValue);
+			}
+		}
+
+		[Test]
+		public void TryPopRangeEmpty ()
+		{
+			stack = new ConcurrentStack<int>();
+			Assert.AreEqual (0, stack.TryPopRange (new int [1]));
+		}
+
+		[Test]
+		public void TryPopRangeTestWithOneElement ()
+		{
+			int[] values = new int[1];
+			Assert.AreEqual (1, stack.TryPopRange (values));
+			Assert.That (values, new CollectionEquivalentConstraint (new int[] { 9 }));
+			Assert.AreEqual (10 - values.Length, stack.Count);
+			for (int i = 9 - values.Length; i >= 0; i--) {
+				int outValue;
+				Assert.IsTrue (stack.TryPop (out outValue));
+				Assert.AreEqual (i, outValue);
+			}
+		}
+
+		[Test]
+		public void TryPopRangeFullTest ()
+		{
+			int[] values = new int[10];
+			Assert.AreEqual (10, stack.TryPopRange (values));
+			Assert.That (values, new CollectionEquivalentConstraint (Enumerable.Range (0, 10).Reverse ()));
+			Assert.AreEqual (0, stack.Count);
+		}
+
+		[Test]
+		public void TryPopRangePartialFillTest ()
+		{
+			int[] values = new int[5];
+			Assert.AreEqual (2, stack.TryPopRange (values, 3, 2));
+			Assert.That (values, new CollectionEquivalentConstraint (new int[] { 0, 0, 0, 9, 8 }));
+			Assert.AreEqual (8, stack.Count);
+		}
+
+		[Test, ExpectedException (typeof (ArgumentOutOfRangeException))]
+		public void TryPopRange_NegativeIndex ()
+		{
+			stack.TryPopRange (new int[3], -2, 3);
+		}
+
+		[Test, ExpectedException (typeof (ArgumentOutOfRangeException))]
+		public void TryPopRange_LargeIndex ()
+		{
+			stack.TryPopRange (new int[3], 200, 3);
+		}
+
+		[Test, ExpectedException (typeof (ArgumentException))]
+		public void TryPopRange_LargeCount ()
+		{
+			stack.TryPopRange (new int[3], 2, 5);
+		}
+
+		[Test, ExpectedException (typeof (ArgumentNullException))]
+		public void TryPopRange_NullArray ()
+		{
+			stack.TryPopRange (null);
+		}
+		
+		[Test]
+		public void PushRangeTestCase()
+		{
+			var testStack = new ConcurrentStack<int>();
+			
+			var testData = new int[] { 1, 2, 3, 4, 5 };			
+			testStack.PushRange (testData);
+			
+			Assert.AreEqual (testData.Length, testStack.Count);
 		}
 	}
 }

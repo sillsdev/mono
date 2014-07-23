@@ -101,6 +101,10 @@ namespace MonoTests.System.Linq.Expressions {
 		[ExpectedException (typeof (ArgumentException))]
 		public void InstanceTypeDoesntMatchMethodDeclaringType ()
 		{
+#if MOBILE
+			// ensure that String.Intern won't be removed by the linker
+			string s = String.Intern (String.Empty);
+#endif
 			Expression.Call (Expression.Constant (1), typeof (string).GetMethod ("Intern"));
 		}
 
@@ -223,6 +227,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void CallMethodOnStruct ()
 		{
 			var param = Expression.Parameter (typeof (EineStrukt), "s");
@@ -259,6 +264,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void CallStaticMethodWithRefParameter ()
 		{
 			var p = Expression.Parameter (typeof (int), "i");
@@ -270,6 +276,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void CallStaticMethodWithRefParameterAndOtherParameter ()
 		{
 			var i = Expression.Parameter (typeof (int), "i");
@@ -306,6 +313,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void Connect282729 ()
 		{
 			// test from https://connect.microsoft.com/VisualStudio/feedback/ViewFeedback.aspx?FeedbackID=282729
@@ -333,6 +341,7 @@ namespace MonoTests.System.Linq.Expressions {
 
 		[Test]
 		[Category ("NotWorking")]
+		[Category ("NotWorkingInterpreter")]
 		public void Connect290278 ()
 		{
 			// test from https://connect.microsoft.com/VisualStudio/feedback/ViewFeedback.aspx?FeedbackID=290278
@@ -355,6 +364,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void Connect297597 ()
 		{
 			// test from https://connect.microsoft.com/VisualStudio/feedback/ViewFeedback.aspx?FeedbackID=297597
@@ -388,6 +398,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void Connect282702 ()
 		{
 			var lambda = Expression.Lambda<Func<Func<int>>> (
@@ -477,6 +488,7 @@ namespace MonoTests.System.Linq.Expressions {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void CallNullableGetValueOrDefault () // #568989
 		{
 			var value = Expression.Parameter (typeof (int?), "value");
@@ -504,6 +516,18 @@ namespace MonoTests.System.Linq.Expressions {
 					typeof (object).GetMethod ("ToString"))).Compile ();
 
 			Assert.AreEqual ("Boolean", lambda ());
+		}
+
+		public static void AcceptsIEnumerable(IEnumerable<object> o)
+		{
+		}
+
+		[Test]
+		public void CallIQueryableMethodWithNewArrayBoundExpression () // #2304
+		{
+			Expression.Call (
+				GetType ().GetMethod ("AcceptsIEnumerable", BindingFlags.Public | BindingFlags.Static),
+				Expression.NewArrayBounds (typeof (object), Expression.Constant (0)));
 		}
 	}
 }

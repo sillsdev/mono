@@ -30,12 +30,14 @@
 using System.Collections;
 using System.Collections.Generic;
 using Mono.Cecil;
+using Mono.Collections.Generic;
 
 namespace Mono.Linker.Steps {
 
 	public class SweepStep : BaseStep {
 
 		AssemblyDefinition [] assemblies;
+		HashSet<AssemblyDefinition> resolvedTypeReferences;
 
 		protected override void Process ()
 		{
@@ -54,12 +56,9 @@ namespace Mono.Linker.Steps {
 				return;
 			}
 
-			var types = assembly.MainModule.Types;
-			var cloned_types = new List<TypeDefinition> (types);
+			var types = new List<TypeDefinition> ();
 
-			types.Clear ();
-
-			foreach (TypeDefinition type in cloned_types) {
+			foreach (TypeDefinition type in assembly.MainModule.Types) {
 				if (Annotations.IsMarked (type)) {
 					SweepType (type);
 					types.Add (type);
@@ -69,6 +68,10 @@ namespace Mono.Linker.Steps {
 				if (type.Name == "<Module>")
 					types.Add (type);
 			}
+
+			assembly.MainModule.Types.Clear ();
+			foreach (TypeDefinition type in types)
+				assembly.MainModule.Types.Add (type);
 		}
 
 		bool IsMarkedAssembly (AssemblyDefinition assembly)
@@ -91,6 +94,9 @@ namespace Mono.Linker.Steps {
 
 		void SweepReferences (AssemblyDefinition assembly, AssemblyDefinition target)
 		{
+			if (assembly == target)
+				return;
+
 			var references = assembly.MainModule.AssemblyReferences;
 			for (int i = 0; i < references.Count; i++) {
 				var reference = references [i];
@@ -98,13 +104,54 @@ namespace Mono.Linker.Steps {
 					continue;
 
 				references.RemoveAt (i);
+				// Removing the reference does not mean it will be saved back to disk!
+				// That depends on the AssemblyAction set for the `assembly`
+				switch (Annotations.GetAction (assembly)) {
+				case AssemblyAction.Copy:
+					// Copy means even if "unlinked" we still want that assembly to be saved back 
+					// to disk (OutputStep) without the (removed) reference
+					Annotations.SetAction (assembly, AssemblyAction.Save);
+					ResolveAllTypeReferences (assembly);
+					break;
+
+				case AssemblyAction.Save:
+				case AssemblyAction.Link:
+					ResolveAllTypeReferences (assembly);
+					break;
+				}
 				return;
 			}
 		}
 
-		static ICollection Clone (ICollection collection)
+		void ResolveAllTypeReferences (AssemblyDefinition assembly)
 		{
-			return new ArrayList (collection);
+			if (resolvedTypeReferences == null)
+				resolvedTypeReferences = new HashSet<AssemblyDefinition> ();
+			if (resolvedTypeReferences.Contains (assembly))
+				return;
+			resolvedTypeReferences.Add (assembly);
+
+			var hash = new Dictionary<TypeReference,IMetadataScope> ();
+
+			foreach (TypeReference tr in assembly.MainModule.GetTypeReferences ()) {
+				if (hash.ContainsKey (tr))
+					continue;
+				var td = tr.Resolve ();
+				IMetadataScope scope = tr.Scope;
+				// at this stage reference might include things that can't be resolved
+				// and if it is (resolved) it needs to be kept only if marked (#16213)
+				if ((td != null) && Annotations.IsMarked (td))
+					scope = assembly.MainModule.Import (td).Scope;
+				hash.Add (tr, scope);
+			}
+
+			// Resolve everything first before updating scopes.
+			// If we set the scope to null, then calling Resolve() on any of its
+			// nested types would crash.
+
+			foreach (var e in hash) {
+				e.Key.Scope = e.Value;
+			}
 		}
 
 		void SweepType (TypeDefinition type)
@@ -146,7 +193,7 @@ namespace Mono.Linker.Steps {
 			if (a.Name != b.Name)
 				return false;
 
-			if (a.Version != b.Version)
+			if (a.Version > b.Version)
 				return false;
 
 			return true;

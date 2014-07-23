@@ -9,22 +9,18 @@
 #include "mini-ppc.h"
 #elif defined(__sparc__) || defined(sparc)
 #include "mini-sparc.h"
-#elif defined(__s390__) || defined(s390)
+#elif defined(TARGET_S390X)
 # if defined(__s390x__)
 #  include "mini-s390x.h"
 # else
-#  include "mini-s390.h"
+#error "s390 is no longer supported."
 # endif
 #elif defined(__ia64__)
 #include "mini-ia64.h"
 #elif defined(TARGET_ARM)
 #include "mini-arm.h"
-#elif defined(__alpha__)
-#include "mini-alpha.h"
 #elif defined(__mips__)
 #include "mini-mips.h"
-#elif defined(__hppa__)
-#include "mini-hppa.h"
 #else
 #error add arch specific include file in mini-arch.h
 #endif

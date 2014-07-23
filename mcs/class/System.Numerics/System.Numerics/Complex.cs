@@ -231,7 +231,7 @@ namespace System.Numerics {
 		public static Complex Cosh (Complex value)
 		{
 			return new Complex (Math.Cosh (value.real) * Math.Cos (value.imaginary),
-					    -Math.Sinh (value.real)  * Math.Sin (value.imaginary));
+					    Math.Sinh (value.real)  * Math.Sin (value.imaginary));
 		}
 		
 		public static Complex Negate (Complex value)
@@ -338,12 +338,12 @@ namespace System.Numerics {
 
 		public string ToString (string format)
 		{
-			return string.Format ("({0}, {1})", string.Format (format, real), string.Format (format, imaginary));
+			return string.Format ("({0}, {1})", real.ToString (format), imaginary.ToString (format));
 		}
 
 		public string ToString (string format, IFormatProvider provider)
 		{
-			return string.Format ("({0}, {1})", string.Format (provider, format, real), string.Format (provider, format, imaginary));
+			return string.Format ("({0}, {1})", real.ToString (format, provider), imaginary.ToString (format, provider));
 		}
 	}
 }

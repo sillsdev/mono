@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "test.h"
 
 /*
@@ -134,11 +136,15 @@ compare_strings_utf16_RESULT (const gunichar2 *expected, const gunichar2 *actual
 	ret = compare_strings_utf16_pos (expected, actual, size);
 	if (ret < 0)
 		return OK;
-	return FAILED ("Incorrect output: expected '%s' but was '%s'\n", expected, actual);
+	return FAILED ("Incorrect output: expected '%s' but was '%s', differ at %d ('%c' x '%c')\n", expected, actual, ret, expected [ret], actual [ret]);
 }
 
+#if !defined(EGLIB_TESTS)
+#define eg_utf8_to_utf16_with_nuls g_utf8_to_utf16
+#endif
+
 RESULT
-compare_utf8_to_utf16_explicit (const gunichar2 *expected, const gchar *utf8, glong len_in, glong len_out, glong size_spec)
+compare_utf8_to_utf16_explicit (const gunichar2 *expected, const gchar *utf8, glong len_in, glong len_out, glong size_spec, gboolean include_nuls)
 {
 	GError *error;
 	gunichar2* ret;
@@ -148,7 +154,11 @@ compare_utf8_to_utf16_explicit (const gunichar2 *expected, const gchar *utf8, gl
 	result = NULL;
 
 	error = NULL;
-	ret = g_utf8_to_utf16 (utf8, size_spec, &in_read, &out_read, &error);
+	if (include_nuls)
+		ret = eg_utf8_to_utf16_with_nuls (utf8, size_spec, &in_read, &out_read, &error);
+	else
+		ret = g_utf8_to_utf16 (utf8, size_spec, &in_read, &out_read, &error);
+
 	if (error) {
 		result = FAILED ("The error is %d %s\n", (error)->code, (error)->message);
 		g_error_free (error);
@@ -170,17 +180,29 @@ compare_utf8_to_utf16_explicit (const gunichar2 *expected, const gchar *utf8, gl
 	return OK;
 }
 
+RESULT
+compare_utf8_to_utf16_general (const gunichar2 *expected, const gchar *utf8, glong len_in, glong len_out, gboolean include_nuls)
+{
+	RESULT result;
+
+	result = compare_utf8_to_utf16_explicit (expected, utf8, len_in, len_out, -1, include_nuls);
+	if (result != OK)
+		return result;
+	return compare_utf8_to_utf16_explicit (expected, utf8, len_in, len_out, len_in, include_nuls);
+}
 
 RESULT
 compare_utf8_to_utf16 (const gunichar2 *expected, const gchar *utf8, glong len_in, glong len_out)
 {
-	RESULT result;
-
-	result = compare_utf8_to_utf16_explicit (expected, utf8, len_in, len_out, -1);
-	if (result != OK)
-		return result;
-	return compare_utf8_to_utf16_explicit (expected, utf8, len_in, len_out, len_in);
+	return compare_utf8_to_utf16_general (expected, utf8, len_in, len_out, FALSE);
 }
+
+RESULT
+compare_utf8_to_utf16_with_nuls (const gunichar2 *expected, const gchar *utf8, glong len_in, glong len_out)
+{
+	return compare_utf8_to_utf16_explicit (expected, utf8, len_in, len_out, len_in, TRUE);
+}
+
 
 RESULT
 test_utf8_seq ()
@@ -191,7 +213,7 @@ test_utf8_seq ()
 	GError *error = NULL;
 	gunichar2 *dst;
 
-	printf ("got: %s\n", src);
+	//printf ("got: %s\n", src);
 	dst = g_utf8_to_utf16 (src, (glong)strlen (src), &in_read, &out_read, &error);
 	if (error != NULL){
 		return error->message;
@@ -239,24 +261,145 @@ test_utf8_to_utf16 ()
 }
 
 RESULT
+test_utf8_to_utf16_with_nuls ()
+{
+	const gchar *src0 = "", *src1 = "AB\0DE", *src2 = "\xE5\xB9\xB4\x27", *src3 = "\xEF\xBC\xA1", *src4 = "\xEF\xBD\x81";
+	gunichar2 str0 [] = {0}, str1 [] = {'A', 'B', 0, 'D', 'E', 0}, str2 [] = {0x5E74, 39, 0}, str3 [] = {0xFF21, 0}, str4 [] = {0xFF41, 0};
+	RESULT result;
+
+#if !defined(EGLIB_TESTS)
+	return OK;
+#endif
+
+	/* implicit length is forbidden */
+		if (eg_utf8_to_utf16_with_nuls (src1, -1, NULL, NULL, NULL) != NULL)
+		return FAILED ("explicit nulls must fail with -1 length\n");
+
+	/* empty string */
+	result = compare_utf8_to_utf16_with_nuls (str0, src0, 0, 0);
+	if (result != OK)
+		return result;
+
+	result = compare_utf8_to_utf16_with_nuls  (str1, src1, 5, 5);
+	if (result != OK)
+		return result;
+	result = compare_utf8_to_utf16_with_nuls  (str2, src2, 4, 2);
+	if (result != OK)
+		return result;
+	result = compare_utf8_to_utf16_with_nuls  (str3, src3, 3, 1);
+	if (result != OK)
+		return result;
+	result = compare_utf8_to_utf16_with_nuls  (str4, src4, 3, 1);
+	if (result != OK)
+		return result;
+
+	return OK;
+}
+
+typedef struct {
+	char *content;
+	size_t length;
+} convert_result_t;
+
+RESULT
 test_convert ()
 {
-	gsize n;
-	char *s = g_convert ("\242\241\243\242\241\243\242\241\243\242\241\243", -1, "UTF-8", "ISO-8859-1", NULL, &n, NULL);
-	guchar *u = (guchar *) s;
+	static const char *charsets[] = { "UTF-8", "UTF-16LE", "UTF-16BE", "UTF-32LE", "UTF-32BE" };
+	gsize length, converted_length, n;
+	char *content, *converted, *path;
+	convert_result_t **expected;
+	GError *err = NULL;
+	const char *srcdir;
+	gboolean loaded;
+	guint i, j, k;
+	char c;
 	
-	if (!s)
-		return FAILED ("Expected 24 bytes, got: NULL");
-
-	if (strlen (s) != 24)
-		return FAILED ("Expected 24 bytes, got: %d", strlen (s));
-
-	if (u [1] != 162 || u [2] != 194 ||
-	    u [3] != 161 || u [4] != 194 ||
-	    u [5] != 163 || u [6] != 194)
-		return FAILED ("Incorrect conversion");
+	if (!(srcdir = getenv ("srcdir")) && !(srcdir = getenv ("PWD")))
+		return FAILED ("srcdir not defined!");
 	
-	g_free (s);
+	expected = g_malloc (sizeof (convert_result_t *) * G_N_ELEMENTS (charsets));
+	
+	/* first load all our test samples... */
+	for (i = 0; i < G_N_ELEMENTS (charsets); i++) {
+		path = g_strdup_printf ("%s%c%s.txt", srcdir, G_DIR_SEPARATOR, charsets[i]);
+		loaded = g_file_get_contents (path, &content, &length, &err);
+		g_free (path);
+		
+		if (!loaded) {
+			for (j = 0; j < i; j++) {
+				g_free (expected[j]->content);
+				g_free (expected[j]);
+			}
+			
+			g_free (expected);
+			
+			return FAILED ("Failed to load content for %s: %s", charsets[i], err->message);
+		}
+		
+		expected[i] = g_malloc (sizeof (convert_result_t));
+		expected[i]->content = content;
+		expected[i]->length = length;
+	}
+	
+	/* test conversion from every charset to every other charset */
+	for (i = 0; i < G_N_ELEMENTS (charsets); i++) {
+		for (j = 0; j < G_N_ELEMENTS (charsets); j++) {
+			converted = g_convert (expected[i]->content, expected[i]->length, charsets[j],
+					       charsets[i], NULL, &converted_length, NULL);
+			
+			if (converted == NULL) {
+				for (k = 0; k < G_N_ELEMENTS (charsets); k++) {
+					g_free (expected[k]->content);
+					g_free (expected[k]);
+				}
+				
+				g_free (expected);
+				
+				return FAILED ("Failed to convert from %s to %s: NULL", charsets[i], charsets[j]);
+			}
+			
+			if (converted_length != expected[j]->length) {
+				length = expected[j]->length;
+				
+				for (k = 0; k < G_N_ELEMENTS (charsets); k++) {
+					g_free (expected[k]->content);
+					g_free (expected[k]);
+				}
+				
+				g_free (converted);
+				g_free (expected);
+				
+				return FAILED ("Failed to convert from %s to %s: expected %u bytes, got %u",
+					       charsets[i], charsets[j], length, converted_length);
+			}
+			
+			for (n = 0; n < converted_length; n++) {
+				if (converted[n] != expected[j]->content[n]) {
+					c = expected[j]->content[n];
+					
+					for (k = 0; k < G_N_ELEMENTS (charsets); k++) {
+						g_free (expected[k]->content);
+						g_free (expected[k]);
+					}
+					
+					g_free (converted);
+					g_free (expected);
+					
+					return FAILED ("Failed to convert from %s to %s: expected 0x%x at offset %u, got 0x%x",
+						       charsets[i], charsets[j], c, n, converted[n]);
+				}
+			}
+			
+			g_free (converted);
+		}
+	}
+	
+	for (k = 0; k < G_N_ELEMENTS (charsets); k++) {
+		g_free (expected[k]->content);
+		g_free (expected[k]);
+	}
+	
+	g_free (expected);
 	
 	return OK;
 }
@@ -293,9 +436,9 @@ ucs4_to_utf16_check_result (const gunichar2 *result_str, const gunichar2 *expect
 {
 	glong i;
 	if (result_items_read != expected_items_read)
-		return FAILED("Incorrect number of items read %d", result_items_read);
+		return FAILED("Incorrect number of items read; expected %d, got %d", expected_items_read, result_items_read);
 	if (result_items_written != expected_items_written)
-		return FAILED("Incorrect number of items written %d", result_items_written);
+		return FAILED("Incorrect number of items written; expected %d, got %d", expected_items_written, result_items_written);
 	if (result_error && !expect_error)
 		return FAILED("There should not be an error code.");
 	if (!result_error && expect_error)
@@ -403,9 +546,9 @@ utf16_to_ucs4_check_result (const gunichar *result_str, const gunichar *expected
 {
 	glong i;
 	if (result_items_read != expected_items_read)
-		return FAILED("Incorrect number of items read %d", result_items_read);
+		return FAILED("Incorrect number of items read; expected %d, got %d", expected_items_read, result_items_read);
 	if (result_items_written != expected_items_written)
-		return FAILED("Incorrect number of items written %d", result_items_written);
+		return FAILED("Incorrect number of items written; expected %d, got %d", expected_items_written, result_items_written);
 	if (result_error && !expect_error)
 		return FAILED("There should not be an error code.");
 	if (!result_error && expect_error)
@@ -449,13 +592,13 @@ test_utf16_to_ucs4 ()
 	check_result = utf16_to_ucs4_check_result (res, exp1, items_read, 11, items_written, 11, err, FALSE);
 	if (check_result) return check_result;
 	g_free (res);
-
+	
 	items_read = items_written = 0;
 	res = g_utf16_to_ucs4 (str2, 0, &items_read, &items_written, &err);
 	check_result = utf16_to_ucs4_check_result (res, exp2, items_read, 0, items_written, 0, err, FALSE);
 	if (check_result) return check_result;
 	g_free (res);
-
+	
 	items_read = items_written = 0;
 	res = g_utf16_to_ucs4 (str2, 1, &items_read, &items_written, &err);
 	check_result = utf16_to_ucs4_check_result (res, exp2, items_read, 1, items_written, 1, err, FALSE);
@@ -467,32 +610,32 @@ test_utf16_to_ucs4 ()
 	check_result = utf16_to_ucs4_check_result (res, exp2, items_read, 1, items_written, 1, err, FALSE);
 	if (check_result) return check_result;
 	g_free (res);
-
+	
 	items_read = items_written = 0;
 	res = g_utf16_to_ucs4 (str2, 3, &items_read, &items_written, &err);
 	check_result = utf16_to_ucs4_check_result (res, exp2, items_read, 3, items_written, 2, err, FALSE);
 	if (check_result) return check_result;
 	g_free (res);
-
+	
 	items_read = items_written = 0;
 	res = g_utf16_to_ucs4 (str2, 4, &items_read, &items_written, &err);
 	check_result = utf16_to_ucs4_check_result (res, exp2, items_read, 3, items_written, 2, err, FALSE);
 	if (check_result) return check_result;
 	g_free (res);
-
+	
 	items_read = items_written = 0;
 	res = g_utf16_to_ucs4 (str2, 5, &items_read, &items_written, &err);
 	check_result = utf16_to_ucs4_check_result (res, exp2, items_read, 4, items_written, 0, err, TRUE);
 	if (check_result) return check_result;
 	g_free (res);
-
+	
 	items_read = items_written = 0;
 	err = 0;
 	res = g_utf16_to_ucs4 (str3, 5, &items_read, &items_written, &err);
 	check_result = utf16_to_ucs4_check_result (res, exp3, items_read, 1, items_written, 0, err, TRUE);
 	if (check_result) return check_result;
 	g_free (res);
-
+	
 	// This loop tests the bounds of the conversion algorithm
 	current_read_index = current_write_index = 0;
 	for (i=0;i<11;i++) {
@@ -772,6 +915,7 @@ test_utf8_strdown ()
 static Test utf8_tests [] = {
 	{"g_utf16_to_utf8", test_utf16_to_utf8},
 	{"g_utf8_to_utf16", test_utf8_to_utf16},
+	{"g_utf8_to_utf16_with_nuls", test_utf8_to_utf16_with_nuls},
 	{"g_utf8_seq", test_utf8_seq},
 	{"g_convert", test_convert },
 	{"g_unichar_xdigit_value", test_xdigit },

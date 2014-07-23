@@ -5,6 +5,7 @@
 //	Sebastien Pouliot <sebastien@ximian.com>
 //
 // (C) 2004-2005 Novell (http://www.novell.com)
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 
 using System;
@@ -116,6 +117,15 @@ namespace MonoTests.System
 		public void ExpandEnvironmentVariables_ComplexExpandable2 () 
 		{
 			ExpandStartsEnds ("Hello %%PATH%%%", "Hello %", "%%");
+		}
+
+		[Test]
+		// Bug #5169
+		public void ExpandEnvironmentVariables_ExpandMultiple ()
+		{
+			string path = Environment.GetEnvironmentVariable ("PATH");
+			var expected = "%TEST123" + path + "TEST456%";
+			ExpandEquals ("%TEST123%PATH%TEST456%", expected);
 		}
 
 		[Test]

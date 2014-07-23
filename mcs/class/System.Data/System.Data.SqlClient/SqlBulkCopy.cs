@@ -37,8 +37,18 @@ using Mono.Data.Tds;
 using Mono.Data.Tds.Protocol;
 
 namespace System.Data.SqlClient {
+	/// <summary>Efficient way to bulk load SQL Server table with several data rows at once</summary>
 	public sealed class SqlBulkCopy : IDisposable 
 	{
+		#region Constants
+		private const string transConflictMessage = "Must not specify SqlBulkCopyOptions.UseInternalTransaction " +
+			"and pass an external Transaction at the same time.";
+		
+		private const SqlBulkCopyOptions insertModifiers =
+			SqlBulkCopyOptions.CheckConstraints | SqlBulkCopyOptions.TableLock |
+			SqlBulkCopyOptions.KeepNulls | SqlBulkCopyOptions.FireTriggers;
+		#endregion
+		
 		#region Fields
 
 		private int _batchSize = 0;
@@ -47,22 +57,30 @@ namespace System.Data.SqlClient {
 		private SqlBulkCopyColumnMappingCollection _columnMappingCollection = new SqlBulkCopyColumnMappingCollection ();
 		private string _destinationTableName = null;
 		private bool ordinalMapping = false;
-		bool sqlRowsCopied = false;
-		bool identityInsert = false;
-		bool isLocalConnection = false;
-		SqlConnection connection;
-		SqlBulkCopyOptions copyOptions = SqlBulkCopyOptions.Default;
+		private bool sqlRowsCopied = false;
+		private bool isLocalConnection = false;
+		private SqlConnection connection;
+		private SqlTransaction externalTransaction;
+		private SqlBulkCopyOptions copyOptions = SqlBulkCopyOptions.Default;
 
 		#endregion
 
 		#region Constructors
 		public SqlBulkCopy (SqlConnection connection)
 		{
+			if (connection == null) {
+				throw new ArgumentNullException("connection");
+			}
+			
 			this.connection = connection;
 		}
 
 		public SqlBulkCopy (string connectionString)
 		{
+			if (connectionString == null) {
+				throw new ArgumentNullException("connectionString");
+			}
+			
 			this.connection = new SqlConnection (connectionString);
 			isLocalConnection = true;
 		}
@@ -70,18 +88,40 @@ namespace System.Data.SqlClient {
 		[MonoTODO]
 		public SqlBulkCopy (string connectionString, SqlBulkCopyOptions copyOptions)
 		{
+			if (connectionString == null) {
+				throw new ArgumentNullException ("connectionString");
+			}
+			
 			this.connection = new SqlConnection (connectionString);
-			this.copyOptions = copyOptions;
 			isLocalConnection = true;
-			throw new NotImplementedException ();
+			
+			if ((copyOptions & SqlBulkCopyOptions.UseInternalTransaction) == SqlBulkCopyOptions.UseInternalTransaction)
+				throw new NotImplementedException ("We don't know how to process UseInternalTransaction option.");
+			
+			this.copyOptions = copyOptions;
 		}
 
 		[MonoTODO]
 		public SqlBulkCopy (SqlConnection connection, SqlBulkCopyOptions copyOptions, SqlTransaction externalTransaction)
 		{
+			if (connection == null) {
+				throw new ArgumentNullException ("connection");
+			}
+			
 			this.connection = connection;
 			this.copyOptions = copyOptions;
-			throw new NotImplementedException ();
+			
+			if ((copyOptions & SqlBulkCopyOptions.UseInternalTransaction) == SqlBulkCopyOptions.UseInternalTransaction) {
+				if (externalTransaction != null)
+					throw new ArgumentException (transConflictMessage);
+			}
+			else
+				this.externalTransaction = externalTransaction;
+			
+			if ((copyOptions & SqlBulkCopyOptions.UseInternalTransaction) == SqlBulkCopyOptions.UseInternalTransaction)
+				throw new NotImplementedException ("We don't know how to process UseInternalTransaction option.");
+			
+			this.copyOptions = copyOptions;
 		}
 
 		#endregion
@@ -199,6 +239,18 @@ namespace System.Data.SqlClient {
 					if ((int)row ["ColumnSize"] != -1) {
 						param.Size = (int) row ["ColumnSize"];
 					}
+
+					short numericPresision = (short)row ["NumericPrecision"];
+					if (numericPresision != 255) {
+						param.Precision = (byte) numericPresision;
+					}
+
+					short numericScale = (short)row ["NumericScale"];
+					if (numericScale != 255) {
+						param.Scale = (byte) numericScale;
+					}
+
+					param.IsNullable = (bool)row ["AllowDBNull"];
 					tmpCmd.Parameters.Add (param);
 					break;
 				}
@@ -207,6 +259,7 @@ namespace System.Data.SqlClient {
 			flag = false;
 			bool insertSt = false;
 			foreach (DataRow row in colMetaData.Rows) {
+				SqlDbType sqlType = (SqlDbType) row ["ProviderType"];
 				if (_columnMappingCollection.Count > 0) {
 					i = 0;
 					insertSt = false;
@@ -238,21 +291,32 @@ namespace System.Data.SqlClient {
 				if ((bool)row ["IsReadOnly"]) {
 					continue;
 				}
+
+				int columnSize = (int)row ["ColumnSize"];
 				string columnInfo = "";
-				if ((int)row ["ColumnSize"] != -1) {
+
+				if (columnSize >= TdsMetaParameter.maxVarCharCharacters && sqlType == SqlDbType.Text)
+					columnInfo = "VarChar(max)";
+				else if (columnSize >= TdsMetaParameter.maxNVarCharCharacters && sqlType == SqlDbType.NText)
+					columnInfo = "NVarChar(max)";
+				else if (IsTextType(sqlType) && columnSize != -1) {
 					columnInfo = string.Format ("{0}({1})",
-								    (SqlDbType) row ["ProviderType"],
-								    row ["ColumnSize"]);
+                                                sqlType,
+                                                columnSize.ToString());
 				} else {
-					columnInfo = string.Format ("{0}", (SqlDbType) row ["ProviderType"]);
+					columnInfo = string.Format ("{0}", sqlType);
 				}
+
+				if ( sqlType == SqlDbType.Decimal)
+					columnInfo += String.Format("({0},{1})", row ["NumericPrecision"], row ["NumericScale"]);
+
 				if (flag)
 					statement += ", ";
 				string columnName = (string) row ["ColumnName"];
 				statement += string.Format ("[{0}] {1}", columnName, columnInfo);
 				if (flag == false)
 					flag = true;
-				if (tableCollations != null) {
+				if (IsTextType(sqlType) && tableCollations != null) {
 					foreach (DataRow collationRow in tableCollations.Rows) {
 						if ((string)collationRow ["name"] == columnName) {
 							statement += string.Format (" COLLATE {0}", collationRow ["collation"]);
@@ -266,41 +330,48 @@ namespace System.Data.SqlClient {
 
 		private void ValidateColumnMapping (DataTable table, DataTable tableCollations)
 		{
-			foreach (SqlBulkCopyColumnMapping _columnMapping in _columnMappingCollection) {
-				if (ordinalMapping == false &&
-				    (_columnMapping.DestinationColumn == String.Empty ||
-				     _columnMapping.SourceColumn == String.Empty))
-					throw new InvalidOperationException ("Mappings must be either all null or ordinal");
-				if (ordinalMapping &&
-				    (_columnMapping.DestinationOrdinal == -1 ||
-				     _columnMapping.SourceOrdinal == -1))
-					throw new InvalidOperationException ("Mappings must be either all null or ordinal");
-				bool flag = false;
-				if (ordinalMapping == false) {
-					foreach (DataRow row in tableCollations.Rows) {
-						if ((string)row ["name"] == _columnMapping.DestinationColumn) {
-							flag = true;
-							break;
-						}
-					}
-					if (flag == false)
-						throw new InvalidOperationException ("ColumnMapping does not match");
-					flag = false;
-					foreach (DataColumn col in table.Columns) {
-						if (col.ColumnName == _columnMapping.SourceColumn) {
-							flag = true;
-							break;
-						}
-					}
-					if (flag == false)
-						throw new InvalidOperationException ("ColumnName " +
-										     _columnMapping.SourceColumn +
-										     " does not match");
-				} else {
-					if (_columnMapping.DestinationOrdinal >= tableCollations.Rows.Count)
-						throw new InvalidOperationException ("ColumnMapping does not match");
-				}
-			}
+			// So the problem here is that temp tables will not have any table collations.  This prevents
+			// us from bulk inserting into temp tables.  So for now we will skip the validation and
+			// let SqlServer tell us there is an issue rather than trying to do it here.
+			// So for now we will simply return and do nothing.  
+			// TODO: At some point we should remove this function if we all agree its the right thing to do
+			return;
+
+//			foreach (SqlBulkCopyColumnMapping _columnMapping in _columnMappingCollection) {
+//				if (ordinalMapping == false &&
+//				    (_columnMapping.DestinationColumn == String.Empty ||
+//				     _columnMapping.SourceColumn == String.Empty))
+//					throw new InvalidOperationException ("Mappings must be either all null or ordinal");
+//				if (ordinalMapping &&
+//				    (_columnMapping.DestinationOrdinal == -1 ||
+//				     _columnMapping.SourceOrdinal == -1))
+//					throw new InvalidOperationException ("Mappings must be either all null or ordinal");
+//				bool flag = false;
+//				if (ordinalMapping == false) {
+//					foreach (DataRow row in tableCollations.Rows) {
+//						if ((string)row ["name"] == _columnMapping.DestinationColumn) {
+//							flag = true;
+//							break;
+//						}
+//					}
+//					if (flag == false)
+//						throw new InvalidOperationException ("ColumnMapping does not match");
+//					flag = false;
+//					foreach (DataColumn col in table.Columns) {
+//						if (col.ColumnName == _columnMapping.SourceColumn) {
+//							flag = true;
+//							break;
+//						}
+//					}
+//					if (flag == false)
+//						throw new InvalidOperationException ("ColumnName " +
+//										     _columnMapping.SourceColumn +
+//										     " does not match");
+//				} else {
+//					if (_columnMapping.DestinationOrdinal >= tableCollations.Rows.Count)
+//						throw new InvalidOperationException ("ColumnMapping does not match");
+//				}
+//			}
 		}
 
 		private void BulkCopyToServer (DataTable table, DataRowState state)
@@ -309,7 +380,10 @@ namespace System.Data.SqlClient {
 				throw new InvalidOperationException ("This method should not be called on a closed connection");
 			if (_destinationTableName == null)
 				throw new ArgumentNullException ("DestinationTableName");
-			if (identityInsert) {
+			if (isLocalConnection && connection.State != ConnectionState.Open)
+				connection.Open();
+			
+			if ((copyOptions & SqlBulkCopyOptions.KeepIdentity) == SqlBulkCopyOptions.KeepIdentity) {
 				SqlCommand cmd = new SqlCommand ("set identity_insert " +
 								 table.TableName + " on",
 								 connection);
@@ -331,6 +405,44 @@ namespace System.Data.SqlClient {
 				string statement = "insert bulk " + DestinationTableName + " (";
 				statement += GenerateColumnMetaData (tmpCmd, colMetaData, tableCollations);
 				statement += ")";
+				
+				#region Check requested options and add corresponding modifiers to the statement
+				if ((copyOptions & insertModifiers) != SqlBulkCopyOptions.Default) {
+					statement += " WITH (";
+					bool commaRequired = false;
+					
+					if ((copyOptions & SqlBulkCopyOptions.CheckConstraints) == SqlBulkCopyOptions.CheckConstraints) {
+						if (commaRequired)
+							statement += ", ";
+						statement += "CHECK_CONSTRAINTS";
+						commaRequired = true;
+					}
+					
+					if ((copyOptions & SqlBulkCopyOptions.TableLock) == SqlBulkCopyOptions.TableLock) {
+						if (commaRequired)
+							statement += ", ";
+						statement += "TABLOCK";
+						commaRequired = true;
+					}
+					
+					if ((copyOptions & SqlBulkCopyOptions.KeepNulls) == SqlBulkCopyOptions.KeepNulls) {
+						if (commaRequired)
+							statement += ", ";
+						statement += "KEEP_NULLS";
+						commaRequired = true;
+					}
+					
+					if ((copyOptions & SqlBulkCopyOptions.FireTriggers) == SqlBulkCopyOptions.FireTriggers) {
+						if (commaRequired)
+							statement += ", ";
+						statement += "FIRE_TRIGGERS";
+						commaRequired = true;
+					}
+					
+					statement += ")";
+				}
+				#endregion Check requested options and add corresponding modifiers to the statement
+
 				blkCopy.SendColumnMetaData (statement);
 			}
 			blkCopy.BulkCopyStart (tmpCmd.Parameters.MetaParameters);
@@ -358,11 +470,14 @@ namespace System.Data.SqlClient {
 										rowToCopy = parameter.Value = parameter.ConvertToFrameworkType (rowToCopy);
 									}
 									string colType = string.Format ("{0}", parameter.MetaParameter.TypeName);
-									if (colType == "nvarchar") {
-										if (row [i] != null) {
+									if (colType == "nvarchar" || colType == "ntext" || colType == "nchar") {
+										if (row [i] != null && row [i] != DBNull.Value) {
 											size = ((string) parameter.Value).Length;
 											size <<= 1;
 										}
+									} else if (colType == "varchar" || colType == "text" || colType == "char") {
+										if (row [i] != null && row [i] != DBNull.Value)
+											size = ((string) parameter.Value).Length;
 									} else {
 										size = parameter.Size;
 									}
@@ -380,11 +495,14 @@ namespace System.Data.SqlClient {
 										rowToCopy = parameter.Value = parameter.ConvertToFrameworkType (rowToCopy);
 									}
 									string colType = string.Format ("{0}", parameter.MetaParameter.TypeName);
-									if (colType == "nvarchar") {
-										if (row [mapping.SourceColumn] != null) {
+									if (colType == "nvarchar" || colType == "ntext" || colType == "nchar") {
+										if (row [mapping.SourceColumn] != null && row [mapping.SourceColumn] != DBNull.Value) {
 											size = ((string) rowToCopy).Length;
 											size <<= 1;
 										}
+									} else if (colType == "varchar" || colType == "text" || colType == "char") {
+										if (row [mapping.SourceColumn] != null && row [mapping.SourceColumn] != DBNull.Value)
+											size = ((string) rowToCopy).Length;
 									} else {
 										size = parameter.Size;
 									}
@@ -400,16 +518,20 @@ namespace System.Data.SqlClient {
 						  If column type is SqlDbType.NVarChar the size of parameter is multiplied by 2
 						  FIXME: Need to check for other types
 						*/
-						if (colType == "nvarchar") {
+						if (colType == "nvarchar" || colType == "ntext" || colType == "nchar") {
 							size = ((string) row [param.ParameterName]).Length;
 							size <<= 1;
+						} else if (colType == "varchar" || colType == "text" || colType == "char") {
+							size = ((string) row [param.ParameterName]).Length;
 						} else {
 							size = param.Size;
 						}
 					}
 					if (rowToCopy == null)
 						continue;
-					blkCopy.BulkCopyData (rowToCopy, size, isNewRow);
+
+					blkCopy.BulkCopyData (rowToCopy, isNewRow, size, param.MetaParameter);
+                    
 					if (isNewRow)
 						isNewRow = false;
 				} // foreach (SqlParameter)
@@ -424,10 +546,22 @@ namespace System.Data.SqlClient {
 			blkCopy.BulkCopyEnd ();
 		}
 
+		private bool IsTextType(SqlDbType sqlType)
+		{
+			return (sqlType == SqlDbType.NText ||
+			        sqlType == SqlDbType.NVarChar || 
+			        sqlType == SqlDbType.Text || 
+			        sqlType == SqlDbType.VarChar ||
+			        sqlType == SqlDbType.Char ||
+			        sqlType == SqlDbType.NChar);
+		}
+
 		public void WriteToServer (DataRow [] rows)
 		{
 			if (rows == null)
 				throw new ArgumentNullException ("rows");
+			if (rows.Length == 0)
+				return;
 			DataTable table = new DataTable (rows [0].Table.TableName);
 			foreach (DataColumn col in rows [0].Table.Columns) {
 				DataColumn tmpCol = new DataColumn (col.ColumnName, col.DataType);

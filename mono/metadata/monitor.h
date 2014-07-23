@@ -16,7 +16,7 @@
 
 G_BEGIN_DECLS
 
-void mono_locks_dump (gboolean include_untaken);
+MONO_API void mono_locks_dump (gboolean include_untaken);
 
 void mono_monitor_init (void) MONO_INTERNAL;
 void mono_monitor_cleanup (void) MONO_INTERNAL;
@@ -38,6 +38,9 @@ extern void ves_icall_System_Threading_Monitor_Monitor_pulse(MonoObject *obj) MO
 extern void ves_icall_System_Threading_Monitor_Monitor_pulse_all(MonoObject *obj) MONO_INTERNAL;
 extern gboolean ves_icall_System_Threading_Monitor_Monitor_wait(MonoObject *obj, guint32 ms) MONO_INTERNAL;
 extern void ves_icall_System_Threading_Monitor_Monitor_try_enter_with_atomic_var (MonoObject *obj, guint32 ms, char *lockTaken) MONO_INTERNAL;
+
+gboolean
+mono_monitor_is_il_fastpath_wrapper (MonoMethod *method) MONO_INTERNAL;
 
 G_END_DECLS
 

@@ -4,6 +4,8 @@
  * Author(s)
  * 	Stephane Delcroix <stephane@delcroix.org>
  *
+ * Copyright 2011 Xamarin Inc.
+ *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -25,6 +27,8 @@
  */
 
 using System;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Collections;
 
 using NUnit.Framework;
@@ -40,7 +44,7 @@ namespace MonoTests.System
 			public void GetLocal ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo local = TimeZoneInfo.Local;
 				Assert.IsNotNull (local);
 				Assert.IsTrue (true);
@@ -149,6 +153,40 @@ namespace MonoTests.System
 				TimeZoneInfo.AdjustmentRule r2 = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule (new DateTime (2005,1,1), new DateTime (2007,1,1), new TimeSpan (1,0,0), s2, e2);
 				TimeZoneInfo.CreateCustomTimeZone ("mytimezone", new TimeSpan (6,0,0),null,null,null,new TimeZoneInfo.AdjustmentRule[] {r1, r2});
 			}
+
+			[Test]
+			public void SupportsDaylightSavingTime_NonEmptyAdjustmentRule ()
+			{
+				TimeZoneInfo.TransitionTime s1 = TimeZoneInfo.TransitionTime.CreateFloatingDateRule (new DateTime (1,1,1,4,0,0), 3, 2, DayOfWeek.Sunday);
+				TimeZoneInfo.TransitionTime e1 = TimeZoneInfo.TransitionTime.CreateFloatingDateRule (new DateTime (1,1,1,4,0,0), 10, 2, DayOfWeek.Sunday);
+				TimeZoneInfo.AdjustmentRule r1 = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule (new DateTime (2000,1,1), new DateTime (2005,1,1), new TimeSpan (1,0,0), s1, e1);
+				TimeZoneInfo tz = TimeZoneInfo.CreateCustomTimeZone ("mytimezone", new TimeSpan (6,0,0),null,null,null,new TimeZoneInfo.AdjustmentRule[] {r1});
+				Assert.IsTrue (tz.SupportsDaylightSavingTime);
+			}
+
+			[Test]
+			public void SupportsDaylightSavingTime_EmptyAdjustmentRule ()
+			{
+				TimeZoneInfo tz = TimeZoneInfo.CreateCustomTimeZone ("mytimezone", new TimeSpan (6,0,0),null,null,null,null);
+				Assert.IsFalse (tz.SupportsDaylightSavingTime);
+			}
+
+			[Test]
+			public void SupportsDaylightSavingTime_NonEmptyAdjustmentRule_DisableDaylightSavingTime ()
+			{
+				TimeZoneInfo.TransitionTime s1 = TimeZoneInfo.TransitionTime.CreateFloatingDateRule (new DateTime (1,1,1,4,0,0), 3, 2, DayOfWeek.Sunday);
+				TimeZoneInfo.TransitionTime e1 = TimeZoneInfo.TransitionTime.CreateFloatingDateRule (new DateTime (1,1,1,4,0,0), 10, 2, DayOfWeek.Sunday);
+				TimeZoneInfo.AdjustmentRule r1 = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule (new DateTime (2000,1,1), new DateTime (2005,1,1), new TimeSpan (1,0,0), s1, e1);
+				TimeZoneInfo tz = TimeZoneInfo.CreateCustomTimeZone ("mytimezone", new TimeSpan (6,0,0),null,null,null,new TimeZoneInfo.AdjustmentRule[] {r1}, true);
+				Assert.IsFalse (tz.SupportsDaylightSavingTime);
+			}
+
+			[Test]
+			public void SupportsDaylightSavingTime_EmptyAdjustmentRule_DisableDaylightSavingTime ()
+			{
+				TimeZoneInfo tz = TimeZoneInfo.CreateCustomTimeZone ("mytimezone", new TimeSpan (6,0,0),null,null,null,null,true);
+				Assert.IsFalse (tz.SupportsDaylightSavingTime);
+			}
 		}
 		
 		[TestFixture]
@@ -176,7 +214,7 @@ namespace MonoTests.System
 			public void DSTInLondon ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				DateTime june01 = new DateTime (2007, 06, 01);
 				DateTime xmas = new DateTime (2007, 12, 25);
 				Assert.IsTrue (london.IsDaylightSavingTime (june01), "June 01 is DST in London");
@@ -187,7 +225,7 @@ namespace MonoTests.System
 			public void DSTTransisions ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				DateTime beforeDST = new DateTime (2007, 03, 25, 0, 59, 59, DateTimeKind.Unspecified);
 				DateTime startDST = new DateTime (2007, 03, 25, 2, 0, 0, DateTimeKind.Unspecified);
 				DateTime endDST = new DateTime (2007, 10, 28, 1, 59, 59, DateTimeKind.Unspecified);
@@ -269,7 +307,7 @@ namespace MonoTests.System
 			public void ConvertFromUTC_ConvertInWinter ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				DateTime utc = new DateTime (2007, 12, 25, 12, 0, 0);
 				DateTime converted = TimeZoneInfo.ConvertTimeFromUtc (utc, london);
 				Assert.AreEqual (utc, converted);
@@ -279,7 +317,7 @@ namespace MonoTests.System
 			public void ConvertFromUtc_ConvertInSummer ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				DateTime utc = new DateTime (2007, 06, 01, 12, 0, 0);
 				DateTime converted = TimeZoneInfo.ConvertTimeFromUtc (utc, london);
 				Assert.AreEqual (utc + new TimeSpan (1,0,0), converted);
@@ -338,7 +376,7 @@ namespace MonoTests.System
 			public void ConvertFromToUtc ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				DateTime utc = DateTime.UtcNow;
 				Assert.AreEqual (utc.Kind, DateTimeKind.Utc);
 				DateTime converted = TimeZoneInfo.ConvertTimeFromUtc (utc, london);
@@ -347,6 +385,32 @@ namespace MonoTests.System
 				Assert.AreEqual (back.Kind, DateTimeKind.Utc);
 				Assert.AreEqual (utc, back);
 		
+			}
+
+
+			[Test]
+			public void ConvertFromToLocal ()
+			{
+				DateTime utc = DateTime.UtcNow;
+				Assert.AreEqual(utc.Kind, DateTimeKind.Utc);
+				DateTime converted = TimeZoneInfo.ConvertTimeFromUtc(utc, TimeZoneInfo.Local);
+			#if NET_4_0
+				Assert.AreEqual(DateTimeKind.Local, converted.Kind);
+			#else
+				Assert.AreEqual(DateTimeKind.Unspecified, converted.Kind);
+			#endif
+				DateTime back = TimeZoneInfo.ConvertTimeToUtc(converted, TimeZoneInfo.Local);
+				Assert.AreEqual(back.Kind, DateTimeKind.Utc);
+				Assert.AreEqual(utc, back);
+			}
+
+			[Test]
+			public void ConvertToTimeZone ()
+			{
+				if (Environment.OSVersion.Platform != PlatformID.Unix)
+					Assert.Ignore ("Not running on Unix.");
+
+				TimeZoneInfo.ConvertTime (DateTime.Now, TimeZoneInfo.FindSystemTimeZoneById("Pacific/Auckland"));
 			}
 		}
 		
@@ -402,7 +466,7 @@ namespace MonoTests.System
 			public void AmbiguousDates ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				Assert.IsFalse (london.IsAmbiguousTime (new DateTime (2007, 10, 28, 1, 0, 0)));
 				Assert.IsTrue (london.IsAmbiguousTime (new DateTime (2007, 10, 28, 1, 0, 1)));
 				Assert.IsTrue (london.IsAmbiguousTime (new DateTime (2007, 10, 28, 2, 0, 0)));
@@ -413,7 +477,7 @@ namespace MonoTests.System
 			public void AmbiguousUTCDates ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				Assert.IsFalse (london.IsAmbiguousTime (new DateTime (2007, 10, 28, 0, 0, 0, DateTimeKind.Utc)));
 				Assert.IsTrue (london.IsAmbiguousTime (new DateTime (2007, 10, 28, 0, 0, 1, DateTimeKind.Utc)));
 				Assert.IsTrue (london.IsAmbiguousTime (new DateTime (2007, 10, 28, 0, 59, 59, DateTimeKind.Utc)));
@@ -438,7 +502,7 @@ namespace MonoTests.System
 			public void NotEmpty ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				global::System.Collections.ObjectModel.ReadOnlyCollection<TimeZoneInfo> systemTZ = TimeZoneInfo.GetSystemTimeZones ();
 				Assert.IsNotNull(systemTZ, "SystemTZ is null");
 				Assert.IsFalse (systemTZ.Count == 0, "SystemTZ is empty");
@@ -448,7 +512,7 @@ namespace MonoTests.System
 			public void ContainsBrussels ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				global::System.Collections.ObjectModel.ReadOnlyCollection<TimeZoneInfo> systemTZ = TimeZoneInfo.GetSystemTimeZones ();
 				foreach (TimeZoneInfo tz in systemTZ) {
 					if (tz.Id == "Europe/Brussels")
@@ -481,7 +545,7 @@ namespace MonoTests.System
 			public void FindBrusselsTZ ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo brussels = TimeZoneInfo.FindSystemTimeZoneById ("Europe/Brussels");
 				Assert.IsNotNull (brussels);
 			}
@@ -490,7 +554,7 @@ namespace MonoTests.System
 			public void OffsetIsCorrectInKinshasa ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo kin = TimeZoneInfo.FindSystemTimeZoneById ("Africa/Kinshasa");
 				Assert.AreEqual (new TimeSpan (1,0,0), kin.BaseUtcOffset, "BaseUtcOffset in Kinshasa is not +1h");
 			}
@@ -499,7 +563,7 @@ namespace MonoTests.System
 			public void OffsetIsCorrectInBrussels ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo brussels = TimeZoneInfo.FindSystemTimeZoneById ("Europe/Brussels");
 				Assert.AreEqual (new TimeSpan (1,0,0), brussels.BaseUtcOffset, "BaseUtcOffset for Brussels is not +1h");
 			}
@@ -508,7 +572,7 @@ namespace MonoTests.System
 			public void NoDSTInKinshasa ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo kin = TimeZoneInfo.FindSystemTimeZoneById ("Africa/Kinshasa");
 				Assert.IsFalse (kin.SupportsDaylightSavingTime);
 			}
@@ -517,7 +581,7 @@ namespace MonoTests.System
 			public void BrusselsSupportsDST ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo brussels = TimeZoneInfo.FindSystemTimeZoneById ("Europe/Brussels");
 				Assert.IsTrue (brussels.SupportsDaylightSavingTime);
 			}
@@ -526,7 +590,7 @@ namespace MonoTests.System
 			public void MelbourneSupportsDST ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo melbourne = TimeZoneInfo.FindSystemTimeZoneById ("Australia/Melbourne");
 				Assert.IsTrue (melbourne.SupportsDaylightSavingTime);
 			}
@@ -535,7 +599,7 @@ namespace MonoTests.System
 			public void RomeAndVaticanSharesTime ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo rome = TimeZoneInfo.FindSystemTimeZoneById ("Europe/Rome");
 				TimeZoneInfo vatican = TimeZoneInfo.FindSystemTimeZoneById ("Europe/Vatican");
 				Assert.IsTrue (rome.HasSameRules (vatican));
@@ -592,7 +656,7 @@ namespace MonoTests.System
 			public void AmbiguousOffsets ()
 			{
 				if (Environment.OSVersion.Platform != PlatformID.Unix)
-					return;
+					Assert.Ignore ("Not running on Unix.");
 				TimeZoneInfo brussels = TimeZoneInfo.FindSystemTimeZoneById ("Europe/Brussels");
 				DateTime date = new DateTime (2007, 10, 28, 2, 30, 00);
 				Assert.IsTrue (brussels.IsAmbiguousTime (date));
@@ -610,6 +674,27 @@ namespace MonoTests.System
 				TimeZoneInfo utc = TimeZoneInfo.Utc;
 				TimeZoneInfo custom = TimeZoneInfo.CreateCustomTimeZone ("Custom", new TimeSpan (0), "Custom", "Custom");
 				Assert.IsTrue (utc.HasSameRules (custom));
+			}
+		}
+
+		[TestFixture]
+		public class SerializationTests
+		{
+			[Test]
+			public void Serialization_Deserialization ()
+			{
+				TimeZoneInfo.TransitionTime start = TimeZoneInfo.TransitionTime.CreateFloatingDateRule (new DateTime (1,1,1,1,0,0), 3, 5, DayOfWeek.Sunday);
+				TimeZoneInfo.TransitionTime end = TimeZoneInfo.TransitionTime.CreateFloatingDateRule (new DateTime (1,1,1,2,0,0), 10, 5, DayOfWeek.Sunday);
+				TimeZoneInfo.AdjustmentRule rule = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule (DateTime.MinValue.Date, DateTime.MaxValue.Date, new TimeSpan (1,0,0), start, end);
+				TimeZoneInfo london = TimeZoneInfo.CreateCustomTimeZone ("Europe/London", new TimeSpan (0), "Europe/London", "British Standard Time", "British Summer Time", new TimeZoneInfo.AdjustmentRule [] {rule});
+				MemoryStream stream = new MemoryStream ();
+				BinaryFormatter formatter = new BinaryFormatter ();
+				formatter.Serialize (stream, london);
+				stream.Position = 0;
+				TimeZoneInfo deserialized = (TimeZoneInfo) formatter.Deserialize (stream);
+				stream.Close ();
+				stream.Dispose ();
+				Assert.IsTrue (london.Equals (deserialized));
 			}
 		}
 	}

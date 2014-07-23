@@ -4,14 +4,13 @@
 // Represents a floating-point decimal data type with up to 29 
 // significant digits, suitable for financial and commercial calculations.
 //
-// Author:
+// Authors:
 //   Martin Weindel (martin.weindel@t-online.de)
+//   Marek Safar (marek.safar@gmail.com)
 //
 // (C) 2001 Martin Weindel
-//
-
-//
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
+// Copyright (C) 2014 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -190,7 +189,7 @@ namespace System
 
 		public Decimal (double value) 
 		{
-#if false
+#if true
 			//
 			// We cant use the double2decimal method
 			// because it incorrectly turns the floating point
@@ -225,10 +224,10 @@ namespace System
 		{
 			if (bits == null) 
 			{
-				throw new ArgumentNullException (Locale.GetText ("Bits is a null reference"));
+				throw new ArgumentNullException (Locale.GetText ("bits is a null reference"));
 			}
 
-			if (bits.GetLength(0) != 4) 
+			if (bits.Length != 4) 
 			{
 				throw new ArgumentException (Locale.GetText ("bits does not contain four values"));
 			}
@@ -756,7 +755,7 @@ namespace System
 			bool hasCurrency = false;
 			if ((style & NumberStyles.AllowCurrencySymbol) != 0)
 			{
-				int index = s.IndexOf (nfi.CurrencySymbol);
+				int index = s.IndexOfOrdinalUnchecked (nfi.CurrencySymbol);
 				if (index >= 0) 
 				{
 					s = s.Remove (index, nfi.CurrencySymbol.Length);
@@ -766,6 +765,11 @@ namespace System
 
 			string decimalSep = (hasCurrency) ? nfi.CurrencyDecimalSeparator : nfi.NumberDecimalSeparator;
 			string groupSep = (hasCurrency) ? nfi.CurrencyGroupSeparator : nfi.NumberGroupSeparator;
+			string negativeSign = nfi.NegativeSign;
+			string positiveSign = nfi.PositiveSign;
+
+			// If we don't have a group separator defined, it has the same effect as if it wasn't allowed.
+			if (string.IsNullOrEmpty(groupSep)) allowedThousands = false;
 
 			int pos = 0;
 			int len = s.Length;
@@ -791,20 +795,20 @@ namespace System
 					isNegative = true;
 					pos++;
 				}
-				else if (allowedLeadingSign && ch == nfi.NegativeSign[0] && !hasSign) 
+				else if (allowedLeadingSign && !string.IsNullOrEmpty (negativeSign) && ch == negativeSign[0] && !hasSign)
 				{
-					int slen = nfi.NegativeSign.Length;
-					if (slen == 1 || s.IndexOf (nfi.NegativeSign, pos, slen) == pos) 
+					int slen = negativeSign.Length;
+					if (slen == 1 || s.IndexOfOrdinalUnchecked (negativeSign, pos, slen) == pos)
 					{
 						hasSign = true;
 						isNegative = true;
 						pos += slen;
 					}
 				}
-				else if (allowedLeadingSign && ch == nfi.PositiveSign[0] && !hasSign) 
+				else if (allowedLeadingSign && !string.IsNullOrEmpty (positiveSign) && ch == positiveSign[0] && !hasSign)
 				{
-					int slen = nfi.PositiveSign.Length;
-					if (slen == 1 || s.IndexOf (nfi.PositiveSign, pos, slen) == pos) 
+					int slen = positiveSign.Length;
+					if (slen == 1 || s.IndexOfOrdinalUnchecked (positiveSign, pos, slen) == pos)
 					{
 						hasSign = true;
 						pos += slen;
@@ -813,7 +817,7 @@ namespace System
 				else if (allowedDecimalPoint && ch == decimalSep[0])
 				{
 					int slen = decimalSep.Length;
-					if (slen != 1 && s.IndexOf (decimalSep, pos, slen) != pos) 
+					if (slen != 1 && s.IndexOfOrdinalUnchecked (decimalSep, pos, slen) != pos) 
 					{
 						if (throwex)
 							ThrowAtPos (pos);
@@ -850,7 +854,7 @@ namespace System
 				else if (allowedThousands && ch == groupSep[0] && ch != decimalSep [0]) 
 				{
 					int slen = groupSep.Length;
-					if (slen != 1 && s.IndexOf(groupSep, pos, slen) != pos) 
+					if (slen != 1 && s.IndexOfOrdinalUnchecked(groupSep, pos, slen) != pos) 
 					{
 						if (throwex)
 							ThrowAtPos (pos);
@@ -862,7 +866,7 @@ namespace System
 				else if (allowedDecimalPoint && ch == decimalSep[0] && !hasDecimalPoint)
 				{
 					int slen = decimalSep.Length;
-					if (slen == 1 || s.IndexOf(decimalSep, pos, slen) == pos) 
+					if (slen == 1 || s.IndexOfOrdinalUnchecked(decimalSep, pos, slen) == pos) 
 					{
 						decPos = sb.Length;
 						hasDecimalPoint = true;
@@ -891,10 +895,10 @@ namespace System
 					}
 					ch = s[pos];
 					bool isNegativeExp = false;
-					if (ch == nfi.PositiveSign[0])
+					if (!string.IsNullOrEmpty (positiveSign) && ch == positiveSign[0])
 					{
-						int slen = nfi.PositiveSign.Length;
-						if (slen == 1 || s.IndexOf (nfi.PositiveSign, pos, slen) == pos) 
+						int slen = positiveSign.Length;
+						if (slen == 1 || s.IndexOfOrdinalUnchecked (positiveSign, pos, slen) == pos)
 						{
 							pos += slen;
 							if (pos >= len) {
@@ -905,10 +909,10 @@ namespace System
 							}
 						}
 					}
-					else if (ch == nfi.NegativeSign[0])
+					else if (!string.IsNullOrEmpty (negativeSign) && ch == negativeSign[0])
 					{
-						int slen = nfi.NegativeSign.Length;
-						if (slen == 1 || s.IndexOf (nfi.NegativeSign, pos, slen) == pos) 
+						int slen = negativeSign.Length;
+						if (slen == 1 || s.IndexOfOrdinalUnchecked (negativeSign, pos, slen) == pos)
 						{
 							pos += slen;
 							if (pos >= len) {
@@ -953,20 +957,20 @@ namespace System
 					hasOpeningParentheses = false;
 					pos++;
 				}
-				else if (allowedTrailingSign && ch == nfi.NegativeSign[0] && !hasSign) 
+				else if (allowedTrailingSign && !string.IsNullOrWhiteSpace (negativeSign) && ch == negativeSign[0] && !hasSign)
 				{
-					int slen = nfi.NegativeSign.Length;
-					if (slen == 1 || s.IndexOf (nfi.NegativeSign, pos, slen) == pos) 
+					int slen = negativeSign.Length;
+					if (slen == 1 || s.IndexOfOrdinalUnchecked(negativeSign, pos, slen) == pos)
 					{
 						hasSign = true;
 						isNegative = true;
 						pos += slen;
 					}
 				}
-				else if (allowedTrailingSign && ch == nfi.PositiveSign[0] && !hasSign) 
+				else if (allowedTrailingSign && !string.IsNullOrWhiteSpace (positiveSign) && ch == positiveSign[0] && !hasSign)
 				{
-					int slen = nfi.PositiveSign.Length;
-					if (slen == 1 || s.IndexOf(nfi.PositiveSign, pos, slen) == pos) 
+					int slen = positiveSign.Length;
+					if (slen == 1 || s.IndexOfOrdinalUnchecked (positiveSign, pos, slen) == pos)
 					{
 						hasSign = true;
 						pos += slen;
@@ -1068,8 +1072,7 @@ namespace System
 			len = s.Length;
 			if (len >= max + 1) {
 				// number lower than MaxValue (base-less) can have better precision
-				if (String.Compare (s, 0, "79228162514264337593543950335", 0, max + 1,
-					false, CultureInfo.InvariantCulture) <= 0) {
+				if (String.CompareOrdinal (s, 0, "79228162514264337593543950335", 0, max + 1) <= 0) {
 					max++;
 				}
 			}
@@ -1077,22 +1080,25 @@ namespace System
 			// then we trunc the string
 			if ((len > max) && (iDecPos < len)) {
 				int round = (s [max] - '0');
-				s = s.Substring (0, max);
 
 				bool addone = false;
 				if (round > 5) {
 					addone = true;
-				}
-				else if (round == 5) {
+				} else if (round == 5) {
 					if (isNegative) {
 						addone = true;
-					}
-					else {
-						// banker rounding applies :(
-						int previous = (s [max - 1] - '0');
-						addone = ((previous & 0x01) == 0x01);
+					} else {
+						// banker's rounding applies
+						if (len > max + 1) {
+							addone = s [max + 1] > '0';
+						} else {
+							int previous = s [max - 1] - '0';
+							addone = ((previous & 0x01) == 0x01);
+						}
 					}
 				}
+
+				s = s.Substring (0, max);
 				if (addone) {
 					char[] array = s.ToCharArray ();
 					int p = max - 1;
@@ -1361,10 +1367,6 @@ namespace System
 		private static extern int decimalIncr (ref Decimal d1, ref Decimal d2);
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
-		internal static extern int decimal2string (ref Decimal val, 
-		    int digits, int decimals, char[] bufDigits, int bufSize, out int decPos, out int sign);
-
-		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		internal static extern int string2decimal (out Decimal val, String sDigits, uint decPos, int sign);
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
@@ -1406,13 +1408,6 @@ namespace System
 		//![MethodImplAttribute(MethodImplOptions.InternalCall)]
 		[DllImport("libdec", EntryPoint="decimalIncr")]
 		private static extern int decimalIncr (ref Decimal d1, ref Decimal d2);
-
-		//![MethodImplAttribute(MethodImplOptions.InternalCall)]
-		[DllImport("libdec", EntryPoint="decimal2string")]
-		internal static extern int decimal2string (ref Decimal val, 
-		    int digits, int decimals,
-		    [MarshalAs(UnmanagedType.LPWStr)]StringBuilder bufDigits, 
-		    int bufSize, out int decPos, out int sign);
 
 		//![MethodImplAttribute(MethodImplOptions.InternalCall)]
 		[DllImport("libdec", EntryPoint="string2decimal")]

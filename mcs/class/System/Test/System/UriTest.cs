@@ -1028,6 +1028,13 @@ namespace MonoTests.System
 		}
 
 		[Test]
+		public void Equals4 ()
+		{
+			var uri = new Uri ("http://w3.org");
+			Assert.IsFalse (uri.Equals ("-"));
+		}
+
+		[Test]
 		public void TestEquals2 ()
 		{
 			Uri a = new Uri ("http://www.go-mono.com");
@@ -1187,7 +1194,15 @@ namespace MonoTests.System
 		}
 
 		[Test]
+		[Category ("NotWorking")]
 		public void RelativeUri ()
+		{
+			var u = new Uri ("/foo/bar");
+			Assert.IsFalse (u.IsAbsoluteUri, "#1");
+		}
+
+		[Test]
+		public void RelativeFragmentUri ()
 		{
 			Uri u = new Uri("http://localhost/../../../a");
 			Assert.AreEqual ("http://localhost/a", u.ToString ());
@@ -1197,7 +1212,7 @@ namespace MonoTests.System
 		}
 
 		[Test]
-		public void RelativeUri2 ()
+		public void RelativeFragmentUri2 ()
 		{
 			Assert.AreEqual ("hoge:ext", new Uri (new Uri ("hoge:foo:bar:baz"), "hoge:ext").ToString (), "#1");
 			if (isWin32) {
@@ -1465,8 +1480,13 @@ namespace MonoTests.System
 			for (int i = 0; i < 128; i++)
 				sb.Append ((char) i);
 
-			Assert.AreEqual ("%00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!%22%23%24%25%26'()*%2B%2C-.%2F0123456789%3A%3B%3C%3D%3E%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%7F",
-				      Uri.EscapeDataString (sb.ToString ()));
+			Assert.AreEqual (
+#if NET_4_0
+				"%00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20%21%22%23%24%25%26%27%28%29%2A%2B%2C-.%2F0123456789%3A%3B%3C%3D%3E%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%7F",
+#else
+				"%00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!%22%23%24%25%26'()*%2B%2C-.%2F0123456789%3A%3B%3C%3D%3E%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%7F",
+#endif
+				 Uri.EscapeDataString (sb.ToString ()));
 
 			Assert.AreEqual ("%C3%A1", Uri.EscapeDataString ("á"));
 		}
@@ -1477,8 +1497,14 @@ namespace MonoTests.System
 			for (int i = 0; i < 128; i++)
 				sb.Append ((char) i);
 
-			Assert.AreEqual ("%00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!%22#$%25&'()*+,-./0123456789:;%3C=%3E?@ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%7F",
+			Assert.AreEqual (
+#if NET_4_0
+				"%00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!%22#$%25&'()*+,-./0123456789:;%3C=%3E?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[%5C]%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%7F",
+#else
+				"%00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!%22#$%25&'()*+,-./0123456789:;%3C=%3E?@ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%7F",
+#endif
 				Uri.EscapeUriString (sb.ToString ()));
+
 			Assert.AreEqual ("%C3%A1", Uri.EscapeDataString ("á"));
 		}
 
@@ -1857,6 +1883,18 @@ namespace MonoTests.System
 
 			string escaped = uri.GetComponents (UriComponents.Fragment, UriFormat.UriEscaped);
 			Assert.AreEqual ("id=1%262&sort=asc", escaped, "UriEscaped");
+		}
+
+		[Test]
+		// Bug #12631
+		public void LocalPathWithBaseUrl ()
+		{
+			var mainUri = new Uri ("http://www.imdb.com");
+			var uriPath = "/title/tt0106521";
+
+			Uri result;
+			Assert.IsTrue (Uri.TryCreate (mainUri, uriPath, out result), "#1");
+			Assert.AreEqual ("http://www.imdb.com/title/tt0106521", result.ToString (), "#2");
 		}
 	}
 }

@@ -19,7 +19,6 @@
 
 using System;
 using System.Collections;
-using System.Text;
 using System.Runtime.InteropServices;
 
 namespace System.Data.OracleClient.Oci {
@@ -33,6 +32,7 @@ namespace System.Data.OracleClient.Oci {
 		bool moreResults;
 		OciServiceHandle serviceHandle;
 		ArrayList values;
+		ArrayList parm;
 		OracleCommand command;
 	
 		#endregion // Fields
@@ -83,12 +83,11 @@ namespace System.Data.OracleClient.Oci {
 				
 				if (disposing) {
 					if (values != null) {
-						foreach (OciDefineHandle h in values)
+						foreach (OciDefineHandle h in values) 
 							h.Dispose ();
 						values = null;
 					}
 				}
-				
 				base.Dispose (disposing);
 			}
 		}
@@ -111,6 +110,9 @@ namespace System.Data.OracleClient.Oci {
 
 			OciParameterDescriptor output = new OciParameterDescriptor (this, handle);
 			output.ErrorHandle = ErrorHandle;
+			if (parm == null)
+				parm = new ArrayList();
+			parm.Add(handle);
 			return output;
 		}
 
@@ -229,6 +231,8 @@ namespace System.Data.OracleClient.Oci {
 			switch (status) {
 			case OciGlue.OCI_NO_DATA:
 				moreResults = false;
+				foreach (IntPtr h in parm)
+					OciCalls.OCIDescriptorFree(h, OciHandleType.Parameter);
 				break;
 			case OciGlue.OCI_DEFAULT:
 				moreResults = true;
@@ -254,20 +258,15 @@ namespace System.Data.OracleClient.Oci {
 				throw new InvalidOperationException ("StatementHandle is already disposed.");
 			}
 
-			ulong rsize = 0;
+			int rsize = 0;
 			byte [] buffer;
 			
-			UIntPtr rsizep = new UIntPtr (rsize);
 			// Get size of buffer
-			OciCalls.OCIUnicodeToCharSet (Parent, null, commandText, ref rsizep);
-			rsize = rsizep.ToUInt64 ();
+			OciCalls.OCIUnicodeToCharSet (Parent, null, commandText, out rsize);
 			
-			//rsize = Encoding.UTF8.GetMaxByteCount (commandText.Length+1);
-
 			// Fill buffer
 			buffer = new byte[rsize];
-
-			OciCalls.OCIUnicodeToCharSet (Parent, buffer, commandText, ref rsizep);
+			OciCalls.OCIUnicodeToCharSet (Parent, buffer, commandText, out rsize);
 
 			// Execute statement
 			status = OciCalls.OCIStmtPrepare (this,

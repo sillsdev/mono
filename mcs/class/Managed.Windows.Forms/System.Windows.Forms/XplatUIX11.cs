@@ -1196,22 +1196,6 @@ namespace System.Windows.Forms {
 			}
 		}
 
-		void SetWmClass (string name, string className, IntPtr handle)
-		{
-			XClassHint hint = new XClassHint ();
-			hint.res_name = Marshal.StringToCoTaskMemAnsi (name);
-			hint.res_class = Marshal.StringToCoTaskMemAnsi (className);
-			IntPtr classHints = Marshal.AllocCoTaskMem (Marshal.SizeOf (hint));
-			Marshal.StructureToPtr (hint, classHints, true);
-
-			XSetClassHint (DisplayHandle, handle, classHints);
-
-			Marshal.FreeCoTaskMem (hint.res_name);
-			Marshal.FreeCoTaskMem (hint.res_class);
-
-			Marshal.FreeCoTaskMem (classHints);
-		}
-
 		void SetIcon(Hwnd hwnd, Icon icon)
 		{
 			if (icon == null) {
@@ -1635,11 +1619,23 @@ namespace System.Windows.Forms {
 				if (hwnd.zombie)
 					return;
 
-				if ((windows & WindowType.Whole) != 0) {
-					XMapWindow(DisplayHandle, hwnd.whole_window);
-				}
-				if ((windows & WindowType.Client) != 0) {
-					XMapWindow(DisplayHandle, hwnd.client_window);
+				if (hwnd.topmost) {
+					// Most window managers will respect the _NET_WM_STATE property.
+					// If not, use XMapRaised to map the window at the top level as
+					// a last ditch effort.
+					if ((windows & WindowType.Whole) != 0) {
+						XMapRaised(DisplayHandle, hwnd.whole_window);
+					}
+					if ((windows & WindowType.Client) != 0) {
+						XMapRaised(DisplayHandle, hwnd.client_window);
+					}
+				} else {
+					if ((windows & WindowType.Whole) != 0) {
+						XMapWindow(DisplayHandle, hwnd.whole_window);
+					}
+					if ((windows & WindowType.Client) != 0) {
+						XMapWindow(DisplayHandle, hwnd.client_window);
+					}
 				}
 
 				hwnd.mapped = true;
@@ -1772,15 +1768,16 @@ namespace System.Windows.Forms {
 
 					if (xevent.AnyEvent.type == XEventName.KeyPress ||
 					    xevent.AnyEvent.type == XEventName.KeyRelease) {
-						if (Keyboard.ClientWindow != IntPtr.Zero) {
-							xevent.KeyEvent.window = Keyboard.ClientWindow;
-						}
 						// PreFilter() handles "shift key state updates.
 						Keyboard.PreFilter (xevent);
+						if (XFilterEvent (ref xevent, Keyboard.ClientWindow)) {
+							// probably here we could raise WM_IME_KEYDOWN and
+							// WM_IME_KEYUP, but I'm not sure it is worthy.
+							continue;
+						}
 					}
-					if (XFilterEvent (ref xevent, IntPtr.Zero)) {
+					else if (XFilterEvent (ref xevent, IntPtr.Zero))
 						continue;
-					}
 				}
 
 				hwnd = Hwnd.GetObjectFromWindow(xevent.AnyEvent.window);
@@ -2599,13 +2596,8 @@ namespace System.Windows.Forms {
 
 		internal override Screen[] AllScreens {
 			get {
-				try {
-					if (!XineramaIsActive (DisplayHandle))
-						return null;
-				} catch (DllNotFoundException) {
-					// Xinerama isn't installed
+				if (!XineramaIsActive (DisplayHandle))
 					return null;
-				}
 				int nScreens;
 				IntPtr xineramaScreens = XineramaQueryScreens (DisplayHandle, out nScreens);
 				var screens = new Screen [nScreens];
@@ -2615,10 +2607,9 @@ namespace System.Windows.Forms {
 						typeof (XineramaScreenInfo));
 					var screenRect = new Rectangle (screen.x_org, screen.y_org, screen.width,
 						screen.height);
-					var isPrimary = (screen.x_org == 0 && screen.y_org == 0);
 					var name = string.Format ("Display {0}", screen.screen_number);
-					screens [i] = new Screen (isPrimary, name, screenRect, screenRect);
-					current = (IntPtr)((ulong)current + (ulong)Marshal.SizeOf(typeof(XineramaScreenInfo)));
+					screens [i] = new Screen (i == 0, name, screenRect, screenRect);
+					current = (IntPtr)( (ulong)current + (ulong)Marshal.SizeOf(typeof (XineramaScreenInfo)));
 				}
 				XFree (xineramaScreens);
 				return screens;
@@ -3020,13 +3011,8 @@ namespace System.Windows.Forms {
 					XSelectInput(DisplayHandle, hwnd.client_window, new IntPtr ((int)(SelectInputMask | EventMask.StructureNotifyMask | Keyboard.KeyEventMask)));
 			}
 
-			if (ExStyleSet (cp.ExStyle, WindowExStyles.WS_EX_TOPMOST)) {
-				atoms = new int[2];
-				atoms[0] = _NET_WM_WINDOW_TYPE_NORMAL.ToInt32();
-				XChangeProperty(DisplayHandle, hwnd.whole_window, _NET_WM_WINDOW_TYPE, (IntPtr)Atom.XA_ATOM, 32, PropertyMode.Replace, atoms, 1);
-
-				XSetTransientForHint (DisplayHandle, hwnd.whole_window, RootWindow);
-			}
+			if (ExStyleSet (cp.ExStyle, WindowExStyles.WS_EX_TOPMOST))
+				SetTopmost(hwnd.whole_window, true);
 
 			SetWMStyles(hwnd, cp);
 			
@@ -3058,10 +3044,6 @@ namespace System.Windows.Forms {
 
 			// Set caption/window title
 			Text(hwnd.Handle, cp.Caption);
-
-			// Set WM_CLASS property. This improves displaying the application icon in
-			// unity and gnome3 window managers.
-			SetWmClass (cp.ClassName, cp.ClassName, hwnd.whole_window);
 
 			SendMessage (hwnd.Handle, Msg.WM_CREATE, (IntPtr)1, IntPtr.Zero /* XXX unused */);
 			SendParentNotify (hwnd.Handle, Msg.WM_CREATE, int.MaxValue, int.MaxValue);
@@ -3855,6 +3837,10 @@ namespace System.Windows.Forms {
 			if (((long)nitems > 0) && (prop != IntPtr.Zero)) {
 				active = (IntPtr)Marshal.ReadInt32(prop);
 				XFree(prop);
+			} else {
+				// The window manager does not support _NET_ACTIVE_WINDOW.  Fall back to XGetInputFocus.
+				IntPtr	revert_to = IntPtr.Zero;
+				XGetInputFocus(DisplayHandle, out active, out revert_to);
 			}
 
 			if (active != IntPtr.Zero) {
@@ -5081,23 +5067,6 @@ namespace System.Windows.Forms {
 			}
 
 			OverrideCursorHandle = cursor;
-
-			// Immediately update cursor visually to behave more like .NET
-			if (LastPointerWindow != null && LastPointerWindow != IntPtr.Zero)
-			{
-				// LastPointerWindow might be a Button widget.
-				// Just setting cursor for a widget won't set the cursor for the rest of that form immediately.
-				// Set cursor for each parent widget to impact many of the elements on the form, though
-				// missing other widgets in the hierarchy such as sibling widgets.
-				Hwnd widget = Hwnd.ObjectFromHandle (LastPointerWindow);
-				while (widget != null)
-				{
-					SetCursor (widget.Handle, OverrideCursorHandle);
-					widget = widget.Parent;
-				}
-				// Get X to update mouse cursor immediately
-				XPending (DisplayHandle);
-			}
 		}
 
 		internal override PaintEventArgs PaintEventStart(ref Message msg, IntPtr handle, bool client)
@@ -5852,6 +5821,7 @@ namespace System.Windows.Forms {
 		{
 
 			Hwnd hwnd = Hwnd.ObjectFromHandle(handle);
+			hwnd.topmost = enabled;
 
 			if (enabled) {
 				lock (XlibLock) {
@@ -6139,12 +6109,13 @@ namespace System.Windows.Forms {
 			}
 
 			hwnd.opacity = (uint)(0xffffffff * transparency);
-			opacity = (IntPtr)((int)hwnd.opacity);
+			opacity = (IntPtr)hwnd.opacity;
 
-			IntPtr w = hwnd.whole_window;
-			if (hwnd.reparented)
-				w = XGetParent (hwnd.whole_window);
-			XChangeProperty(DisplayHandle, w, _NET_WM_WINDOW_OPACITY, (IntPtr)Atom.XA_CARDINAL, 32, PropertyMode.Replace, ref opacity, 1);
+			if (transparency >= 1.0) {
+				XDeleteProperty (DisplayHandle, hwnd.whole_window, _NET_WM_WINDOW_OPACITY);
+			} else {
+				XChangeProperty (DisplayHandle, hwnd.whole_window, _NET_WM_WINDOW_OPACITY, (IntPtr)Atom.XA_CARDINAL, 32, PropertyMode.Replace, ref opacity, 1);
+			}
 		}
 
 		internal override bool SetZOrder(IntPtr handle, IntPtr after_handle, bool top, bool bottom)
@@ -6469,6 +6440,13 @@ namespace System.Windows.Forms {
 		{
 			DebugHelper.TraceWriteLine ("XMapWindow");
 			return _XMapWindow(display, window);
+		}
+		[DllImport ("libX11", EntryPoint="XMapRaised")]
+		internal extern static int _XMapRaised(IntPtr display, IntPtr window);
+		internal static int XMapRaised(IntPtr display, IntPtr window)
+		{
+			DebugHelper.TraceWriteLine ("XMapRaised");
+			return _XMapRaised(display, window);
 		}
 		[DllImport ("libX11", EntryPoint="XUnmapWindow")]
 		internal extern static int _XUnmapWindow(IntPtr display, IntPtr window);
@@ -7279,19 +7257,11 @@ namespace System.Windows.Forms {
 			DebugHelper.TraceWriteLine ("XIfEvent");
 			_XIfEvent (display, ref xevent, event_predicate, arg);
 		}
-
-		[DllImport ("libX11", EntryPoint="XSetClassHint", CharSet=CharSet.Ansi)]
-		internal extern static int _XSetClassHint (IntPtr display, IntPtr window, IntPtr classHint);
-		internal static void XSetClassHint (IntPtr display, IntPtr window, IntPtr classHint)
-		{
-			DebugHelper.TraceWriteLine ("XSetClassHint");
-			_XSetClassHint (DisplayNameAttribute, WindowActiveFlags, XClassHint);
-		}
 #endregion
 
 #region Xinerama imports
 		[DllImport ("libXinerama", EntryPoint="XineramaQueryScreens")]
-		internal extern static IntPtr _XineramaQueryScreens (IntPtr display, out int number);
+		extern static IntPtr _XineramaQueryScreens (IntPtr display, out int number);
 		internal static IntPtr XineramaQueryScreens (IntPtr display, out int number)
 		{
 			DebugHelper.TraceWriteLine ("XineramaQueryScreens");
@@ -7299,11 +7269,22 @@ namespace System.Windows.Forms {
 		}
 
 		[DllImport ("libXinerama", EntryPoint="XineramaIsActive")]
-		internal extern static bool _XineramaIsActive (IntPtr display);
+		extern static bool _XineramaIsActive (IntPtr display);
+		static bool XineramaNotInstalled;
+
 		internal static bool XineramaIsActive (IntPtr display)
 		{
 			DebugHelper.TraceWriteLine ("XineramaIsActive");
-			return _XineramaIsActive (display);
+
+			if (XineramaNotInstalled)
+				return false;
+			try {
+				return _XineramaIsActive (display);
+			} catch (DllNotFoundException) {
+				// Xinerama isn't installed
+				XineramaNotInstalled = true;
+				return false;
+			}
 		}
 #endregion
 
@@ -7344,6 +7325,9 @@ namespace System.Windows.Forms {
 		
 		[DllImport ("libX11", EntryPoint="XMapWindow")]
 		internal extern static int XMapWindow(IntPtr display, IntPtr window);
+		
+		[DllImport ("libX11", EntryPoint="XMapRaised")]
+		internal extern static int XMapRaised(IntPtr display, IntPtr window);
 		
 		[DllImport ("libX11", EntryPoint="XUnmapWindow")]
 		internal extern static int XUnmapWindow(IntPtr display, IntPtr window);
@@ -7656,18 +7640,9 @@ namespace System.Windows.Forms {
 		[DllImport ("libX11", EntryPoint="XIfEvent")]
 		internal extern static void XIfEvent (IntPtr display, ref XEvent xevent, Delegate event_predicate, IntPtr arg);
 
-		[DllImport ("libX11", EntryPoint="XSetClassHint", CharSet=CharSet.Ansi)]
-		internal extern static int XSetClassHint(IntPtr display, IntPtr window, IntPtr classHint);
-#endregion
-
-#region Xinerama imports
-		[DllImport ("libXinerama")]
-		internal extern static IntPtr XineramaQueryScreens (IntPtr display, out int number);
-
-		[DllImport ("libXinerama")]
-		internal extern static bool XineramaIsActive (IntPtr display);
-#endregion
-
+		[DllImport ("libX11", EntryPoint="XGetInputFocus")]
+		internal extern static void XGetInputFocus (IntPtr display, out IntPtr focus, out IntPtr revert_to);
+		#endregion
 #region Gtk/Gdk imports
 		[DllImport("libgdk-x11-2.0")]
 		internal extern static IntPtr gdk_atom_intern (string atomName, bool onlyIfExists);
@@ -7680,6 +7655,29 @@ namespace System.Windows.Forms {
 
 		[DllImport("libgtk-x11-2.0")]
 		internal extern static void gtk_clipboard_set_text (IntPtr clipboard, string text, int len);
+#endregion
+
+
+#region Xinerama imports
+		[DllImport ("libXinerama")]
+		internal extern static IntPtr XineramaQueryScreens (IntPtr display, out int number);
+
+		[DllImport ("libXinerama", EntryPoint = "XineramaIsActive")]
+		extern static bool _XineramaIsActive (IntPtr display);
+		static bool XineramaNotInstalled;
+
+		internal static bool XineramaIsActive (IntPtr display)
+		{
+			if (XineramaNotInstalled)
+				return false;
+			try {
+				return _XineramaIsActive (display);
+			} catch (DllNotFoundException) {
+				// Xinerama isn't installed
+				XineramaNotInstalled = true;
+				return false;
+			}
+		}
 #endregion
 
 #endif

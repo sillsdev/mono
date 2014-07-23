@@ -29,15 +29,14 @@ typedef signed   @GSIZE@ gssize;
 #define G_GSIZE_FORMAT   @GSIZE_FORMAT@
 #define G_GUINT64_FORMAT @G_GUINT64_FORMAT@
 #define G_GINT64_FORMAT @G_GINT64_FORMAT@
+#define G_GUINT32_FORMAT @G_GUINT32_FORMAT@
+#define G_GINT32_FORMAT @G_GINT32_FORMAT@
 
 #if @G_HAVE_ISO_VARARGS@ == 1
 #define G_HAVE_ISO_VARARGS
 #endif
 
 #if defined (__native_client__)
-#define sem_trywait(x) sem_wait(x)
-#define sem_timedwait(x,y) sem_wait(x)
-#define getdtablesize() (32768)
 #undef G_BREAKPOINT
 #define G_BREAKPOINT()
 #endif

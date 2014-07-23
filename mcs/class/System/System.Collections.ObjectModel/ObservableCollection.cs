@@ -18,12 +18,15 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 // Copyright (c) 2007 Novell, Inc. (http://www.novell.com)
+// Copyright 2011 Xamarin Inc.
 //
 // Authors:
 //	Chris Toshok (toshok@novell.com)
 //	Brian O'Keefe (zer0keefie@gmail.com)
+//	Marek Safar (marek.safar@gmail.com)
 //
-#if NET_4_0 || MOBILE
+
+#if NET_4_0
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -36,47 +39,56 @@ namespace System.Collections.ObjectModel
 	[TypeForwardedFrom (Consts.WindowsBase_3_0)]
 #endif
 	public class ObservableCollection<T> : Collection<T>, INotifyCollectionChanged, INotifyPropertyChanged {
-		
-		private class Reentrant : IDisposable {
-			private int count = 0;
+		[Serializable]
+#if !MOBILE
+		[TypeForwardedFrom (Consts.WindowsBase_3_0)]
+#endif
+		sealed class SimpleMonitor : IDisposable {
+			private int _busyCount;
 
-			public Reentrant()
+			public SimpleMonitor()
 			{
 			}
 
 			public void Enter()
 			{
-				count++;
+				_busyCount++;
 			}
 
 			public void Dispose()
 			{
-				count--;
+				_busyCount--;
 			}
 
 			public bool Busy
 			{
-				get { return count > 0; }
+				get { return _busyCount > 0; }
 			}
 		}
 
-		private Reentrant reentrant = new Reentrant ();
+		private SimpleMonitor _monitor = new SimpleMonitor ();
 
-		public ObservableCollection()
+		public ObservableCollection ()
 		{
 		}
 
-		public ObservableCollection(IEnumerable<T> collection)
+		public ObservableCollection (IEnumerable<T> collection)
 		{
-			throw new NotImplementedException ();
+			if (collection == null)
+				throw new ArgumentNullException ("collection");
+
+			foreach (var item in collection)
+				Add (item);
 		}
 
-		public ObservableCollection(List<T> list)
-			: base (list)
+		public ObservableCollection (List<T> list)
+			: base (list != null ? new List<T> (list) : null)
 		{
 		}
 
+		[field:NonSerialized]
 		public virtual event NotifyCollectionChangedEventHandler CollectionChanged;
+		[field:NonSerialized]
 		protected virtual event PropertyChangedEventHandler PropertyChanged;
 
 		event PropertyChangedEventHandler INotifyPropertyChanged.PropertyChanged {
@@ -86,8 +98,8 @@ namespace System.Collections.ObjectModel
 
 		protected IDisposable BlockReentrancy ()
 		{
-			reentrant.Enter ();
-			return reentrant;
+			_monitor.Enter ();
+			return _monitor;
 		}
 
 		protected void CheckReentrancy ()
@@ -95,7 +107,7 @@ namespace System.Collections.ObjectModel
 			NotifyCollectionChangedEventHandler eh = CollectionChanged;
 
 			// Only have a problem if we have more than one event listener.
-			if (reentrant.Busy && eh != null && eh.GetInvocationList ().Length > 1)
+			if (_monitor.Busy && eh != null && eh.GetInvocationList ().Length > 1)
 				throw new InvalidOperationException ("Cannot modify the collection while reentrancy is blocked.");
 		}
 

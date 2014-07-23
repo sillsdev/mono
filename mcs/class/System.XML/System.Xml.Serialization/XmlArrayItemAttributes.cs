@@ -28,17 +28,16 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-using System.Xml.Serialization;
 using System.Collections;
-using System;
+using System.Collections.Generic;
 
 namespace System.Xml.Serialization
 {
 	/// <summary>
 	/// Summary description for XmlArrayItemAttributes.
 	/// </summary>
-	public class XmlArrayItemAttributes : CollectionBase
-	{
+
+	public class XmlArrayItemAttributes : CollectionBase {
 
 		public XmlArrayItemAttribute this [int index] {
 			get {
@@ -51,7 +50,7 @@ namespace System.Xml.Serialization
 
 		public int Add (XmlArrayItemAttribute attribute)
 		{
-			return List.Add(attribute);
+			return (List as IList).Add (attribute);
 		}
 
 		public bool Contains(XmlArrayItemAttribute attribute)

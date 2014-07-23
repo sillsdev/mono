@@ -1,14 +1,17 @@
-// CS0119: Expression denotes a `type', where a `variable' or `value' was expected
-// Line: 12
- 
-public class Foo<T>
+// CS0119: Expression denotes a `type', where a `variable', `value' or `method group' was expected
+// Line: 14
+
+using System;
+
+namespace Test
 {
-}
- 
-class X
-{
-	static void Main ()
+	public delegate void SomeDel (Action a);
+
+	public class TestClass
 	{
-		Foo<X> = new Foo<X> ();
+		public void TestMethod ()
+		{
+			SomeDel (() => { });
+		}
 	}
 }

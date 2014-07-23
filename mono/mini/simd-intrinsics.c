@@ -12,6 +12,7 @@
 
 #include "mini.h"
 #include "ir-emit.h"
+#include "mono/utils/bsearch.h"
 
 /*
 General notes on SIMD intrinsics
@@ -897,8 +898,9 @@ mono_type_to_expand_op (MonoType *type)
 		return OP_EXPAND_R4;
 	case MONO_TYPE_R8:
 		return OP_EXPAND_R8;
+	default:
+		g_assert_not_reached ();
 	}
-	g_assert_not_reached ();
 }
 
 static int
@@ -984,8 +986,9 @@ mono_type_to_extract_op (MonoType *type)
 	case MONO_TYPE_U4:
 	case MONO_TYPE_R4:
 		return OP_EXTRACT_I4;
+	default:
+		g_assert_not_reached ();
 	}
-	g_assert_not_reached ();
 }
 
 /*Returns the amount to shift the element index to get the dword it belongs to*/
@@ -1003,8 +1006,9 @@ mono_type_elements_shift_bits (MonoType *type)
 	case MONO_TYPE_U4:
 	case MONO_TYPE_R4:
 		return 0;
+	default:
+		g_assert_not_reached ();
 	}
-	g_assert_not_reached ();
 }
 
 static G_GNUC_UNUSED int
@@ -1027,8 +1031,9 @@ mono_type_to_insert_op (MonoType *type)
 		return OP_INSERT_R4;
 	case MONO_TYPE_R8:
 		return OP_INSERT_R8;
+	default:
+		g_assert_not_reached ();
 	}
-	g_assert_not_reached ();
 }
 
 static int
@@ -1051,8 +1056,9 @@ mono_type_to_slow_insert_op (MonoType *type)
 		return OP_INSERTX_R4_SLOW;
 	case MONO_TYPE_R8:
 		return OP_INSERTX_R8_SLOW;
+	default:
+		g_assert_not_reached ();
 	}
-	g_assert_not_reached ();
 }
 
 static MonoInst*
@@ -1472,7 +1478,7 @@ simd_version_name (guint32 version)
 static MonoInst*
 emit_intrinsics (MonoCompile *cfg, MonoMethod *cmethod, MonoMethodSignature *fsig, MonoInst **args, const SimdIntrinsc *intrinsics, guint32 size)
 {
-	const SimdIntrinsc * result = bsearch (cmethod->name, intrinsics, size, sizeof (SimdIntrinsc), &simd_intrinsic_compare_by_name);
+	const SimdIntrinsc * result = mono_binary_search (cmethod->name, intrinsics, size, sizeof (SimdIntrinsc), &simd_intrinsic_compare_by_name);
 	if (!result) {
 		DEBUG (printf ("function doesn't have a simd intrinsic %s::%s/%d\n", cmethod->klass->name, cmethod->name, fsig->param_count));
 		return NULL;

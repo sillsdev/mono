@@ -9,7 +9,7 @@
 // (C) Copyright 2002 Ville Palo
 // (C) Copyright 2003 Martin Willemoes Hansen
 // (C) 2005 Mainsoft Corporation (http://www.mainsoft.com)
-
+// Copyright 2011 Xamarin Inc.
 //
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
 //
@@ -283,11 +283,14 @@ namespace MonoTests.System.Data
 			substring = TextString.Substring (0, TextString.IndexOf(EOL));
 			TextString = TextString.Substring (TextString.IndexOf(EOL) + EOL.Length);
 			// This is original DataSet.WriteXmlSchema() output
-//			Assert.AreEqual ("              <xs:element name=\"second\" msdata:DataType=\"System.Data.SqlTypes.SqlGuid, System.Data, Version=1.0.5000.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\" type=\"xs:string\" minOccurs=\"0\" />", substring, "test#16");
-#if NET_2_0
+#if MOBILE
+			Assert.AreEqual ("              <xs:element minOccurs=\"0\" msdata:DataType=\"System.Data.SqlTypes.SqlGuid, System.Data, Version=2.0.5.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\" name=\"second\" type=\"xs:string\" />", substring, "test#16");
+#elif NET_4_0
+			Assert.AreEqual ("              <xs:element minOccurs=\"0\" msdata:DataType=\"System.Data.SqlTypes.SqlGuid, System.Data, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\" name=\"second\" type=\"xs:string\" />", substring, "test#16");
+#elif NET_2_0
 			Assert.AreEqual ("              <xs:element minOccurs=\"0\" msdata:DataType=\"System.Data.SqlTypes.SqlGuid, System.Data, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\" name=\"second\" type=\"xs:string\" />", substring, "test#16");
 #else
-			Assert.AreEqual ("              <xs:element minOccurs=\"0\" msdata:DataType=\"System.Data.SqlTypes.SqlGuid, System.Data, Version=1.0.5000.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\" name=\"second\" type=\"xs:string\" />", substring, "test#16");
+			#error "Unknown profile"
 #endif
 			if (substring.IndexOf ("<xs:element") < 0)
 				Assert.Fail ("test#16: " + substring);
@@ -1211,46 +1214,54 @@ namespace MonoTests.System.Data
 		[Test]
                 public void CloneCopy ()
                 {
-                        DataTable table = new DataTable ("pTable");                         DataTable table1 = new DataTable ("cTable");                         DataSet set = new DataSet ();
-                                                                                                    
+                        DataTable table = new DataTable ("pTable");
+			DataTable table1 = new DataTable ("cTable");
+			DataSet set = new DataSet ();
+
                         set.Tables.Add (table);
-                        set.Tables.Add (table1);                         DataColumn col = new DataColumn ();
+                        set.Tables.Add (table1);
+
+			DataColumn col = new DataColumn ();
                         col.ColumnName = "Id";
                         col.DataType = Type.GetType ("System.Int32");
                         table.Columns.Add (col);
                         UniqueConstraint uc = new UniqueConstraint ("UK1", table.Columns[0] );
                         table.Constraints.Add (uc);
-                                                                                                    
+
                         col = new DataColumn ();
                         col.ColumnName = "Name";
                         col.DataType = Type.GetType ("System.String");
                         table.Columns.Add (col);
-                                                                                                    
+
                         col = new DataColumn ();
                         col.ColumnName = "Id";
                         col.DataType = Type.GetType ("System.Int32");
                         table1.Columns.Add (col);
-                                                                                                    
+
                         col = new DataColumn ();
                         col.ColumnName = "Name";
                         col.DataType = Type.GetType ("System.String");
 		        table1.Columns.Add (col);
 			  ForeignKeyConstraint fc = new ForeignKeyConstraint ("FK1", table.Columns[0], table1.Columns[0] );
                         table1.Constraints.Add (fc);
-                                                                                                    
-                                                                                                    
+
+
                         DataRow row = table.NewRow ();
-                                                                                                    
+
                         row ["Id"] = 147;
                         row ["name"] = "Row1";
                         row.RowError = "Error#1";
                         table.Rows.Add (row);
-                                                                                                    
+
+			// Set column to RO as commonly used by auto-increment fields.
+			// ds.Copy() has to omit the RO check when cloning DataRows 
+			table.Columns["Id"].ReadOnly = true;
+			
                         row = table1.NewRow ();
                         row ["Id"] = 147;
                         row ["Name"] = "Row1";
                         table1.Rows.Add (row);
-                                                                                                    
+
                         //Setting properties of DataSet
                         set.CaseSensitive = true;
                         set.DataSetName = "My DataSet";
@@ -1262,7 +1273,7 @@ namespace MonoTests.System.Data
                         set.ExtendedProperties.Add ("TimeStamp", DateTime.Now);
                         CultureInfo cultureInfo = new CultureInfo( "ar-SA" );
                         set.Locale = cultureInfo;
-                                                                                                    
+
                         //Testing Copy ()
                         DataSet copySet = set.Copy ();
                         Assert.AreEqual (set.CaseSensitive, copySet.CaseSensitive, "#A01");

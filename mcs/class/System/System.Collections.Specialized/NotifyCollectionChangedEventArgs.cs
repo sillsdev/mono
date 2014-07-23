@@ -23,7 +23,7 @@
 //	Chris Toshok (toshok@ximian.com)
 //	Brian O'Keefe (zer0keefie@gmail.com)
 //
-#if NET_4_0 || MOBILE
+#if NET_4_0
 using System.Runtime.CompilerServices;
 
 namespace System.Collections.Specialized
@@ -113,7 +113,7 @@ namespace System.Collections.Specialized
 		{
 		}
 
-		public NotifyCollectionChangedEventArgs (NotifyCollectionChangedAction action, IList newItems, IList oldItems, int index)
+		public NotifyCollectionChangedEventArgs (NotifyCollectionChangedAction action, IList newItems, IList oldItems, int startingIndex)
 		{
 			this.action = action;
 
@@ -129,8 +129,8 @@ namespace System.Collections.Specialized
 			this.oldItems = oldItems;
 			this.newItems = newItems;
 
-			oldIndex = index;
-			newIndex = index;
+			oldIndex = startingIndex;
+			newIndex = startingIndex;
 		}
 
 		public NotifyCollectionChangedEventArgs (NotifyCollectionChangedAction action, IList changedItems, int index, int oldIndex)

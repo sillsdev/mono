@@ -8,6 +8,7 @@
 //
 // Copyright 2001 Ximian, Inc (http://www.ximian.com)
 // Copyright 2003-2009 Novell, Inc
+// Copyright 2011 Xamarin Inc
 //
 
 using System;
@@ -35,7 +36,7 @@ namespace Mono.CSharp {
 			return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode (obj);
 		}
 	}
-
+#if !NET_4_0 && !MOBILE_DYNAMIC
 	public class Tuple<T1, T2> : IEquatable<Tuple<T1, T2>>
 	{
 		public Tuple (T1 item1, T2 item2)
@@ -63,13 +64,49 @@ namespace Mono.CSharp {
 		#endregion
 	}
 
+	public class Tuple<T1, T2, T3> : IEquatable<Tuple<T1, T2, T3>>
+	{
+		public Tuple (T1 item1, T2 item2, T3 item3)
+		{
+			Item1 = item1;
+			Item2 = item2;
+			Item3 = item3;
+		}
+
+		public T1 Item1 { get; private set; }
+		public T2 Item2 { get; private set; }
+		public T3 Item3 { get; private set; }
+
+		public override int GetHashCode ()
+		{
+			return Item1.GetHashCode () ^ Item2.GetHashCode () ^ Item3.GetHashCode ();
+		}
+
+		#region IEquatable<Tuple<T1,T2>> Members
+
+		public bool Equals (Tuple<T1, T2, T3> other)
+		{
+			return EqualityComparer<T1>.Default.Equals (Item1, other.Item1) &&
+				EqualityComparer<T2>.Default.Equals (Item2, other.Item2) &&
+				EqualityComparer<T3>.Default.Equals (Item3, other.Item3);
+		}
+
+		#endregion
+	}
+
 	static class Tuple
 	{
 		public static Tuple<T1, T2> Create<T1, T2> (T1 item1, T2 item2)
 		{
 			return new Tuple<T1, T2> (item1, item2);
 		}
+
+		public static Tuple<T1, T2, T3> Create<T1, T2, T3> (T1 item1, T2 item2, T3 item3)
+		{
+			return new Tuple<T1, T2, T3> (item1, item2, item3);
+		}
 	}
+#endif
 
 	static class ArrayComparer
 	{
@@ -99,21 +136,28 @@ namespace Mono.CSharp {
 	/// </summary>
 	public class SeekableStreamReader : IDisposable
 	{
+		public const int DefaultReadAheadSize =
+#if FULL_AST
+			65536 / 2; // Large buffer because of ReadChars of large literal string
+#else
+			4096 / 2;
+#endif
+
 		StreamReader reader;
 		Stream stream;
 
-		static char[] buffer;
+		char[] buffer;
 		int read_ahead_length;	// the length of read buffer
 		int buffer_start;       // in chars
 		int char_count;         // count of filled characters in buffer[]
 		int pos;                // index into buffer[]
 
-		public SeekableStreamReader (Stream stream, Encoding encoding)
+		public SeekableStreamReader (Stream stream, Encoding encoding, char[] sharedBuffer = null)
 		{
 			this.stream = stream;
+			this.buffer = sharedBuffer;
 
-			const int default_read_ahead = 2048;
-			InitializeStream (default_read_ahead);
+			InitializeStream (DefaultReadAheadSize);
 			reader = new StreamReader (stream, encoding, true);
 		}
 
@@ -201,6 +245,18 @@ namespace Mono.CSharp {
 			return pos < char_count;
 		}
 
+		public char[] ReadChars (int fromPosition, int toPosition)
+		{
+			char[] chars = new char[toPosition - fromPosition];
+			if (buffer_start <= fromPosition && toPosition <= buffer_start + buffer.Length) {
+				Array.Copy (buffer, fromPosition - buffer_start, chars, 0, chars.Length);
+			} else {
+				throw new NotImplementedException ();
+			}
+
+			return chars;
+		}
+
 		public int Peek ()
 		{
 			if ((pos >= char_count) && !ReadBuffer ())
@@ -264,6 +320,40 @@ namespace Mono.CSharp {
 			get {
 				return base_text;
 			}
+		}
+	}
+
+	struct TypeNameParser
+	{
+		internal static string Escape(string name)
+		{
+			if (name == null) {
+				return null;
+			}
+			StringBuilder sb = null;
+			for (int pos = 0; pos < name.Length; pos++) {
+				char c = name[pos];
+				switch (c) {
+					case '\\':
+					case '+':
+					case ',':
+					case '[':
+					case ']':
+					case '*':
+					case '&':
+						if (sb == null) {
+							sb = new StringBuilder(name, 0, pos, name.Length + 3);
+						}
+						sb.Append("\\").Append(c);
+						break;
+					default:
+						if (sb != null) {
+							sb.Append(c);
+						}
+						break;
+				}
+			}
+			return sb != null ? sb.ToString() : name;
 		}
 	}
 }

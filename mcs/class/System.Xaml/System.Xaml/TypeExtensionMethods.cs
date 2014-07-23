@@ -70,6 +70,9 @@ namespace System.Xaml
 			if (type == definition)
 				return true;
 
+			if (type.IsGenericType && type.GetGenericTypeDefinition () == definition)
+				return true;
+
 			foreach (var iface in type.GetInterfaces ())
 				if (iface == definition || (iface.IsGenericType && iface.GetGenericTypeDefinition () == definition))
 					return true;
@@ -118,14 +121,7 @@ namespace System.Xaml
 		
 		public static TypeConverter GetTypeConverter (this Type type)
 		{
-#if MOONLIGHT
-			if (typeof (IConvertible).IsAssignableFrom (type))
-				return (TypeConverter) Activator.CreateInstance (typeof (ConvertibleTypeConverter<>).MakeGenericType (new Type [] {type}));
-			var name = type.GetCustomAttribute<TypeConverterAttribute> (true).ConverterTypeName;
-			return (TypeConverter) Activator.CreateInstance (type.Assembly.GetType (name) ?? Type.GetType (name));
-#else
 			return TypeDescriptor.GetConverter (type);
-#endif
 		}
 		
 		// FIXME: I want this to cover all the existing types and make it valid in both NET_2_1 and !NET_2_1.

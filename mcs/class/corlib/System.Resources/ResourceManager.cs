@@ -45,8 +45,8 @@ namespace System.Resources
 	public class ResourceManager
 	{
 		static readonly object thisLock = new object ();
-		static Hashtable ResourceCache = new Hashtable (); 
-		Hashtable NonExistent = new Hashtable ();
+		static readonly Hashtable ResourceCache = new Hashtable ();
+		readonly Hashtable NonExistent = new Hashtable ();
 		public static readonly int HeaderVersionNumber = 1;
 		public static readonly int MagicNumber = unchecked ((int) 0xBEEFCACE);
 
@@ -196,12 +196,7 @@ namespace System.Resources
 				culture = CultureInfo.CurrentUICulture;
 
 			lock (thisLock) {
-				ResourceSet set = null;
-				try {
-					set = InternalGetResourceSet(culture, true, true);
-				} catch {
-					// Ignored
-				}
+				ResourceSet set = InternalGetResourceSet(culture, true, true);
 				object obj = null;
 				
 				if (set != null) {
@@ -254,12 +249,7 @@ namespace System.Resources
 				culture = CultureInfo.CurrentUICulture;
 
 			lock (thisLock) {
-				ResourceSet set = null;
-				try {
-					set = InternalGetResourceSet (culture, true, true);
-				} catch {
-					// Ignored
-				}
+				ResourceSet set = InternalGetResourceSet (culture, true, true);
 				string str = null;
 
 				if (set != null) {
@@ -295,11 +285,9 @@ namespace System.Resources
 
 		private string GetResourceFilePath (CultureInfo culture)
 		{
-#if !MOONLIGHT
 			if (resourceDir != null)
 				return Path.Combine (resourceDir, GetResourceFileName (culture));
 			else
-#endif
 				return GetResourceFileName (culture);
 		}
 		
@@ -347,6 +335,8 @@ namespace System.Resources
 			set = (ResourceSet) ResourceSets [culture];
 #endif
 			if (set != null) {
+				return set;
+/*				
 				try {
 					if (!set.IsDisposed)
 						return set;
@@ -358,6 +348,7 @@ namespace System.Resources
 				if (NonExistent.Contains (culture))
 					NonExistent.Remove (culture);
 				set = null;
+*/
 			}
 			
 			if (NonExistent.Contains (culture))

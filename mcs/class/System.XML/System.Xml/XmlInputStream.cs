@@ -51,8 +51,6 @@ namespace System.Xml
 		{
 		}
 
-		static XmlException invalidDataException = new XmlException ("invalid data.");
-
 		public override void Close ()
 		{
 			this.input.Close ();
@@ -63,15 +61,9 @@ namespace System.Xml
 			try {
 				return base.Read (dest_buffer, index, count);
 			}
-#if NET_1_1
 			catch (System.ArgumentException ex) {
 				throw new XmlException ("Invalid data", ex);
 			}
-#else
-			catch (System.Text.DecoderFallbackException) {
-				throw invalidDataException;
-			}
-#endif
 		}
 
 		protected override void Dispose (bool disposing)
@@ -370,15 +362,7 @@ namespace System.Xml
 				if (ReadByteSpecial () < 0)
 					return null;
 			bufPos = posBak;
-#if MOONLIGHT
-			char [] chars = new char [count];
-			for (int i = index; i < count; i++)
-				chars [i] = (char) buffer [i];
-
-			return new string (chars);
-#else
 			return Encoding.ASCII.GetString (buffer, index, count);
-#endif
 		}
 
 		private void Initialize (Stream stream)

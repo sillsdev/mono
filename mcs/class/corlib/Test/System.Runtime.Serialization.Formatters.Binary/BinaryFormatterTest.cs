@@ -192,6 +192,118 @@ namespace MonoTests.System.Runtime.Serialization.Formatters.Binary
 		}
 	}
 
+	[Serializable]
+	public class Comparable
+	{
+		public int Foo {
+			get;
+			set;
+		}
+
+		public override bool Equals (object obj)
+		{
+			var other = obj as Comparable;
+			if (other == null)
+				return false;
+			return other.Foo == Foo;
+		}
+
+		public override int GetHashCode ()
+		{
+			return Foo;
+		}
+	}
+
+	class Class
+	{
+		public string Name;
+
+		public virtual Instance NewInstance()
+		{
+			return new Instance { Class = this };
+		}
+	}
+
+	class Instance
+	{
+		public Class Class;
+	}
+
+
+	[Serializable]
+	class ClassSerializationProxy : IObjectReference
+	{
+		string className;
+
+		public ClassSerializationProxy (Class klass)
+		{
+			this.className = klass.Name;
+		}
+
+		public object GetRealObject(StreamingContext context)
+		{
+			return new Class { Name = className };
+		}
+	}
+
+	[Serializable]
+	class ObjectStreamClass : Class, IObjectReference, ISerializable
+	{
+		Class klass;
+
+		public ObjectStreamClass (Class klass)
+		{
+			this.klass = klass;
+		}
+
+		public ObjectStreamClass(SerializationInfo info, StreamingContext context)
+		{
+			klass = (Class)info.GetValue("0", typeof(object));
+		}
+
+		public object GetRealObject (StreamingContext context)
+		{
+			return this;
+		}
+
+		public void GetObjectData (SerializationInfo info, StreamingContext context)
+		{
+			info.AddValue ("0", new ClassSerializationProxy (klass));
+		}
+
+		public override Instance NewInstance()
+		{
+			return klass.NewInstance();
+		}
+	}
+
+	[Serializable]
+	class DynamicProxy: IObjectReference, ISerializable
+	{
+		Instance obj;
+
+		public DynamicProxy (Instance obj)
+		{
+			this.obj = obj;
+		}
+
+		public DynamicProxy (SerializationInfo info, StreamingContext context)
+		{
+			ObjectStreamClass osc = (ObjectStreamClass) info.GetValue("0", typeof(object));
+			obj = osc.NewInstance();
+		}
+
+		public object GetRealObject (StreamingContext context)
+		{
+			return obj;
+		}
+
+		public void GetObjectData (SerializationInfo info, StreamingContext context)
+		{
+			info.AddValue ("0", new ObjectStreamClass (obj.Class));
+		}
+	}
+
 	[TestFixture]
 	public class BinaryFormatterTest
 	{
@@ -320,6 +432,24 @@ namespace MonoTests.System.Runtime.Serialization.Formatters.Binary
 				Assert.AreEqual (e [i], a [i], names [i]);
 		}
 
+		[Test]
+		public void GenericArray ()
+		{
+			Comparable [] a = new Comparable [1];
+			a [0] = new Comparable ();
+
+			BinaryFormatter bf = new BinaryFormatter ();
+			MemoryStream ms = new MemoryStream ();
+
+			bf.Serialize (ms, a);
+
+			ms.Position = 0;
+			Comparable [] b = (Comparable []) bf.Deserialize (ms);
+
+			Assert.AreEqual (a.Length, b.Length, "#1");
+			Assert.AreEqual (a [0], b [0], "#2");
+		}
+
 		public Stream GetSerializedStream ()
 		{
 			SerializationTest test = new SerializationTest (true, Int32.MinValue);
@@ -410,6 +540,23 @@ namespace MonoTests.System.Runtime.Serialization.Formatters.Binary
 			Assert.AreEqual (666, o.Id);
 
 			ms.Close ();
+		}
+
+		[Test]
+		public void NestedObjectReferences ()
+		{
+			MemoryStream ms = new MemoryStream ();
+
+			var cls = new Class { Name = "MyClass" };
+			var ob = cls.NewInstance ();
+
+			BinaryFormatter bf = new BinaryFormatter();
+			bf.Serialize (ms, new DynamicProxy (ob));
+
+			ms.Position = 0;
+
+			Instance ins = (Instance) bf.Deserialize (ms);
+			Assert.AreEqual ("MyClass", ins.Class.Name);
 		}
 
 		class SimpleSerializationBinder2 : SerializationBinder

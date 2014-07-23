@@ -28,6 +28,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Xml;
 using System.Xml.Schema;
@@ -36,6 +37,7 @@ using System.Xml.Serialization;
 namespace System.Xml.Linq
 {
 	[XmlSchemaProvider (null, IsAny = true)]
+	[XmlTypeConvertor ("ConvertForAssignment")]
 	public class XElement : XContainer, IXmlSerializable
 	{
 		static IEnumerable <XElement> emptySequence =
@@ -49,34 +51,54 @@ namespace System.Xml.Linq
 		XAttribute attr_first, attr_last;
 		bool explicit_is_empty = true;
 
-		public XElement (XName name, object value)
+		public XElement (XName name, object content)
 		{
+			if (name == null)
+				throw new ArgumentNullException ("name");
 			this.name = name;
-			Add (value);
+			Add (content);
 		}
 
-		public XElement (XElement source)
+		public XElement (XElement other)
 		{
-			name = source.name;
-			Add (source.Attributes ());
-			Add (source.Nodes ());
+			if (other == null)
+				throw new ArgumentNullException ("other");
+			name = other.name;
+			Add (other.Attributes ());
+			Add (other.Nodes ());
 		}
 
 		public XElement (XName name)
 		{
+			if (name == null)
+				throw new ArgumentNullException ("name");
 			this.name = name;
 		}
 
-		public XElement (XName name, params object [] contents)
+		public XElement (XName name, params object [] content)
 		{
+			if (name == null)
+				throw new ArgumentNullException ("name");
 			this.name = name;
-			Add (contents);
+			Add (content);
 		}
 
-		public XElement (XStreamingElement source)
+		public XElement (XStreamingElement other)
 		{
-			this.name = source.Name;
-			Add (source.Contents);
+			if (other == null)
+				throw new ArgumentNullException ("other");
+			this.name = other.Name;
+			Add (other.Contents);
+		}
+
+		static object ConvertForAssignment (object value)
+		{
+			var node = value as XmlNode;
+			if (node == null)
+				return value;
+			var doc = new XmlDocument ();
+			doc.AppendChild (doc.ImportNode (node, true));
+			return XElement.Parse (doc.InnerXml);
 		}
 
 		[CLSCompliant (false)]
@@ -329,7 +351,9 @@ namespace System.Xml.Linq
 			set {
 				if (value == null)
 					throw new ArgumentNullException ("Name");
+				OnNameChanging (this);
 				name = value;
+				OnNameChanged (this);
 			}
 		}
 
@@ -369,7 +393,8 @@ namespace System.Xml.Linq
 
 		public XAttribute Attribute (XName name)
 		{
-			foreach (XAttribute a in Attributes ())
+			XAttribute next;
+			for (XAttribute a = attr_first; a != null; a = a.NextAttribute)
 				if (a.Name == name)
 					return a;
 			return null;
@@ -394,12 +419,7 @@ namespace System.Xml.Linq
 
 		static void DefineDefaultSettings (XmlReaderSettings settings, LoadOptions options)
 		{
-#if MOONLIGHT
-			// 2.1 has a DtdProcessing property which defaults to DtdProcessing.Prohibit
-			settings.DtdProcessing = DtdProcessing.Parse;
-#else
 			settings.ProhibitDtd = false;
-#endif
 
 			settings.IgnoreWhitespace = (options & LoadOptions.PreserveWhitespace) == 0;
 		}
@@ -425,16 +445,16 @@ namespace System.Xml.Linq
 			}
 		}
 
-		public static XElement Load (TextReader tr)
+		public static XElement Load (TextReader textReader)
 		{
-			return Load (tr, LoadOptions.None);
+			return Load (textReader, LoadOptions.None);
 		}
 
-		public static XElement Load (TextReader tr, LoadOptions options)
+		public static XElement Load (TextReader textReader, LoadOptions options)
 		{
 			XmlReaderSettings s = CreateDefaultSettings (options);
 
-			using (XmlReader r = XmlReader.Create (tr, s)) {
+			using (XmlReader r = XmlReader.Create (textReader, s)) {
 				return LoadCore (r, options);
 			}
 		}
@@ -454,7 +474,7 @@ namespace System.Xml.Linq
 			}
 		}
 
-#if MOONLIGHT || MOBILE || NET_4_0
+#if NET_4_0
 		public static XElement Load (Stream stream)
 		{
 			return Load (stream, LoadOptions.None);
@@ -503,14 +523,14 @@ namespace System.Xml.Linq
 			return e;
 		}
 
-		public static XElement Parse (string s)
+		public static XElement Parse (string text)
 		{
-			return Parse (s, LoadOptions.None);
+			return Parse (text, LoadOptions.None);
 		}
 
-		public static XElement Parse (string s, LoadOptions options)
+		public static XElement Parse (string text, LoadOptions options)
 		{
-			return Load (new StringReader (s), options);
+			return Load (new StringReader (text), options);
 		}
 
 		public void RemoveAll ()
@@ -525,52 +545,52 @@ namespace System.Xml.Linq
 				attr_last.Remove ();
 		}
 
-		public void Save (string filename)
+		public void Save (string fileName)
 		{
-			Save (filename, SaveOptions.None);
+			Save (fileName, SaveOptions.None);
 		}
 
-		public void Save (string filename, SaveOptions options)
+		public void Save (string fileName, SaveOptions options)
 		{
 			XmlWriterSettings s = new XmlWriterSettings ();
 
 			if ((options & SaveOptions.DisableFormatting) == SaveOptions.None)
 				s.Indent = true;
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			if ((options & SaveOptions.OmitDuplicateNamespaces) == SaveOptions.OmitDuplicateNamespaces)
 				s.NamespaceHandling |= NamespaceHandling.OmitDuplicates;
 #endif
-			using (XmlWriter w = XmlWriter.Create (filename, s)) {
+			using (XmlWriter w = XmlWriter.Create (fileName, s)) {
 				Save (w);
 			}
 		}
 
-		public void Save (TextWriter tw)
+		public void Save (TextWriter textWriter)
 		{
-			Save (tw, SaveOptions.None);
+			Save (textWriter, SaveOptions.None);
 		}
 
-		public void Save (TextWriter tw, SaveOptions options)
+		public void Save (TextWriter textWriter, SaveOptions options)
 		{
 			XmlWriterSettings s = new XmlWriterSettings ();
 			
 			if ((options & SaveOptions.DisableFormatting) == SaveOptions.None)
 				s.Indent = true;
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			if ((options & SaveOptions.OmitDuplicateNamespaces) == SaveOptions.OmitDuplicateNamespaces)
 				s.NamespaceHandling |= NamespaceHandling.OmitDuplicates;
 #endif
-			using (XmlWriter w = XmlWriter.Create (tw, s)) {
+			using (XmlWriter w = XmlWriter.Create (textWriter, s)) {
 				Save (w);
 			}
 		}
 
-		public void Save (XmlWriter w)
+		public void Save (XmlWriter writer)
 		{
-			WriteTo (w);
+			WriteTo (writer);
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public void Save (Stream stream)
 		{
 			Save (stream, SaveOptions.None);
@@ -640,6 +660,7 @@ namespace System.Xml.Linq
 
 		void SetAttributeObject (XAttribute a)
 		{
+			OnAddingObject (a);
 			a = (XAttribute) XUtil.GetDetachedObject (a);
 			a.SetOwner (this);
 			if (attr_first == null) {
@@ -650,42 +671,69 @@ namespace System.Xml.Linq
 				a.PreviousAttribute = attr_last;
 				attr_last = a;
 			}
+			OnAddedObject (a);
 		}
 
-		public override void WriteTo (XmlWriter w)
+		string LookupPrefix (string ns, XmlWriter w)
 		{
-			// some people expect the same prefix output as in input,
-			// in the loss of performance... see bug #466423.
-			string prefix = name.NamespaceName.Length > 0 ? w.LookupPrefix (name.Namespace.NamespaceName) : String.Empty;
+			string prefix = ns.Length > 0 ? GetPrefixOfNamespace (ns) ?? w.LookupPrefix (ns) : String.Empty;
 			foreach (XAttribute a in Attributes ()) {
-				if (a.IsNamespaceDeclaration && a.Value == name.Namespace.NamespaceName) {
+				if (a.IsNamespaceDeclaration && a.Value == ns) {
 					if (a.Name.Namespace == XNamespace.Xmlns)
 						prefix = a.Name.LocalName;
 					// otherwise xmlns="..."
 					break;
 				}
 			}
+			return prefix;
+		}
+		
+		static string CreateDummyNamespace (ref int createdNS, IEnumerable<XAttribute> atts, bool isAttr)
+		{
+			if (!isAttr && atts.All (a => a.Name.LocalName != "xmlns" || a.Name.NamespaceName == XNamespace.Xmlns.NamespaceName))
+				return String.Empty;
+			string p = null;
+			do {
+				p = "p" + (++createdNS);
+				// check conflict
+				if (atts.All (a => a.Name.LocalName != p || a.Name.NamespaceName == XNamespace.Xmlns.NamespaceName))
+					break;
+			} while (true);
+			return p;
+		}
 
-			w.WriteStartElement (prefix, name.LocalName, name.Namespace.NamespaceName);
+		public override void WriteTo (XmlWriter writer)
+		{
+			// some people expect the same prefix output as in input,
+			// in the loss of performance... see bug #466423.
+			string prefix = LookupPrefix (name.NamespaceName, writer);
+			int createdNS = 0;
+			if (prefix == null)
+				prefix = CreateDummyNamespace (ref createdNS, Attributes (), false);
+
+			writer.WriteStartElement (prefix, name.LocalName, name.Namespace.NamespaceName);
 
 			foreach (XAttribute a in Attributes ()) {
 				if (a.IsNamespaceDeclaration) {
 					if (a.Name.Namespace == XNamespace.Xmlns)
-						w.WriteAttributeString ("xmlns", a.Name.LocalName, XNamespace.Xmlns.NamespaceName, a.Value);
+						writer.WriteAttributeString ("xmlns", a.Name.LocalName, XNamespace.Xmlns.NamespaceName, a.Value);
 					else
-						w.WriteAttributeString ("xmlns", a.Value);
+						writer.WriteAttributeString ("xmlns", a.Value);
+				} else {
+					string apfix = LookupPrefix (a.Name.NamespaceName, writer);
+					if (apfix == null)
+						apfix = CreateDummyNamespace (ref createdNS, Attributes (), true);
+					writer.WriteAttributeString (apfix, a.Name.LocalName, a.Name.Namespace.NamespaceName, a.Value);
 				}
-				else
-					w.WriteAttributeString (a.Name.LocalName, a.Name.Namespace.NamespaceName, a.Value);
 			}
 
 			foreach (XNode node in Nodes ())
-				node.WriteTo (w);
+				node.WriteTo (writer);
 
 			if (explicit_is_empty)
-				w.WriteEndElement ();
+				writer.WriteEndElement ();
 			else
-				w.WriteFullEndElement ();
+				writer.WriteFullEndElement ();
 		}
 
 		public XNamespace GetDefaultNamespace ()
@@ -722,35 +770,42 @@ namespace System.Xml.Linq
 						yield return a.Name.Namespace == XNamespace.None ? String.Empty : a.Name.LocalName;
 		}
 
-		public void ReplaceAll (object item)
+		public void ReplaceAll (object content)
+		{
+			// it's waste of resource, but from bug #11298 it must save content
+			// snapshot first and then remove existing attributes.
+			ReplaceAll (XUtil.ExpandArray (content).ToArray ());
+		}
+
+		public void ReplaceAll (params object [] content)
 		{
 			RemoveNodes ();
-			Add (item);
+			Add (content);
 		}
 
-		public void ReplaceAll (params object [] items)
+		public void ReplaceAttributes (object content)
 		{
-			RemoveNodes ();
-			Add (items);
+			// it's waste of resource, but from bug #11298 it must save content
+			// snapshot first and then remove existing attributes.
+			ReplaceAttributes (XUtil.ExpandArray (content).ToArray ());
 		}
 
-		public void ReplaceAttributes (object item)
-		{
-			RemoveAttributes ();
-			Add (item);
-		}
-
-		public void ReplaceAttributes (params object [] items)
+		public void ReplaceAttributes (params object [] content)
 		{
 			RemoveAttributes ();
-			Add (items);
+			Add (content);
 		}
 
 		public void SetElementValue (XName name, object value)
 		{
-			XElement el = new XElement (name, value);
-			RemoveNodes ();
-			Add (el);
+			var element = Element (name);
+			if (element == null) {
+				if (value != null)
+					Add (new XElement (name, value));
+			} else if (element != null && value == null) {
+				element.Remove ();
+			} else
+				element.SetValue (value);
 		}
 
 		public void SetValue (object value)

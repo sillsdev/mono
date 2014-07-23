@@ -29,11 +29,18 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if SECURITY_DEP || MOONLIGHT
+#if SECURITY_DEP
 
+#if MONOTOUCH
 using Mono.Security;
 using Mono.Security.Cryptography;
 using MSX = Mono.Security.X509;
+#else
+extern alias MonoSecurity;
+using MonoSecurity::Mono.Security;
+using MonoSecurity::Mono.Security.Cryptography;
+using MSX = MonoSecurity::Mono.Security.X509;
+#endif
 
 namespace System.Security.Cryptography.X509Certificates {
 
@@ -46,6 +53,8 @@ namespace System.Security.Cryptography.X509Certificates {
 		private AsnEncodedData _keyValue;
 		private AsnEncodedData _params;
 		private Oid _oid;
+
+		static byte[] Empty = new byte [0];
 
 		public PublicKey (Oid oid, AsnEncodedData parameters, AsnEncodedData keyValue)
 		{
@@ -67,14 +76,12 @@ namespace System.Security.Cryptography.X509Certificates {
 			bool export_required = true;
 
 			if (certificate.KeyAlgorithm == rsaOid) {
-#if !MOONLIGHT
 				// shortcut export/import in the case the private key isn't available
 				RSACryptoServiceProvider rcsp = (certificate.RSA as RSACryptoServiceProvider);
 				if ((rcsp != null) && rcsp.PublicOnly) {
 					_key = certificate.RSA;
 					export_required = false;
 				} else 
-#endif
 				{
 					RSAManaged rsam = (certificate.RSA as RSAManaged);
 					if ((rsam != null) && rsam.PublicOnly) {
@@ -89,7 +96,6 @@ namespace System.Security.Cryptography.X509Certificates {
 					(_key as RSA).ImportParameters (rsap);
 				}
 			} else {
-#if !MOONLIGHT
 				// shortcut export/import in the case the private key isn't available
 				DSACryptoServiceProvider dcsp = (certificate.DSA as DSACryptoServiceProvider);
 				if ((dcsp != null) && dcsp.PublicOnly) {
@@ -103,12 +109,11 @@ namespace System.Security.Cryptography.X509Certificates {
 					_key = DSA.Create ();
 					(_key as DSA).ImportParameters (rsap);
 				}
-#endif
 			}
 
 			_oid = new Oid (certificate.KeyAlgorithm);
 			_keyValue = new AsnEncodedData (_oid, certificate.PublicKey);
-			_params = new AsnEncodedData (_oid, certificate.KeyAlgorithmParameters);
+			_params = new AsnEncodedData (_oid, certificate.KeyAlgorithmParameters ?? Empty);
 		}
 
 		// properties
@@ -184,11 +189,7 @@ namespace System.Security.Cryptography.X509Certificates {
 				throw new CryptographicException (msg, e);
 			}
 
-#if MOONLIGHT
-			DSA dsa = (DSA) new DSAManaged (dsaParams.Y.Length << 3);
-#else
 			DSA dsa = (DSA) new DSACryptoServiceProvider (dsaParams.Y.Length << 3);
-#endif
 			dsa.ImportParameters (dsaParams);
 			return dsa;
 		}
@@ -218,11 +219,7 @@ namespace System.Security.Cryptography.X509Certificates {
 			}
 
 			int keySize = (rsaParams.Modulus.Length << 3);
-#if MOONLIGHT
-			RSA rsa = (RSA) new RSAManaged (keySize);
-#else
 			RSA rsa = (RSA) new RSACryptoServiceProvider (keySize);
-#endif
 			rsa.ImportParameters (rsaParams);
 			return rsa;
 		}

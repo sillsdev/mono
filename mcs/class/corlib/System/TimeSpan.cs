@@ -5,10 +5,12 @@
 //   Duco Fijma (duco@lorentz.xs4all.nl)
 //   Andreas Nahr (ClassDevelopment@A-SoftTech.com)
 //   Sebastien Pouliot  <sebastien@ximian.com>
+//   Marek Safar (marek.safar@gmail.com)
 //
 // (C) 2001 Duco Fijma
 // (C) 2004 Andreas Nahr
 // Copyright (C) 2004 Novell (http://www.novell.com)
+// Copyright (C) 2014 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -39,7 +41,7 @@ namespace System
 	[Serializable]
 	[System.Runtime.InteropServices.ComVisible (true)]
 	public struct TimeSpan : IComparable, IComparable<TimeSpan>, IEquatable <TimeSpan>
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 				 , IFormattable
 #endif
 	{
@@ -309,7 +311,7 @@ namespace System
 				value = (value * (tickMultiplicator / TicksPerMillisecond));
 
 				checked {
-					long val = (long) Math.Round(value);
+					long val = (long) Math.Round(value, MidpointRounding.AwayFromZero);
 					return new TimeSpan (val * TicksPerMillisecond);
 				}
 			}
@@ -359,7 +361,7 @@ namespace System
 			return p.Execute (true, out result);
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public static TimeSpan Parse (string input, IFormatProvider formatProvider)
 		{
 			if (input == null)
@@ -439,7 +441,7 @@ namespace System
 		{
 			result = TimeSpan.Zero;
 
-			if (formats == null || formats.Length == 0)
+			if (input == null || formats == null || formats.Length == 0)
 				return false;
 
 			Parser p = new Parser (input, formatProvider);
@@ -526,7 +528,7 @@ namespace System
 			return sb.ToString ();
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public string ToString (string format)
 		{
 			return ToString (format, null);
@@ -543,7 +545,7 @@ namespace System
 
 			NumberFormatInfo number_info = null;
 			if (formatProvider != null)
-				number_info = (NumberFormatInfo)formatProvider.GetFormat (typeof (NumberFormatInfo));
+				number_info = formatProvider.GetFormat (typeof (NumberFormatInfo)) as NumberFormatInfo;
 			if (number_info == null)
 				number_info = Thread.CurrentThread.CurrentCulture.NumberFormat;
 
@@ -606,7 +608,7 @@ namespace System
 
 			StringBuilder sb = new StringBuilder (format.Length + 1);
 
-			for (;;) {
+			while (true) {
 				if (parser.AtEnd)
 					break;
 
@@ -614,42 +616,42 @@ namespace System
 				switch (element.Type) {
 					case FormatElementType.Days:
 						value = Math.Abs (Days);
-						sb.Append (value.ToString ("D" + element.IntValue));
 						break;
 					case FormatElementType.Hours:
 						value = Math.Abs (Hours);
-						sb.Append (value.ToString ("D" + element.IntValue));
 						break;
 					case FormatElementType.Minutes:
 						value = Math.Abs (Minutes);
-						sb.Append (value.ToString ("D" + element.IntValue));
 						break;
 					case FormatElementType.Seconds:
 						value = Math.Abs (Seconds);
-						sb.Append (value.ToString ("D" + element.IntValue));
 						break;
 					case FormatElementType.Ticks:
-						value = Math.Abs (Milliseconds);
-						sb.Append (value.ToString ("D" + element.IntValue));
-						break;
 					case FormatElementType.TicksUppercase:
 						value = Math.Abs (Milliseconds);
-						if (value > 0) {
-							int threshold = (int)Math.Pow (10, element.IntValue);
-							while (value >= threshold)
-								value /= 10;
-							sb.Append (value.ToString ());
+						if (value == 0) {
+							if (element.Type == FormatElementType.Ticks)
+								break;
+
+							continue;
 						}
-						break;
+
+						int threshold = (int)Math.Pow (10, element.IntValue);
+						while (value >= threshold)
+							value /= 10;
+						sb.Append (value.ToString ());
+						continue;
 					case FormatElementType.EscapedChar:
 						sb.Append (element.CharValue);
-						break;
+						continue;
 					case FormatElementType.Literal:
 						sb.Append (element.StringValue);
-						break;
+						continue;
 					default:
 						throw new FormatException ("The format is not recognized.");
 				}
+
+				sb.Append (value.ToString ("D" + element.IntValue.ToString ()));
 			}
 
 			return sb.ToString ();
@@ -719,7 +721,7 @@ namespace System
 			private int _cur = 0;
 			private int _length;
 			ParseError parse_error;
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			bool parsed_ticks;
 			NumberFormatInfo number_format;
 			int parsed_numbers_count;
@@ -735,12 +737,12 @@ namespace System
 			{
 				_src = src;
 				_length = _src.Length;
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 				number_format = GetNumberFormatInfo (null);
 #endif
 			}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			// Reset state data, so we can execute another parse over the input.
 			void Reset ()
 			{
@@ -756,11 +758,11 @@ namespace System
 				number_format = GetNumberFormatInfo (formatProvider);
 			}
 
-			NumberFormatInfo GetNumberFormatInfo (IFormatProvider formatProvider)
+			static NumberFormatInfo GetNumberFormatInfo (IFormatProvider formatProvider)
 			{
 				NumberFormatInfo format = null;
 				if (formatProvider != null)
-					format = (NumberFormatInfo) formatProvider.GetFormat (typeof (NumberFormatInfo));
+					format = formatProvider.GetFormat (typeof (NumberFormatInfo)) as NumberFormatInfo;
 				if (format == null)
 					format = Thread.CurrentThread.CurrentCulture.NumberFormat;
 
@@ -806,7 +808,7 @@ namespace System
 				return res;
 			}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			// Used for custom formats parsing, where we may need to declare how
 			// many digits we expect, as well as the maximum allowed.
 			private int ParseIntExact (int digit_count, int max_digit_count)
@@ -855,7 +857,7 @@ namespace System
 
 				if (!optional && (count == 0))
 					SetParseError (ParseError.Format);
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 				if (count > 0)
 					parsed_numbers_count++;
 #endif
@@ -863,20 +865,7 @@ namespace System
 				return (int)res;
 			}
 
-			// Parse optional dot
-			private bool ParseOptDot ()
-			{
-				if (AtEnd)
-					return false;
-
-				if (_src[_cur] == '.') {
-					_cur++;
-					return true;
-				}
-				return false;
-			}	
-
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			// This behaves pretty much like ParseOptDot, but we need to have it
 			// as a separated routine for both days and decimal separators.
 			private bool ParseOptDaysSeparator ()
@@ -935,6 +924,18 @@ namespace System
 				return false;
 			}
 #endif
+			// Parse optional dot
+			private bool ParseOptDot ()
+			{
+				if (AtEnd)
+					return false;
+
+				if (_src[_cur] == '.') {
+					_cur++;
+					return true;
+				}
+				return false;
+			}	
 
 			private void ParseColon (bool optional)
 			{
@@ -963,7 +964,7 @@ namespace System
 
 				if (!digitseen)
 					SetParseError (ParseError.Format);
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 				else if (!AtEnd && Char.IsDigit (_src, _cur))
 					SetParseError (ParseError.Overflow);
 
@@ -973,7 +974,7 @@ namespace System
 				return res;
 			}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			// Used by custom formats parsing
 			// digits_count = 0 for digits up to max_digits_count (optional), and other value to
 			// force a precise number of digits.
@@ -1007,7 +1008,7 @@ namespace System
 				parse_error = error;
 			}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			bool CheckParseSuccess (bool tryParse)
 #else
 			bool CheckParseSuccess (int hours, int minutes, int seconds, bool tryParse)
@@ -1015,7 +1016,7 @@ namespace System
 			{
 				// We always report the first error, but for 2.0 we need to give a higher
 				// precence to per-element overflow (as opposed to int32 overflow).
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 				if (parse_error == ParseError.Overflow) {
 #else
 				if (parse_error == ParseError.Overflow || hours > 23 || minutes > 59 || seconds > 59) {
@@ -1036,7 +1037,7 @@ namespace System
 				return true;
 			}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			// We are using a different parse approach in 4.0, due to some changes in the behaviour
 			// of the parse routines.
 			// The input string is documented as:
@@ -1220,7 +1221,7 @@ namespace System
 			}
 #endif
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 			public bool ExecuteWithFormat (string format, TimeSpanStyles style, bool tryParse, out TimeSpan result)
 			{
 				int days, hours, minutes, seconds;
@@ -1327,7 +1328,7 @@ namespace System
 			}
 #endif
 		}
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		enum FormatElementType 
 		{
 			Days,

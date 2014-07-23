@@ -54,6 +54,7 @@
 #include <mono/utils/mono-logger-internal.h>
 #include <mono/utils/mono-mmap.h>
 #include <mono/utils/dtrace.h>
+#include <mono/utils/mono-signal-handler.h>
 
 #include "mini.h"
 #include <string.h>
@@ -100,7 +101,17 @@ mono_runtime_cleanup_handlers (void)
 {
 }
 
+pid_t
+mono_runtime_syscall_fork (void)
+{
+	g_assert_not_reached();
+	return 0;
+}
 
+void
+mono_gdb_render_native_backtraces (pid_t crashed_pid)
+{
+}
 
 #else
 
@@ -182,8 +193,7 @@ SIG_HANDLER_SIGNATURE (mono_chain_signal)
 	return FALSE;
 }
 
-static void
-SIG_HANDLER_SIGNATURE (sigabrt_signal_handler)
+SIG_HANDLER_FUNC (static, sigabrt_signal_handler)
 {
 	MonoJitInfo *ji = NULL;
 	GET_CONTEXT;
@@ -197,10 +207,8 @@ SIG_HANDLER_SIGNATURE (sigabrt_signal_handler)
 	}
 }
 
-static void
-SIG_HANDLER_SIGNATURE (sigusr1_signal_handler)
+SIG_HANDLER_FUNC (static, sigusr1_signal_handler)
 {
-	MonoContext mctx;
 	gboolean running_managed;
 	MonoException *exc;
 	MonoInternalThread *thread = mono_thread_internal_current ();
@@ -209,10 +217,17 @@ SIG_HANDLER_SIGNATURE (sigusr1_signal_handler)
 	
 	GET_CONTEXT;
 
-	if (!thread || !domain)
+	if (!thread || !domain) {
 		/* The thread might not have started up yet */
 		/* FIXME: Specify the synchronization with start_wrapper () in threads.c */
+		mono_debugger_agent_thread_interrupt (ctx, NULL);
 		return;
+	}
+
+	if (thread->ignore_next_signal) {
+		thread->ignore_next_signal = FALSE;
+		return;
+	}
 
 	if (thread->thread_dump_requested) {
 		thread->thread_dump_requested = FALSE;
@@ -245,9 +260,15 @@ SIG_HANDLER_SIGNATURE (sigusr1_signal_handler)
 	 */
 #ifdef MONO_ARCH_HAVE_SIGCTX_TO_MONOCTX
 	if (!mono_aot_only && ctx) {
-		mono_arch_sigctx_to_monoctx (ctx, &mctx);
-		if (mono_install_handler_block_guard (thread, &mctx)) {
-			return;
+		MonoThreadUnwindState unwind_state;
+		if (mono_thread_state_init_from_sigctx (&unwind_state, ctx)) {
+			if (mono_install_handler_block_guard (&unwind_state)) {
+#ifndef HOST_WIN32
+				/*Clear current thread from been wapi interrupted otherwise things can go south*/
+				wapi_clear_interruption ();
+#endif
+				return;
+			}
 		}
 	}
 #endif
@@ -256,8 +277,9 @@ SIG_HANDLER_SIGNATURE (sigusr1_signal_handler)
 	if (!exc)
 		return;
 
-	mono_arch_handle_exception (ctx, exc, FALSE);
+	mono_arch_handle_exception (ctx, exc);
 }
+
 
 #if defined(__i386__) || defined(__x86_64__)
 #define FULL_STAT_PROFILER_BACKTRACE 1
@@ -276,8 +298,7 @@ SIG_HANDLER_SIGNATURE (sigusr1_signal_handler)
 
 #if defined(__ia64__) || defined(__sparc__) || defined(sparc) || defined(__s390__) || defined(s390)
 
-static void
-SIG_HANDLER_SIGNATURE (sigprof_signal_handler)
+SIG_HANDLER_FUNC (static, sigprof_signal_handler)
 {
 	if (mono_chain_signal (SIG_HANDLER_PARAMS))
 		return;
@@ -287,8 +308,7 @@ SIG_HANDLER_SIGNATURE (sigprof_signal_handler)
 
 #else
 
-static void
-SIG_HANDLER_SIGNATURE (sigprof_signal_handler)
+SIG_HANDLER_FUNC (static, sigprof_signal_handler)
 {
 	int call_chain_depth = mono_profiler_stat_get_call_chain_depth ();
 	MonoProfilerCallChainStrategy call_chain_strategy = mono_profiler_stat_get_call_chain_strategy ();
@@ -297,7 +317,7 @@ SIG_HANDLER_SIGNATURE (sigprof_signal_handler)
 	if (call_chain_depth == 0) {
 		mono_profiler_stat_hit (mono_arch_ip_from_context (ctx), ctx);
 	} else {
-		MonoJitTlsData *jit_tls = TlsGetValue (mono_jit_tls_id);
+		MonoJitTlsData *jit_tls = mono_native_tls_get_value (mono_jit_tls_id);
 		int current_frame_index = 1;
 		MonoContext mono_context;
 		guchar *ips [call_chain_depth + 1];
@@ -366,8 +386,7 @@ SIG_HANDLER_SIGNATURE (sigprof_signal_handler)
 
 #endif
 
-static void
-SIG_HANDLER_SIGNATURE (sigquit_signal_handler)
+SIG_HANDLER_FUNC (static, sigquit_signal_handler)
 {
 	gboolean res;
 
@@ -378,23 +397,26 @@ SIG_HANDLER_SIGNATURE (sigquit_signal_handler)
 	if (res)
 		return;
 
-	printf ("Full thread dump:\n");
+	if (mono_thread_info_new_interrupt_enabled ()) {
+		mono_threads_request_thread_dump ();
+	} else {
+		printf ("Full thread dump:\n");
 
-	mono_threads_request_thread_dump ();
+		mono_threads_request_thread_dump ();
 
-	/*
-	 * print_thread_dump () skips the current thread, since sending a signal
-	 * to it would invoke the signal handler below the sigquit signal handler,
-	 * and signal handlers don't create an lmf, so the stack walk could not
-	 * be performed.
-	 */
-	mono_print_thread_dump (ctx);
+		/*
+		 * print_thread_dump () skips the current thread, since sending a signal
+		 * to it would invoke the signal handler below the sigquit signal handler,
+		 * and signal handlers don't create an lmf, so the stack walk could not
+		 * be performed.
+		 */
+		mono_print_thread_dump (ctx);
+	}
 
 	mono_chain_signal (SIG_HANDLER_PARAMS);
 }
 
-static void
-SIG_HANDLER_SIGNATURE (sigusr2_signal_handler)
+SIG_HANDLER_FUNC (static, sigusr2_signal_handler)
 {
 	gboolean enabled = mono_trace_is_enabled ();
 
@@ -414,7 +436,13 @@ add_signal_handler (int signo, gpointer handler)
 	sigemptyset (&sa.sa_mask);
 	sa.sa_flags = SA_SIGINFO;
 #ifdef MONO_ARCH_SIGSEGV_ON_ALTSTACK
+
+/*Apple likes to deliver SIGBUS for *0 */
+#ifdef __APPLE__
+	if (signo == SIGSEGV || signo == SIGBUS) {
+#else
 	if (signo == SIGSEGV) {
+#endif
 		sa.sa_flags |= SA_ONSTACK;
 
 		/* 
@@ -485,7 +513,8 @@ mono_runtime_posix_install_handlers (void)
 	if (mono_jit_trace_calls != NULL)
 		add_signal_handler (SIGUSR2, sigusr2_signal_handler);
 
-	add_signal_handler (mono_thread_get_abort_signal (), sigusr1_signal_handler);
+	if (!mono_thread_info_new_interrupt_enabled ())
+		add_signal_handler (mono_thread_get_abort_signal (), sigusr1_signal_handler);
 	/* it seems to have become a common bug for some programs that run as parents
 	 * of many processes to block signal delivery for real time signals.
 	 * We try to detect and work around their breakage here.
@@ -631,7 +660,7 @@ mono_runtime_syscall_fork ()
 	return (pid_t) syscall (SYS_fork);
 #else
 	g_assert_not_reached ();
-	return;
+	return 0;
 #endif
 }
 
@@ -639,25 +668,65 @@ void
 mono_gdb_render_native_backtraces (pid_t crashed_pid)
 {
 	const char *argv [9];
+	char template [] = "/tmp/mono-lldb-commands.XXXXXX";
 	char buf1 [128];
+	FILE *commands;
+	gboolean using_lldb = FALSE;
 
 	argv [0] = g_find_program_in_path ("gdb");
 	if (argv [0] == NULL) {
-		return;
+		argv [0] = g_find_program_in_path ("lldb");
+		using_lldb = TRUE;
 	}
 
-	argv [1] = "-ex";
-	sprintf (buf1, "attach %ld", (long) crashed_pid);
-	argv [2] = buf1;
-	argv [3] = "--ex";
-	argv [4] = "info threads";
-	argv [5] = "--ex";
-	argv [6] = "thread apply all bt";
-	argv [7] = "--batch";
-	argv [8] = 0;
+	if (argv [0] == NULL)
+		return;
+
+	if (using_lldb) {
+		if (mkstemp (template) == -1)
+			return;
+
+		commands = fopen (template, "w");
+
+		fprintf (commands, "process attach --pid %ld\n", (long) crashed_pid);
+		fprintf (commands, "script lldb.debugger.HandleCommand (\"thread list\")\n");
+		fprintf (commands, "script lldb.debugger.HandleCommand (\"thread backtrace all\")\n");
+		fprintf (commands, "detach\n");
+		fprintf (commands, "quit\n");
+
+		fflush (commands);
+		fclose (commands);
+
+		argv [1] = "--source";
+		argv [2] = template;
+		argv [3] = 0;
+	} else {
+		argv [1] = "-ex";
+		sprintf (buf1, "attach %ld", (long) crashed_pid);
+		argv [2] = buf1;
+		argv [3] = "--ex";
+		argv [4] = "info threads";
+		argv [5] = "--ex";
+		argv [6] = "thread apply all bt";
+		argv [7] = "--batch";
+		argv [8] = 0;
+	}
 
 	execv (argv [0], (char**)argv);
+
+	if (using_lldb)
+		unlink (template);
 }
 #endif
 #endif /* __native_client__ */
 
+#if !defined (__MACH__)
+
+gboolean
+mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoNativeThreadId thread_id, MonoNativeThreadHandle thread_handle)
+{
+	g_error ("Posix systems don't support mono_thread_state_init_from_handle");
+	return FALSE;
+}
+
+#endif

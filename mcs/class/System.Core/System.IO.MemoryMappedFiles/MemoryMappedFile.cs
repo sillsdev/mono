@@ -26,7 +26,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0 || MOBILE
+#if NET_4_0
 
 using System;
 using System.IO;
@@ -124,7 +124,7 @@ namespace System.IO.MemoryMappedFiles
 				if (Syscall.stat (path, out buf) == -1)
 					UnixMarshal.ThrowExceptionForLastError ();
 
-				if ((capacity == 0 && buf.st_size == 0) || (capacity > buf.st_size))
+				if (capacity > buf.st_size)
 					throw new ArgumentException ("capacity");
 
 				int fd = Syscall.open (path, ToUnixMode (mode) | ToUnixMode (access), FilePermissions.DEFFILEMODE);
@@ -199,7 +199,7 @@ namespace System.IO.MemoryMappedFiles
 		}
 
 
-		[DllImport("kernel32.dll", SetLastError = true)]
+		[DllImport("kernel32", SetLastError = true)]
 		static extern bool SetHandleInformation (IntPtr hObject, int dwMask, int dwFlags);
 		static void ConfigureWindowsFD (IntPtr handle, HandleInheritability h)
 		{
@@ -236,8 +236,18 @@ namespace System.IO.MemoryMappedFiles
 		[DllImport ("libc", SetLastError=true)]
 		static extern int open (string path, int flags, int access);
 
+#if MONODROID
+		[DllImport ("__Internal")]
+		static extern int monodroid_getpagesize ();
+
+		static int getpagesize ()
+		{
+			return monodroid_getpagesize ();
+		}
+#else
 		[DllImport ("libc")]
 		static extern int getpagesize ();
+#endif
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		static extern long mono_filesize_from_path (string str);
@@ -359,7 +369,7 @@ namespace System.IO.MemoryMappedFiles
 			if (file_size < 0)
 				throw new FileNotFoundException (path);
 
-			if ((capacity == 0 && file_size == 0) || (capacity > file_size))
+			if (capacity > file_size)
 				throw new ArgumentException ("capacity");
 
 			int fd = open (path, ToUnixMode (mode) | ToUnixMode (access), DEFFILEMODE);
@@ -482,16 +492,22 @@ namespace System.IO.MemoryMappedFiles
 			};
 		}
 
+#if MOBILE
+		public static MemoryMappedFile CreateFromFile (FileStream fileStream, string mapName, long capacity, MemoryMappedFileAccess access,
+							       HandleInheritability inheritability,
+							       bool leaveOpen)
+#else
 		[MonoLimitation ("memoryMappedFileSecurity is currently ignored")]
 		public static MemoryMappedFile CreateFromFile (FileStream fileStream, string mapName, long capacity, MemoryMappedFileAccess access,
 							       MemoryMappedFileSecurity memoryMappedFileSecurity, HandleInheritability inheritability,
 							       bool leaveOpen)
+#endif
 		{
 			if (fileStream == null)
 				throw new ArgumentNullException ("fileStream");
 			if (mapName != null && mapName.Length == 0)
 				throw new ArgumentException ("mapName");
-			if ((capacity == 0 && fileStream.Length == 0) || (capacity > fileStream.Length))
+			if ((!MonoUtil.IsUnix && capacity == 0 && fileStream.Length == 0) || (capacity > fileStream.Length))
 				throw new ArgumentException ("capacity");
 
 			MemoryMapImpl.ConfigureFD (fileStream.Handle, inheritability);
@@ -508,19 +524,33 @@ namespace System.IO.MemoryMappedFiles
 		[MonoLimitation ("CreateNew requires that mapName be a file name on Unix")]
 		public static MemoryMappedFile CreateNew (string mapName, long capacity)
 		{
+#if MOBILE
+			return CreateNew (mapName, capacity, MemoryMappedFileAccess.ReadWrite, MemoryMappedFileOptions.DelayAllocatePages, 0);
+#else
 			return CreateNew (mapName, capacity, MemoryMappedFileAccess.ReadWrite, MemoryMappedFileOptions.DelayAllocatePages, null, 0);
+#endif
 		}
 
 		[MonoLimitation ("CreateNew requires that mapName be a file name on Unix")]
 		public static MemoryMappedFile CreateNew (string mapName, long capacity, MemoryMappedFileAccess access) 
 		{
+#if MOBILE
+			return CreateNew (mapName, capacity, access, MemoryMappedFileOptions.DelayAllocatePages, 0);
+#else
 			return CreateNew (mapName, capacity, access, MemoryMappedFileOptions.DelayAllocatePages, null, 0);
+#endif
 		}
 
+#if MOBILE
+		public static MemoryMappedFile CreateNew (string mapName, long capacity, MemoryMappedFileAccess access,
+							  MemoryMappedFileOptions options, 
+							  HandleInheritability handleInheritability)
+#else
 		[MonoLimitation ("CreateNew requires that mapName be a file name on Unix; options and memoryMappedFileSecurity are ignored")]
 		public static MemoryMappedFile CreateNew (string mapName, long capacity, MemoryMappedFileAccess access,
 							  MemoryMappedFileOptions options, MemoryMappedFileSecurity memoryMappedFileSecurity,
-							  HandleInheritability handleInheritability)
+							  HandleInheritability inheritability)
+#endif
 		{
 			return CreateFromFile (mapName, FileMode.CreateNew, mapName, capacity, access);
 		}
@@ -538,7 +568,11 @@ namespace System.IO.MemoryMappedFiles
 		}
 
 		[MonoTODO]
-		public static MemoryMappedFile CreateOrOpen (string mapName, long capacity, MemoryMappedFileAccess access, MemoryMappedFileOptions options, MemoryMappedFileSecurity memoryMappedFileSecurity, HandleInheritability handleInheritability)
+#if MOBILE
+		public static MemoryMappedFile CreateOrOpen (string mapName, long capacity, MemoryMappedFileAccess access, MemoryMappedFileOptions options, HandleInheritability inheritability)
+#else
+		public static MemoryMappedFile CreateOrOpen (string mapName, long capacity, MemoryMappedFileAccess access, MemoryMappedFileOptions options, MemoryMappedFileSecurity memoryMappedFileSecurity, HandleInheritability inheritability)
+#endif
 		{
 			throw new NotImplementedException ();
 		}
@@ -618,6 +652,7 @@ namespace System.IO.MemoryMappedFiles
 			}
 		}
 
+#if !MOBILE
 		[MonoTODO]
 		public MemoryMappedFileSecurity GetAccessControl ()
 		{
@@ -629,6 +664,7 @@ namespace System.IO.MemoryMappedFiles
 		{
 			throw new NotImplementedException ();
 		}
+#endif
 
 		[MonoTODO]
 		public SafeMemoryMappedFileHandle SafeMemoryMappedFileHandle {

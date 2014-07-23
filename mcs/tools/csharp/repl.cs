@@ -8,6 +8,7 @@
 //
 // Copyright 2001, 2002, 2003 Ximian, Inc (http://www.ximian.com)
 // Copyright 2004, 2005, 2006, 2007, 2008 Novell, Inc
+// Copyright 2011-2013 Xamarin Inc
 //
 //
 // TODO:
@@ -33,41 +34,104 @@ namespace Mono {
 
 	public class Driver {
 		public static string StartupEvalExpression;
+		static int? attach;
+		static string target_host;
+		static int target_port;
+		static string agent;
 		
 		static int Main (string [] args)
 		{
-#if !ON_DOTNET
-			if (args.Length > 0 && args [0] == "--attach") {
-				new ClientCSharpShell (Int32.Parse (args [1])).Run (null);
-				return 0;
-			}
+			var cmd = new CommandLineParser (Console.Out);
+			cmd.UnknownOptionHandler += HandleExtraArguments;
 
-			if (args.Length > 0 && args [0].StartsWith ("--agent:")) {
-				new CSharpAgent (args [0]);
-				return 0;
-			}
-#endif
-			return Startup(args);
-		}
+			// Enable unsafe code by default
+			var settings = new CompilerSettings () {
+				Unsafe = true
+			};
 
-		static int Startup (string[] args)
-		{
-			string[] startup_files;
-			try {
-				startup_files = Evaluator.InitAndGetStartupFiles (args, HandleExtraArguments);
-				Evaluator.DescribeTypeExpressions = true;
-				Evaluator.SetInteractiveBaseClass (typeof (InteractiveBaseShell));
-			} catch {
+			if (!cmd.ParseArguments (settings, args))
 				return 1;
+
+			var startup_files = new string [settings.SourceFiles.Count];
+			int i = 0;
+			foreach (var source in settings.SourceFiles)
+				startup_files [i++] = source.FullPathName;
+			settings.SourceFiles.Clear ();
+
+			TextWriter agent_stderr = null;
+			ReportPrinter printer;
+			if (agent != null) {
+				agent_stderr = new StringWriter ();
+				printer = new StreamReportPrinter (agent_stderr);
+			} else {
+				printer = new ConsoleReportPrinter ();
 			}
-			return new CSharpShell ().Run (startup_files);
+
+			var eval = new Evaluator (new CompilerContext (settings, printer));
+
+			eval.InteractiveBaseClass = typeof (InteractiveBaseShell);
+			eval.DescribeTypeExpressions = true;
+			eval.WaitOnTask = true;
+
+			CSharpShell shell;
+#if !ON_DOTNET
+			if (attach.HasValue) {
+				shell = new ClientCSharpShell_v1 (eval, attach.Value);
+			} else if (agent != null) {
+				new CSharpAgent (eval, agent, agent_stderr).Run (startup_files);
+				return 0;
+			} else
+#endif
+			if (target_host != null) 
+				shell = new ClientCSharpShell  (eval, target_host, target_port);
+			else 
+				shell = new CSharpShell (eval);
+
+			return shell.Run (startup_files);
 		}
 
 		static int HandleExtraArguments (string [] args, int pos)
 		{
-			if (args [pos] == "-e" && pos+1 < args.Length){
-				StartupEvalExpression = args [pos+1];
-				return pos+1;
+			switch (args [pos]) {
+			case "-e":
+				if (pos + 1 < args.Length) {
+					StartupEvalExpression = args[pos + 1];
+					return pos + 1;
+				}
+				break;
+			case "--attach":
+				if (pos + 1 < args.Length) {
+					attach = Int32.Parse (args[1]);
+					return pos + 1;
+				}
+				break;
+			default:
+				if (args [pos].StartsWith ("--server=")){
+					var hostport = args [pos].Substring (9);
+					int p = hostport.IndexOf (':');
+					if (p == -1){
+						target_host = hostport;
+						target_port = 10000;
+					} else {
+						target_host = hostport.Substring (0,p);
+						if (!int.TryParse (hostport.Substring (p), out target_port)){
+							Console.Error.WriteLine ("Usage is: --server[=host[:port]");
+							Environment.Exit (1);
+						}
+					}
+					return pos + 1;
+				}
+				if (args [pos].StartsWith ("--client")){
+					target_host = "localhost";
+					target_port = 10000;
+					return pos + 1;
+				}
+				if (args [pos].StartsWith ("--agent:")) {
+					agent = args[pos];
+					return pos + 1;
+				} else {
+					return -1;
+				}
 			}
 			return -1;
 		}
@@ -99,24 +163,30 @@ namespace Mono {
 		public static new string help {
 			get {
 				return InteractiveBase.help +
-					"  TabAtStartCompletes - Whether tab will complete even on emtpy lines\n";
+					"  TabAtStartCompletes      - Whether tab will complete even on empty lines\n";
 			}
 		}
 	}
 	
 	public class CSharpShell {
 		static bool isatty = true, is_unix = false;
-		string [] startup_files;
+		protected string [] startup_files;
 		
 		Mono.Terminal.LineEditor editor;
 		bool dumb;
+		readonly Evaluator evaluator;
+
+		public CSharpShell (Evaluator evaluator)
+		{
+			this.evaluator = evaluator;
+		}
 
 		protected virtual void ConsoleInterrupt (object sender, ConsoleCancelEventArgs a)
 		{
 			// Do not about our program
 			a.Cancel = true;
 
-			Mono.CSharp.Evaluator.Interrupt ();
+			evaluator.Interrupt ();
 		}
 		
 		void SetupConsole ()
@@ -135,7 +205,7 @@ namespace Mono {
 
 				string complete = s.Substring (0, pos);
 				
-				string [] completions = Evaluator.GetCompletions (complete, out prefix);
+				string [] completions = evaluator.GetCompletions (complete, out prefix);
 				
 				return new Mono.Terminal.LineEditor.Completion (prefix, completions);
 			};
@@ -185,17 +255,13 @@ namespace Mono {
 
 		void InitTerminal (bool show_banner)
 		{
-#if ON_DOTNET
-			is_unix = false;
-			isatty = true;
-#else
 			int p = (int) Environment.OSVersion.Platform;
 			is_unix = (p == 4) || (p == 128);
 
-			if (is_unix)
-				isatty = UnixUtils.isatty (0) && UnixUtils.isatty (1);
-			else
-				isatty = true;
+#if NET_4_5
+			isatty = !Console.IsInputRedirected && !Console.IsOutputRedirected;
+#else
+			isatty = true;
 #endif
 
 			// Work around, since Console is not accounting for
@@ -260,7 +326,7 @@ namespace Mono {
 			}
 
 			foreach (string file in libraries)
-				Evaluator.LoadAssembly (file);
+				evaluator.LoadAssembly (file);
 
 			ExecuteSources (sources, true);
 		}
@@ -279,7 +345,7 @@ namespace Mono {
 				expr = expr == null ? input : expr + "\n" + input;
 				
 				expr = Evaluate (expr);
-			} 
+			}
 		}
 
 		public int ReadEvalPrintLoop ()
@@ -291,17 +357,24 @@ namespace Mono {
 
 			LoadStartupFiles ();
 
-			if (startup_files.Length != 0)
+			if (startup_files != null && startup_files.Length != 0) {
 				ExecuteSources (startup_files, false);
-			else if (Driver.StartupEvalExpression != null){
-				ReadEvalPrintLoopWith (p => {
-					var ret = Driver.StartupEvalExpression;
-					Driver.StartupEvalExpression = null;
-					return ret;
-					});
-			} else
-				ReadEvalPrintLoopWith (GetLine);
+			} else {
+				if (Driver.StartupEvalExpression != null){
+					ReadEvalPrintLoopWith (p => {
+						var ret = Driver.StartupEvalExpression;
+						Driver.StartupEvalExpression = null;
+						return ret;
+						});
+				} else {
+					ReadEvalPrintLoopWith (GetLine);
+				}
+				
+				editor.SaveHistory ();
+			}
 
+			Console.CancelKeyPress -= ConsoleInterrupt;
+			
 			return 0;
 		}
 
@@ -311,7 +384,7 @@ namespace Mono {
 			object result;
 
 			try {
-				input = Evaluator.Evaluate (input, out result, out result_set);
+				input = evaluator.Evaluate (input, out result, out result_set);
 
 				if (result_set){
 					PrettyPrint (Console.Out, result);
@@ -379,6 +452,24 @@ namespace Mono {
 				break;
 			}
 		}
+
+		// Some types (System.Json.JsonPrimitive) implement
+		// IEnumerator and yet, throw an exception when we
+		// try to use them, helper function to check for that
+		// condition
+		static internal bool WorksAsEnumerable (object obj)
+		{
+			IEnumerable enumerable = obj as IEnumerable;
+			if (enumerable != null){
+				try {
+					enumerable.GetEnumerator ();
+					return true;
+				} catch {
+					// nothing, we return false below
+				}
+			}
+			return false;
+		}
 		
 		internal static void PrettyPrint (TextWriter output, object result)
 		{
@@ -422,7 +513,7 @@ namespace Mono {
 						p (output, " }");
 				}
 				p (output, "}");
-			} else if (result is IEnumerable) {
+			} else if (WorksAsEnumerable (result)) {
 				int i = 0;
 				p (output, "{ ");
 				foreach (object item in (IEnumerable) result) {
@@ -439,16 +530,168 @@ namespace Mono {
 			}
 		}
 
-		public CSharpShell ()
-		{
-		}
-
 		public virtual int Run (string [] startup_files)
 		{
 			this.startup_files = startup_files;
 			return ReadEvalPrintLoop ();
 		}
 		
+	}
+
+	//
+	// Stream helper extension methods
+	//
+	public static class StreamHelper {
+		static DataConverter converter = DataConverter.LittleEndian;
+		
+		static void GetBuffer (this Stream stream, byte [] b)
+		{
+			int n, offset = 0;
+			int len = b.Length;
+
+			do {
+				n = stream.Read (b, offset, len);
+				if (n == 0)
+					throw new IOException ("End reached");
+
+				offset += n;
+				len -= n;
+			} while (len > 0);
+		}
+
+		public static int GetInt (this Stream stream)
+		{
+			byte [] b = new byte [4];
+			stream.GetBuffer (b);
+			return converter.GetInt32 (b, 0);
+		}
+
+		public static string GetString (this Stream stream)
+		{
+			int len = stream.GetInt ();
+			if (len == 0)
+				return "";
+
+			byte [] b = new byte [len];
+			stream.GetBuffer (b);
+
+			return Encoding.UTF8.GetString (b);
+		}
+
+		public static void WriteInt (this Stream stream, int n)
+		{
+			byte [] bytes = converter.GetBytes (n);
+			stream.Write (bytes, 0, bytes.Length);
+		}
+	
+		public static void WriteString (this Stream stream, string s)
+		{
+			stream.WriteInt (s.Length);
+			byte [] bytes = Encoding.UTF8.GetBytes (s);
+			stream.Write (bytes, 0, bytes.Length);
+		}
+	}
+	
+	public enum AgentStatus : byte {
+		// Received partial input, complete
+		PARTIAL_INPUT  = 1,
+	
+		// The result was set, expect the string with the result
+		RESULT_SET     = 2,
+	
+		// No result was set, complete
+		RESULT_NOT_SET = 3,
+	
+		// Errors and warnings string follows
+		ERROR          = 4,
+
+		// Stdout
+		STDOUT         = 5,
+	}
+
+	class ClientCSharpShell : CSharpShell {
+		string target_host;
+		int target_port;
+		
+		public ClientCSharpShell (Evaluator evaluator, string target_host, int target_port) : base (evaluator)
+		{
+			this.target_port = target_port;
+			this.target_host = target_host;
+		}
+
+		T ConnectServer<T> (Func<NetworkStream,T> callback, Action<Exception> error)
+		{
+			try {
+				var client = new TcpClient (target_host, target_port);
+				var ns = client.GetStream ();
+				T ret = callback (ns);
+				ns.Flush ();
+				ns.Close ();
+				client.Close ();
+				return ret;
+			} catch (Exception e){
+				error (e);
+				return default(T);
+			}
+		}
+		
+		protected override string Evaluate (string input)
+		{
+			return ConnectServer<string> ((ns)=> {
+				try {
+					ns.WriteString ("EVALTXT");
+					ns.WriteString (input);
+
+					while (true) {
+						AgentStatus s = (AgentStatus) ns.ReadByte ();
+					
+						switch (s){
+						case AgentStatus.PARTIAL_INPUT:
+							return input;
+						
+						case AgentStatus.ERROR:
+							string err = ns.GetString ();
+							Console.Error.WriteLine (err);
+							break;
+
+						case AgentStatus.STDOUT:
+							string stdout = ns.GetString ();
+							Console.WriteLine (stdout);
+							break;
+						
+						case AgentStatus.RESULT_NOT_SET:
+							return null;
+						
+						case AgentStatus.RESULT_SET:
+							string res = ns.GetString ();
+							Console.WriteLine (res);
+							return null;
+						}
+					}
+				} catch (Exception e){
+					Console.Error.WriteLine ("Error evaluating expression, exception: {0}", e);
+				}
+				return null;
+			}, (e) => {
+				Console.Error.WriteLine ("Error communicating with server {0}", e);
+			});
+		}
+		
+		public override int Run (string [] startup_files)
+		{
+			// The difference is that we do not call Evaluator.Init, that is done on the target
+			this.startup_files = startup_files;
+			return ReadEvalPrintLoop ();
+		}
+	
+		protected override void ConsoleInterrupt (object sender, ConsoleCancelEventArgs a)
+		{
+			ConnectServer<int> ((ns)=> {
+				ns.WriteString ("INTERRUPT");
+				return 0;
+			}, (e) => { });
+		}
+			
 	}
 
 #if !ON_DOTNET
@@ -458,10 +701,11 @@ namespace Mono {
 	//  - Support Gtk and Winforms main loops if detected, this should
 	//    probably be done as a separate agent in a separate place.
 	//
-	class ClientCSharpShell : CSharpShell {
+	class ClientCSharpShell_v1 : CSharpShell {
 		NetworkStream ns, interrupt_stream;
 		
-		public ClientCSharpShell (int pid)
+		public ClientCSharpShell_v1 (Evaluator evaluator, int pid)
+			: base (evaluator)
 		{
 			// Create a server socket we listen on whose address is passed to the agent
 			TcpListener listener = new TcpListener (new IPEndPoint (IPAddress.Loopback, 0));
@@ -485,7 +729,7 @@ namespace Mono {
 	
 			Console.WriteLine ("Connected.");
 		}
-	
+
 		//
 		// A remote version of Evaluate
 		//
@@ -518,6 +762,7 @@ namespace Mono {
 		public override int Run (string [] startup_files)
 		{
 			// The difference is that we do not call Evaluator.Init, that is done on the target
+			this.startup_files = startup_files;
 			return ReadEvalPrintLoop ();
 		}
 	
@@ -535,65 +780,18 @@ namespace Mono {
 	}
 
 	//
-	// Stream helper extension methods
-	//
-	public static class StreamHelper {
-		static DataConverter converter = DataConverter.LittleEndian;
-		
-		public static int GetInt (this Stream stream)
-		{
-			byte [] b = new byte [4];
-			if (stream.Read (b, 0, 4) != 4)
-				throw new IOException ("End reached");
-			return converter.GetInt32 (b, 0);
-		}
-		
-		public static string GetString (this Stream stream)
-		{
-			int len = stream.GetInt ();
-			byte [] b = new byte [len];
-			if (stream.Read (b, 0, len) != len)
-				throw new IOException ("End reached");
-			return Encoding.UTF8.GetString (b);
-		}
-	
-		public static void WriteInt (this Stream stream, int n)
-		{
-			byte [] bytes = converter.GetBytes (n);
-			stream.Write (bytes, 0, bytes.Length);
-		}
-	
-		public static void WriteString (this Stream stream, string s)
-		{
-			stream.WriteInt (s.Length);
-			byte [] bytes = Encoding.UTF8.GetBytes (s);
-			stream.Write (bytes, 0, bytes.Length);
-		}
-	}
-	
-	public enum AgentStatus : byte {
-		// Received partial input, complete
-		PARTIAL_INPUT  = 1,
-	
-		// The result was set, expect the string with the result
-		RESULT_SET     = 2,
-	
-		// No result was set, complete
-		RESULT_NOT_SET = 3,
-	
-		// Errors and warnings string follows
-		ERROR          = 4, 
-	}
-	
-	//
 	// This is the agent loaded into the target process when using --attach.
 	//
 	class CSharpAgent
 	{
 		NetworkStream interrupt_stream;
+		readonly Evaluator evaluator;
+		TextWriter stderr;
 		
-		public CSharpAgent (String arg)
+		public CSharpAgent (Evaluator evaluator, String arg, TextWriter stderr)
 		{
+			this.evaluator = evaluator;
+			this.stderr = stderr;
 			new Thread (new ParameterizedThreadStart (Run)).Start (arg);
 		}
 
@@ -603,7 +801,7 @@ namespace Mono {
 				int b = interrupt_stream.ReadByte();
 				if (b == -1)
 					return;
-				Evaluator.Interrupt ();
+				evaluator.Interrupt ();
 				interrupt_stream.WriteByte (0);
 			}
 		}
@@ -627,20 +825,15 @@ namespace Mono {
 			new Thread (InterruptListener).Start ();
 
 			try {
-				Evaluator.Init (new string [0]);
-			} catch {
-				// TODO: send a result back.
-				Console.WriteLine ("csharp-agent: initialization failed");
-				return;
-			}
-	
-			try {
 				// Add all assemblies loaded later
 				AppDomain.CurrentDomain.AssemblyLoad += AssemblyLoaded;
 	
 				// Add all currently loaded assemblies
-				foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies ())
-					Evaluator.ReferenceAssembly (a);
+				foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies ()) {
+					// Some assemblies seem to be already loaded, and loading them again causes 'defined multiple times' errors
+					if (a.GetName ().Name != "mscorlib" && a.GetName ().Name != "System.Core" && a.GetName ().Name != "System")
+						evaluator.ReferenceAssembly (a);
+				}
 	
 				RunRepl (s);
 			} finally {
@@ -651,9 +844,9 @@ namespace Mono {
 			}
 		}
 	
-		static void AssemblyLoaded (object sender, AssemblyLoadEventArgs e)
+		void AssemblyLoaded (object sender, AssemblyLoadEventArgs e)
 		{
-			Evaluator.ReferenceAssembly (e.LoadedAssembly);
+			evaluator.ReferenceAssembly (e.LoadedAssembly);
 		}
 	
 		public void RunRepl (NetworkStream s)
@@ -663,9 +856,8 @@ namespace Mono {
 			while (!InteractiveBase.QuitRequested) {
 				try {
 					string error_string;
-					StringWriter error_output = new StringWriter ();
-//					Report.Stderr = error_output;
-					
+					StringWriter error_output = (StringWriter)stderr;
+
 					string line = s.GetString ();
 	
 					bool result_set;
@@ -677,7 +869,7 @@ namespace Mono {
 						input = input + "\n" + line;
 	
 					try {
-						input = Evaluator.Evaluate (input, out result, out result_set);
+						input = evaluator.Evaluate (input, out result, out result_set);
 					} catch (Exception e) {
 						s.WriteByte ((byte) AgentStatus.ERROR);
 						s.WriteString (e.ToString ());
@@ -695,6 +887,7 @@ namespace Mono {
 					if (error_string.Length != 0){
 						s.WriteByte ((byte) AgentStatus.ERROR);
 						s.WriteString (error_output.ToString ());
+						error_output.GetStringBuilder ().Clear ();
 					}
 	
 					if (result_set){

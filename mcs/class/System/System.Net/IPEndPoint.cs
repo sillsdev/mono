@@ -49,9 +49,9 @@ namespace System.Net {
 			Port = port;
 		}
 		
-		public IPEndPoint (long iaddr, int port)
+		public IPEndPoint (long address, int port)
 		{
-			Address = new IPAddress (iaddr);
+			Address = new IPAddress (address);
 			Port = port;
 		}
 
@@ -117,7 +117,6 @@ namespace System.Net {
 
 					ipe = new IPEndPoint(address, port);
 					break;
-#if NET_1_1
 				case AddressFamily.InterNetworkV6:
 					if (size < 28) {
 						return(null);
@@ -144,7 +143,6 @@ namespace System.Net {
 
 					ipe = new IPEndPoint (new IPAddress(addressData, scopeId), port);
 					break;
-#endif
 				default:
 					return null;
 			}
@@ -173,7 +171,7 @@ namespace System.Net {
 					sockaddr [6] = (byte) ((addr >> 16) & 0xff);
 					sockaddr [7] = (byte) ((addr >> 24) & 0xff);
 					break;
-#if NET_1_1
+
 				case AddressFamily.InterNetworkV6:
 					sockaddr = new SocketAddress(AddressFamily.InterNetworkV6, 28);
 
@@ -189,7 +187,6 @@ namespace System.Net {
 					sockaddr [26] = (byte) ((address.ScopeId >> 16) & 0xff);
 					sockaddr [27] = (byte) ((address.ScopeId >> 24) & 0xff);
 					break;
-#endif
 			}
 
 			return(sockaddr);
@@ -199,9 +196,9 @@ namespace System.Net {
 			return(address.ToString() + ":" + port);
 		}
 
-		public override bool Equals (Object obj)
+		public override bool Equals (object comparand)
 		{
-			IPEndPoint p = obj as IPEndPoint;
+			IPEndPoint p = comparand as IPEndPoint;
 			return p != null && 
 			       p.port == port && 
 			       p.address.Equals (address);

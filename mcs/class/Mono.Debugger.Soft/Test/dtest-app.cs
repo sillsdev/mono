@@ -29,8 +29,37 @@ public enum AnEnum {
 	B= 1
 }
 
+public sealed class Tests3 {
+	public static void M1 () {
+	}
+
+	static void M2 () {
+	}
+
+	public void M3 () {
+	}
+
+	void M4 () {
+	}
+
+}
+
+public static class Tests4 {
+	static Tests4 () {
+	}
+}
+
+public class AAttribute : Attribute {
+	public int afield;
+}
+
+public class BAttribute : AAttribute {
+	public int bfield;
+}
+
 [DebuggerDisplay ("Tests", Name="FOO", Target=typeof (int))]
 [DebuggerTypeProxy (typeof (Tests))]
+[BAttribute (afield = 1, bfield = 2)]
 public class Tests2 {
 	[DebuggerBrowsableAttribute (DebuggerBrowsableState.Collapsed)]
 	public int field_j;
@@ -86,6 +115,10 @@ public class GClass<T> {
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public GClass () {
 	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public void bp<T2> () {
+	}
 }
 
 public struct GStruct<T> {
@@ -99,7 +132,53 @@ public struct GStruct<T> {
 	}
 }
 
-public class Tests : TestsBase
+public struct NestedStruct {
+	NestedInner nested1, nested2;
+}
+
+public struct NestedInner {
+}
+
+interface ITest
+{
+	void Foo ();
+	void Bar ();
+}
+
+interface ITest<T>
+{
+	void Foo ();
+	void Bar ();
+}
+
+class TestIfaces : ITest
+{
+	void ITest.Foo () {
+	}
+
+	void ITest.Bar () {
+	}
+
+	TestIfaces<int> Baz () {
+		return null;
+	}
+}
+
+class TestIfaces<T> : ITest<T>
+{
+	void ITest<T>.Foo () {
+	}
+
+	void ITest<T>.Bar () {
+	}
+}
+
+public interface ITest2
+{
+	int invoke_iface ();
+}
+
+public class Tests : TestsBase, ITest2
 {
 #pragma warning disable 0414
 	int field_i;
@@ -117,6 +196,7 @@ public class Tests : TestsBase
 	double field_double;
 	Thread field_class;
 	IntPtr field_intptr;
+	int? field_nullable;
 	static int static_i = 55;
 	static string static_s = "A";
 	public const int literal_i = 56;
@@ -125,9 +205,11 @@ public class Tests : TestsBase
 	public AStruct field_struct;
 	public object field_boxed_struct;
 	public GStruct<int> generic_field_struct;
+	public KeyValuePair<int, object> boxed_struct_field;
 	[ThreadStatic]
 	public static int tls_i;
 	public static bool is_attached = Debugger.IsAttached;
+	public NestedStruct nested_struct;
 
 #pragma warning restore 0414
 
@@ -155,12 +237,34 @@ public class Tests : TestsBase
 		}
 	}
 
+	public static void wait_one ()
+	{
+		ManualResetEvent evt = new ManualResetEvent (false);
+		evt.WaitOne ();
+	}
+
 	public static int Main (String[] args) {
 		tls_i = 42;
 
 		if (args.Length > 0 && args [0] == "suspend-test")
 			/* This contains an infinite loop, so execute it conditionally */
 			suspend ();
+		if (args.Length >0 && args [0] == "unhandled-exception") {
+			unhandled_exception ();
+			return 0;
+		}
+		if (args.Length >0 && args [0] == "unhandled-exception-endinvoke") {
+			unhandled_exception_endinvoke ();
+			return 0;
+		}
+		if (args.Length >0 && args [0] == "unhandled-exception-user") {
+			unhandled_exception_user ();
+			return 0;
+		}
+		if (args.Length >0 && args [0] == "wait-one") {
+			wait_one ();
+			return 0;
+		}
 		breakpoints ();
 		single_stepping ();
 		arguments ();
@@ -176,6 +280,10 @@ public class Tests : TestsBase
 		exception_filter ();
 		threads ();
 		dynamic_methods ();
+		user ();
+		type_load ();
+		regress ();
+		gc_suspend ();
 		if (args.Length > 0 && args [0] == "domain-test")
 			/* This takes a lot of time, so execute it conditionally */
 			domains ();
@@ -183,7 +291,7 @@ public class Tests : TestsBase
 			ref_emit ();
 		if (args.Length > 0 && args [0] == "frames-in-native")
 			frames_in_native ();
-		if (args.Length >0 && args [0] == "invoke-single-threaded")
+		if (args.Length > 0 && args [0] == "invoke-single-threaded")
 			new Tests ().invoke_single_threaded ();
 		return 3;
 	}
@@ -201,7 +309,7 @@ public class Tests : TestsBase
 		bp4 ();
 		bp4 ();
 		bp5 ();
-		bp6<string> ();
+		bp6<string> (new GClass <int> ());
 		bp7<int> ();
 		bp7<string> ();
 	}
@@ -227,7 +335,8 @@ public class Tests : TestsBase
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	public static void bp6<T> () {
+	public static void bp6<T> (GClass<int> gc) {
+		gc.bp<int> ();
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -236,6 +345,7 @@ public class Tests : TestsBase
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void single_stepping () {
+		bool b = true;
 		ss1 ();
 		ss2 ();
 		ss3 ();
@@ -243,10 +353,15 @@ public class Tests : TestsBase
 		ss4 ();
 		ss5 (new int [] { 1, 2, 3 }, new Func<int, bool> (is_even));
 		try {
-			ss6 (true);
+			ss6 (b);
 		} catch {
 		}
+		ss7 ();
+		ss_nested ();
 		ss_regress_654694 ();
+		ss_step_through ();
+		ss_recursive (1);
+		ss_fp_clobber ();
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -292,13 +407,98 @@ public class Tests : TestsBase
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void ss6 (bool b) {
 		if (b) {
-			ss7 ();
+			ss6_2 ();
 			throw new Exception ();
 		}
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss6_2 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void ss7 () {
+		try {
+			ss7_2 ();
+			ss7_3 ();
+		} catch {
+		}
+		ss7_2 ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss7_2 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss7_3 () {
+		throw new Exception ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_nested () {
+		ss_nested_1 (ss_nested_2 ());
+		ss_nested_1 (ss_nested_2 ());
+		ss_nested_3 ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_nested_1 (int i) {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static int ss_nested_2 () {
+		return 0;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_nested_3 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_step_through () {
+		step_through_1 ();
+		StepThroughClass.step_through_2 ();
+		step_through_3 ();
+	}
+
+	[DebuggerStepThrough]
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void step_through_1 () {
+	}
+
+	[DebuggerStepThrough]
+	class StepThroughClass {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public static void step_through_2 () {
+		}
+	}
+
+	[DebuggerStepThrough]
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void step_through_3 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_recursive (int n) {
+		if (n == 10)
+			return;
+		ss_recursive (n + 1);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_fp_clobber () {
+		double v = ss_fp_clobber_1 (5.0);
+		ss_fp_clobber_2 (v);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static double ss_fp_clobber_1 (double d) {
+		return d + 2.0;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_fp_clobber_2 (double d) {
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -340,7 +540,7 @@ public class Tests : TestsBase
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void objects () {
-		Tests t = new Tests () { field_i = 42, field_bool1 = true, field_bool2 = false, field_char = 'A', field_byte = 129, field_sbyte = -33, field_short = Int16.MaxValue - 5, field_ushort = UInt16.MaxValue - 5, field_long = Int64.MaxValue - 5, field_ulong = UInt64.MaxValue - 5, field_float = 3.14f, field_double = 3.14f, field_s = "S", base_field_i = 43, base_field_s = "T", field_enum = AnEnum.B, field_class = null, field_intptr = new IntPtr (Int32.MaxValue - 5) };
+		Tests t = new Tests () { field_i = 42, field_bool1 = true, field_bool2 = false, field_char = 'A', field_byte = 129, field_sbyte = -33, field_short = Int16.MaxValue - 5, field_ushort = UInt16.MaxValue - 5, field_long = Int64.MaxValue - 5, field_ulong = UInt64.MaxValue - 5, field_float = 3.14f, field_double = 3.14f, field_s = "S", base_field_i = 43, base_field_s = "T", field_enum = AnEnum.B, field_class = null, field_intptr = new IntPtr (Int32.MaxValue - 5), field_nullable = null };
 		t.o1 (new Tests2 () { field_j = 43 }, new GClass <int> { field = 42 }, new GClass <string> { field = "FOO" });
 		o2 (new string [] { "BAR", "BAZ" }, new int[] { 42, 43 }, new int [,] { { 1, 2 }, { 3, 4 }}, (int[,])Array.CreateInstance (typeof (int), new int [] { 2, 2}, new int [] { 1, 3}), new int[] { 0 });
 	}
@@ -382,7 +582,7 @@ public class Tests : TestsBase
 	}
 
 	public static void vtypes () {
-		Tests t = new Tests () { field_struct = new AStruct () { i = 42, s = "S", k = 43 }, generic_field_struct = new GStruct<int> () { i = 42 }, field_boxed_struct = new AStruct () { i = 42 }};
+		Tests t = new Tests () { field_struct = new AStruct () { i = 42, s = "S", k = 43 }, generic_field_struct = new GStruct<int> () { i = 42 }, field_boxed_struct = new AStruct () { i = 42 }, boxed_struct_field = new KeyValuePair<int, object> (1, (long)42 ) };
 		AStruct s = new AStruct { i = 44, s = "T", k = 45 };
 		AStruct[] arr = new AStruct[] { 
 			new AStruct () { i = 1, s = "S1" },
@@ -412,14 +612,25 @@ public class Tests : TestsBase
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void locals () {
+		string s = null;
+		var astruct = new AStruct () { i = 42 };
 		locals1 (null);
-		locals2<string> (null, 5, "ABC");
+		locals2<string> (null, 5, "ABC", ref s, ref astruct);
 		locals3 ();
+		locals6 ();
+		locals7<int> (22);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void locals11 (double a, ref double b) {
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void locals1 (string[] args) {
 		long foo = 42;
+
+		double ri = 1;
+		locals11 (b: ref ri, a: ri);
 
 		for (int j = 0; j < 10; ++j) {
 			foo ++;
@@ -427,7 +638,10 @@ public class Tests : TestsBase
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	public static void locals2<T> (string[] args, int arg, T t) {
+#if NET_4_5
+	[StateMachine (typeof (int))]
+#endif
+	public static void locals2<T> (string[] args, int arg, T t, ref string rs, ref AStruct astruct) {
 		long i = 42;
 		string s = "AB";
 
@@ -436,8 +650,11 @@ public class Tests : TestsBase
 				i ++;
 			if (t != null)
 				i ++;
+			astruct = new AStruct ();
 		}
+		rs = "A";
 	}
+
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void locals3 () {
@@ -466,6 +683,65 @@ public class Tests : TestsBase
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void locals5 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void locals6 () {
+		int i = 0;
+		int j = 0;
+		for (i = 0; i < 10; ++i)
+			j ++;
+		sbyte sb = 0;
+		for (i = 0; i < 10; ++i)
+			sb ++;
+		locals6_1 ();
+		locals6_2 (j);
+		locals6_3 ();
+		locals6_4 (j);
+		locals6_5 ();
+		locals6_6 (sb);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void locals6_1 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void locals6_2 (int arg) {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void locals6_3 () {
+		// Clobber all registers
+		int sum = 0, i, j, k, l, m;
+		for (i = 0; i < 100; ++i)
+			sum ++;
+		for (j = 0; j < 100; ++j)
+			sum ++;
+		for (k = 0; k < 100; ++k)
+			sum ++;
+		for (l = 0; l < 100; ++l)
+			sum ++;
+		for (m = 0; m < 100; ++m)
+			sum ++;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void locals6_4 (int arg) {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void locals6_5 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void locals6_6 (int arg) {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void locals7<T> (T arg) {
+		T t = arg;
+		T t2 = t;
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -622,6 +898,10 @@ public class Tests : TestsBase
 		throw new Exception ();
 	}
 
+	public int invoke_iface () {
+		return 42;
+	}
+
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void exceptions () {
 		try {
@@ -640,6 +920,15 @@ public class Tests : TestsBase
 			throw new OverflowException ();
 		} catch (Exception) {
 		}
+		// no subclasses
+		try {
+			throw new OverflowException ();
+		} catch (Exception) {
+		}
+		try {
+			throw new Exception ();
+		} catch (Exception) {
+		}
 
 		object o = null;
 		try {
@@ -651,6 +940,50 @@ public class Tests : TestsBase
 			exceptions2 ();
 		} catch (Exception) {
 		}
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void unhandled_exception () {
+		ThreadPool.QueueUserWorkItem (delegate {
+				throw new InvalidOperationException ();
+			});
+		Thread.Sleep (10000);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void unhandled_exception_endinvoke_2 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void unhandled_exception_endinvoke () {
+			Action action = new Action (() => 
+			{
+				throw new Exception ("thrown");
+			});
+			action.BeginInvoke ((ar) => {
+				try {
+					action.EndInvoke (ar);
+				} catch (Exception ex) {
+					//Console.WriteLine (ex);
+				}
+			}, null);
+		Thread.Sleep (1000);
+		unhandled_exception_endinvoke_2 ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void unhandled_exception_user () {
+#if NET_4_5
+		System.Threading.Tasks.Task.Factory.StartNew (() => {
+				Throw ();
+			});
+		Thread.Sleep (10000);
+#endif
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void Throw () {
+		throw new Exception ();
 	}
 
 	internal static Delegate create_filter_delegate (Delegate dlg, MethodInfo filter_method)
@@ -752,6 +1085,8 @@ public class Tests : TestsBase
 		CrossDomain o = (CrossDomain)domain.CreateInstanceAndUnwrap (
 				   typeof (CrossDomain).Assembly.FullName, "CrossDomain");
 
+		domains_2 (o, new CrossDomain ());
+
 		o.invoke_2 ();
 
 		o.invoke ();
@@ -760,11 +1095,15 @@ public class Tests : TestsBase
 
 		AppDomain.Unload (domain);
 
-		domains_2 ();
+		domains_3 ();
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	public static void domains_2 () {
+	public static void domains_2 (object o, object o2) {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void domains_3 () {
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -822,6 +1161,23 @@ public class Tests : TestsBase
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void frames_in_native () {
 		Thread.Sleep (500);
+		var evt = new ManualResetEvent (false);
+		
+		object mon = new object ();
+		ThreadPool.QueueUserWorkItem (delegate {
+				frames_in_native_2 ();
+				evt.Set ();
+			});
+		evt.WaitOne ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void frames_in_native_2 () {
+		frames_in_native_3 ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void frames_in_native_3 () {
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -835,6 +1191,95 @@ public class Tests : TestsBase
 			string_call (h);
 		}
 	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void user () {
+		Debugger.Break ();
+
+		Debugger.Log (5, Debugger.IsLogging () ? "A" : "", "B");
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void type_load () {
+		type_load_2 ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void type_load_2 () {
+		var c1 = new Dictionary<int, int> ();
+		c1.ToString ();
+		var c = new TypeLoadClass ();
+		c.ToString ();
+		var c2 = new TypeLoadClass2 ();
+		c2.ToString ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void regress () {
+		regress_2755 (DateTime.Now);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static unsafe void regress_2755 (DateTime d) {
+		int* buffer = stackalloc int [128];
+
+		regress_2755_2 ();
+
+		int sum = 0;
+		for (int i = 0; i < 128; ++i)
+			sum += buffer [i];
+
+		regress_2755_3 (sum);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void regress_2755_2 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void regress_2755_3 (int sum) {
+	}
+
+	static object gc_suspend_field;
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static unsafe void set_gc_suspend_field () {
+		set_gc_suspend_field_2 ();
+		// Clear stack
+		int* buffer = stackalloc int [4096];
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void set_gc_suspend_field_2 () {
+		gc_suspend_field = new object ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void gc_suspend_1 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void gc_suspend_invoke () {
+		gc_suspend_field = null;
+		GC.Collect ();
+		GC.WaitForPendingFinalizers ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void gc_suspend () {
+		set_gc_suspend_field ();
+		gc_suspend_1 ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void generic_method<T> () where T : class {
+	}
+}
+
+class TypeLoadClass {
+}
+
+class TypeLoadClass2 {
 }
 
 public class CrossDomain : MarshalByRefObject
@@ -845,6 +1290,10 @@ public class CrossDomain : MarshalByRefObject
 
 	public void invoke_2 () {
 		Tests.invoke_in_domain_2 ();
+	}
+
+	public int invoke_3 () {
+		return 42;
 	}
 }	
 
@@ -858,6 +1307,7 @@ public class LineNumbers
 {
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void ln1 () {
+		// Column 3
 		ln2 ();
 		ln3 ();
 	}
@@ -868,5 +1318,9 @@ public class LineNumbers
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void ln3 () {
+#pragma warning disable 0219
+		int i = 5;
+#pragma warning restore 0219
+		#line 55 "FOO"
 	}
 }

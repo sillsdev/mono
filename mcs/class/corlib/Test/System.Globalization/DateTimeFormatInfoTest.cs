@@ -5,6 +5,7 @@
 //     Ben Maurer <bmaurer@andrew.cmu.edu>
 //
 // Copyright (C) 2005 Novell (http://www.novell.com)
+// Copyright (C) 2012 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -54,6 +55,8 @@ namespace MonoTests.System.Globalization
 			CultureInfo en_US = new CultureInfo ("en-US");
 			DateTimeFormatInfo dtfi = en_US.DateTimeFormat;
 			Assert.AreEqual ("AD", dtfi.GetAbbreviatedEraName (0), "#1");
+			Assert.AreEqual ("AD", dtfi.GetAbbreviatedEraName (1), "#7");
+			Assert.AreEqual ("A.D.", dtfi.GetEraName (0), "#8");
 			Assert.AreEqual ("A.D.", dtfi.GetEraName (1), "#2");
 			Assert.AreEqual (1, dtfi.GetEra ("A.D."), "#3");
 			Assert.AreEqual (1, dtfi.GetEra ("AD"), "#4");
@@ -93,11 +96,41 @@ namespace MonoTests.System.Globalization
 		{
 			CultureInfo ci = new CultureInfo ("es-ES");
 			DateTimeFormatInfo di = ci.DateTimeFormat;
-			Assert.AreEqual ("dddd, dd' de 'MMMM' de 'yyyy", di.LongDatePattern, "#1");
+			Assert.AreEqual ("dddd, d' de 'MMMM' de 'yyyy", di.LongDatePattern, "#1");
 			Assert.AreEqual ("H:mm:ss", di.LongTimePattern, "#2");
-			Assert.AreEqual ("dddd, dd' de 'MMMM' de 'yyyy H:mm:ss", di.FullDateTimePattern, "#3");
+			Assert.AreEqual ("dddd, d' de 'MMMM' de 'yyyy H:mm:ss", di.FullDateTimePattern, "#3");
 			Assert.AreEqual ("MMMM' de 'yyyy", di.YearMonthPattern, "#4");
-			Assert.AreEqual ("dd MMMM", di.MonthDayPattern, "#5");
+			Assert.AreEqual ("d' de 'MMMM", di.MonthDayPattern, "#5");
+		}
+
+		[Test]
+		public void Clone ()
+		{
+			DateTimeFormatInfo dfi = (DateTimeFormatInfo) DateTimeFormatInfo.InvariantInfo.Clone ();
+			dfi.MonthNames[0] = "foo";
+			dfi.AbbreviatedDayNames[0] = "b1";
+			dfi.AbbreviatedMonthGenitiveNames[0] = "b2";
+
+
+			Assert.IsFalse (dfi.IsReadOnly, "#0");
+			Assert.AreEqual ("January", DateTimeFormatInfo.InvariantInfo.MonthNames [0], "#1");
+			Assert.AreEqual ("Sun", DateTimeFormatInfo.InvariantInfo.AbbreviatedDayNames[0], "#2");
+			Assert.AreEqual ("Jan", DateTimeFormatInfo.InvariantInfo.AbbreviatedMonthGenitiveNames[0], "#3");
+		}
+
+		[Test]
+		public void MonthGenitiveNames ()
+		{
+			var dfi = new CultureInfo ("cs-CZ").DateTimeFormat;
+			Assert.AreEqual ("ledna", dfi.MonthGenitiveNames[0], "#1");
+			Assert.AreEqual ("led", dfi.AbbreviatedMonthGenitiveNames[0], "#2");
+		}
+
+		[Test]
+		public void QuoteInValue ()
+		{
+			var culture = new CultureInfo("mt-MT");
+			Assert.AreEqual ("dddd, d' ta\\' 'MMMM yyyy", culture.DateTimeFormat.LongDatePattern);
 		}
 
 #if !TARGET_JVM

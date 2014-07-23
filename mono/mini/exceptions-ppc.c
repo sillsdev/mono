@@ -220,7 +220,7 @@ mono_arch_get_restore_context (MonoTrampInfo **info, gboolean aot)
 	mono_arch_flush_icache (start, code - start);
 
 	if (info)
-		*info = mono_tramp_info_create (g_strdup_printf ("restore_context"), start, code - start, ji, unwind_ops);
+		*info = mono_tramp_info_create ("restore_context", start, code - start, ji, unwind_ops);
 
 	return start;
 }
@@ -308,7 +308,7 @@ mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
 	mono_arch_flush_icache (start, code - start);
 
 	if (info)
-		*info = mono_tramp_info_create (g_strdup_printf ("call_filter"), start, code - start, ji, unwind_ops);
+		*info = mono_tramp_info_create ("call_filter", start, code - start, ji, unwind_ops);
 
 	return start;
 }
@@ -316,11 +316,7 @@ mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
 void
 mono_ppc_throw_exception (MonoObject *exc, unsigned long eip, unsigned long esp, mgreg_t *int_regs, gdouble *fp_regs, gboolean rethrow)
 {
-	static void (*restore_context) (MonoContext *);
 	MonoContext ctx;
-
-	if (!restore_context)
-		restore_context = mono_get_restore_context ();
 
 	/* adjust eip so that it point into the call instruction */
 	eip -= 4;
@@ -338,8 +334,8 @@ mono_ppc_throw_exception (MonoObject *exc, unsigned long eip, unsigned long esp,
 		if (!rethrow)
 			mono_ex->stack_trace = NULL;
 	}
-	mono_handle_exception (&ctx, exc, (gpointer)eip, FALSE);
-	restore_context (&ctx);
+	mono_handle_exception (&ctx, exc);
+	mono_restore_context (&ctx);
 
 	g_assert_not_reached ();
 }
@@ -440,7 +436,7 @@ mono_arch_get_throw_exception_generic (int size, MonoTrampInfo **info, int corli
 	mono_arch_flush_icache (start, code - start);
 
 	if (info)
-		*info = mono_tramp_info_create (g_strdup_printf (corlib ? "throw_corlib_exception" : (rethrow ? "rethrow_exception" : "throw_exception")), start, code - start, ji, unwind_ops);
+		*info = mono_tramp_info_create (corlib ? "throw_corlib_exception" : (rethrow ? "rethrow_exception" : "throw_exception"), start, code - start, ji, unwind_ops);
 
 	return start;
 }
@@ -520,7 +516,6 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 
 	memset (frame, 0, sizeof (StackFrameInfo));
 	frame->ji = ji;
-	frame->managed = FALSE;
 
 	*new_ctx = *ctx;
 	setup_context (new_ctx);
@@ -534,17 +529,11 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 
 		frame->type = FRAME_TYPE_MANAGED;
 
-		if (!ji->method->wrapper_type || ji->method->wrapper_type == MONO_WRAPPER_DYNAMIC_METHOD)
-			frame->managed = TRUE;
-
-		if (ji->from_aot)
-			unwind_info = mono_aot_get_unwind_info (ji, &unwind_info_len);
-		else
-			unwind_info = mono_get_cached_unwind_info (ji->used_regs, &unwind_info_len);
+		unwind_info = mono_jinfo_get_unwind_info (ji, &unwind_info_len);
 
 		sframe = (MonoPPCStackFrame*)MONO_CONTEXT_GET_SP (ctx);
 		MONO_CONTEXT_SET_BP (new_ctx, sframe->sp);
-		if (ji->method->save_lmf) {
+		if (jinfo_get_method (ji)->save_lmf) {
 			/* sframe->sp points just past the end of the LMF */
 			guint8 *lmf_addr = (guint8*)sframe->sp - sizeof (MonoLMF);
 			memcpy (&new_ctx->fregs, lmf_addr + G_STRUCT_OFFSET (MonoLMF, fregs), sizeof (double) * MONO_SAVED_FREGS);
@@ -671,15 +660,13 @@ mono_ppc_set_func_into_sigctx (void *sigctx, void *func)
 }
 
 static void
-altstack_handle_and_restore (void *sigctx, gpointer obj, gboolean test_only)
+altstack_handle_and_restore (void *sigctx, gpointer obj)
 {
-	void (*restore_context) (MonoContext *);
 	MonoContext mctx;
 
-	restore_context = mono_get_restore_context ();
 	mono_arch_sigctx_to_monoctx (sigctx, &mctx);
-	mono_handle_exception (&mctx, obj, (gpointer)mctx.sc_ir, test_only);
-	restore_context (&mctx);
+	mono_handle_exception (&mctx, obj);
+	mono_restore_context (&mctx);
 }
 
 void
@@ -699,8 +686,8 @@ mono_arch_handle_altstack_exception (void *sigctx, gpointer fault_addr, gboolean
 		const char *method;
 		/* we don't do much now, but we can warn the user with a useful message */
 		fprintf (stderr, "Stack overflow: IP: %p, SP: %p\n", mono_arch_ip_from_context (sigctx), (gpointer)UCONTEXT_REG_Rn(uc, 1));
-		if (ji && ji->method)
-			method = mono_method_full_name (ji->method, TRUE);
+		if (ji && jinfo_get_method (ji))
+			method = mono_method_full_name (jinfo_get_method (ji), TRUE);
 		else
 			method = "Unmanaged";
 		fprintf (stderr, "At %s\n", method);
@@ -754,20 +741,16 @@ mono_arch_handle_altstack_exception (void *sigctx, gpointer fault_addr, gboolean
  *   Called by resuming from a signal handler.
  */
 static void
-handle_signal_exception (gpointer obj, gboolean test_only)
+handle_signal_exception (gpointer obj)
 {
-	MonoJitTlsData *jit_tls = TlsGetValue (mono_jit_tls_id);
+	MonoJitTlsData *jit_tls = mono_native_tls_get_value (mono_jit_tls_id);
 	MonoContext ctx;
-	static void (*restore_context) (MonoContext *);
-
-	if (!restore_context)
-		restore_context = mono_get_restore_context ();
 
 	memcpy (&ctx, &jit_tls->ex_ctx, sizeof (MonoContext));
 
-	mono_handle_exception (&ctx, obj, MONO_CONTEXT_GET_IP (&ctx), test_only);
+	mono_handle_exception (&ctx, obj);
 
-	restore_context (&ctx);
+	mono_restore_context (&ctx);
 }
 
 static void
@@ -789,7 +772,7 @@ setup_ucontext_return (void *uc, gpointer func)
 }
 
 gboolean
-mono_arch_handle_exception (void *ctx, gpointer obj, gboolean test_only)
+mono_arch_handle_exception (void *ctx, gpointer obj)
 {
 #if defined(MONO_ARCH_USE_SIGACTION) && defined(UCONTEXT_REG_Rn)
 	/*
@@ -797,7 +780,7 @@ mono_arch_handle_exception (void *ctx, gpointer obj, gboolean test_only)
 	 * signal is disabled, and we could run arbitrary code though the debugger. So
 	 * resume into the normal stack and do most work there if possible.
 	 */
-	MonoJitTlsData *jit_tls = TlsGetValue (mono_jit_tls_id);
+	MonoJitTlsData *jit_tls = mono_native_tls_get_value (mono_jit_tls_id);
 	mgreg_t sp;
 	void *sigctx = ctx;
 	int frame_size;
@@ -807,7 +790,6 @@ mono_arch_handle_exception (void *ctx, gpointer obj, gboolean test_only)
 	mono_arch_sigctx_to_monoctx (sigctx, &jit_tls->ex_ctx);
 	/* The others in registers */
 	UCONTEXT_REG_Rn (sigctx, PPC_FIRST_ARG_REG) = (gsize)obj;
-	UCONTEXT_REG_Rn (sigctx, PPC_FIRST_ARG_REG + 1) = test_only;
 
 	/* Allocate a stack frame below the red zone */
 	/* Similar to mono_arch_handle_altstack_exception () */
@@ -826,7 +808,7 @@ mono_arch_handle_exception (void *ctx, gpointer obj, gboolean test_only)
 
 	mono_arch_sigctx_to_monoctx (ctx, &mctx);
 
-	result = mono_handle_exception (&mctx, obj, (gpointer)mctx.sc_ir, test_only);
+	result = mono_handle_exception (&mctx, obj);
 	/* restore the context so that returning from the signal handler will invoke
 	 * the catch clause 
 	 */
@@ -834,10 +816,3 @@ mono_arch_handle_exception (void *ctx, gpointer obj, gboolean test_only)
 	return result;
 #endif
 }
-
-gboolean
-mono_arch_has_unwind_info (gconstpointer addr)
-{
-	return FALSE;
-}
-

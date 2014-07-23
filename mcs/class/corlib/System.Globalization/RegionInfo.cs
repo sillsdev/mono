@@ -1,12 +1,12 @@
 //
 // System.Globalization.RegionInfo.cs
 //
-// Author:
+// Authors:
 //	Atsushi Enomoto  <atsushi@ximian.com>
-//
-
+//   Marek Safar (marek.safar@gmail.com)
 //
 // Copyright (C) 2005 Novell, Inc (http://www.novell.com)
+// Copyright (C) 2012 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -27,46 +27,55 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace System.Globalization
 {
 	[System.Runtime.InteropServices.ComVisible(true)]
 	[Serializable]
-	public class RegionInfo
+	[StructLayout (LayoutKind.Sequential)]
+	public partial class RegionInfo
 	{
 		static RegionInfo currentRegion;
 
-		// This property is not synchronized with CurrentCulture, so
-		// we need to use bootstrap CurrentCulture LCID.
 		public static RegionInfo CurrentRegion {
 			get {
-				if (currentRegion == null) {
-					// make sure to fill BootstrapCultureID.
+				var region = currentRegion;
+				if (region == null) {
 					CultureInfo ci = CultureInfo.CurrentCulture;
-					// If current culture is invariant then region is not available.
-					if (ci == null || CultureInfo.BootstrapCultureID == 0x7F)
-						return null;
-					currentRegion = new RegionInfo (CultureInfo.BootstrapCultureID);
+					if (ci != null) {
+						region = new RegionInfo (ci);
+					} else {
+#if MONOTOUCH
+						region = CreateFromNSLocale ();
+#endif
+					}
+
+					if (Interlocked.CompareExchange (ref currentRegion, region, null) != null)
+						region = currentRegion;
 				}
-				return currentRegion;
+
+				return region;
 			}
 		}
-
-		int lcid; // it is used only for Equals() (not even used in GetHashCode()).
-
+		
+		// the following (instance) fields must be _first_ and stay synchronized
+		// with the mono's MonoRegionInfo defined in mono/metadata/object-internals.h
 #pragma warning disable 649
 		int regionId;
 		string iso2Name;
 		string iso3Name;
 		string win3Name;
 		string englishName;
+		string nativeName;
 		string currencySymbol;
 		string isoCurrencySymbol;
 		string currencyEnglishName;
+		string currencyNativeName;
 #pragma warning restore 649
-
+		
 		public RegionInfo (int culture)
 		{
 			if (!GetByTerritory (CultureInfo.GetCultureInfo (culture)))
@@ -80,11 +89,30 @@ namespace System.Globalization
 				throw new ArgumentNullException ();
 
 			if (construct_internal_region_from_name (name.ToUpperInvariant ())) {
-				lcid = name.GetHashCode (); // random-ish
 				return;
 			}
 			if (!GetByTerritory (CultureInfo.GetCultureInfo (name)))
 				throw new ArgumentException (String.Format ("Region name {0} is not supported.", name), "name");
+		}
+
+		RegionInfo (CultureInfo ci)
+		{
+			if (ci.LCID == CultureInfo.InvariantCultureId) {
+				regionId = 244;
+				iso2Name = "IV";
+				iso3Name = "ivc";
+				win3Name = "IVC";
+				nativeName = englishName = "Invariant Country";
+				currencySymbol = "\u00A4";
+				isoCurrencySymbol ="XDR";
+				currencyEnglishName = currencyNativeName = "International Monetary Fund";
+				return;
+			}
+
+			if (ci.Territory == null)
+				throw new NotImplementedException ("Neutral region info");
+
+			construct_internal_region_from_name (ci.Territory.ToUpperInvariant ());
 		}
 
 		bool GetByTerritory (CultureInfo ci)
@@ -93,7 +121,7 @@ namespace System.Globalization
 				throw new Exception ("INTERNAL ERROR: should not happen.");
 			if (ci.IsNeutralCulture || ci.Territory == null)
 				return false;
-			this.lcid = ci.LCID;
+
 			return construct_internal_region_from_name (ci.Territory.ToUpperInvariant ());
 		}
 
@@ -139,15 +167,14 @@ namespace System.Globalization
 			get { return isoCurrencySymbol; }
 		}
 
-		[System.Runtime.InteropServices.ComVisible(false)]
+		[ComVisible(false)]
 		public virtual string NativeName {
-			get { return DisplayName; }
+			get { return nativeName; }
 		}
 
-		[MonoTODO ("Not implemented")]
-		[System.Runtime.InteropServices.ComVisible(false)]
+		[ComVisible(false)]
 		public virtual string CurrencyNativeName {
-			get { throw new NotImplementedException (); }
+			get { return currencyNativeName; }
 		}
 
 		public virtual string Name {
@@ -166,23 +193,25 @@ namespace System.Globalization
 			get { return iso2Name; }
 		}
 
-		//
-		// methods
-
 		public override bool Equals (object value)
 		{
 			RegionInfo other = value as RegionInfo;
-			return other != null && lcid == other.lcid;
+			return other != null && Name == other.Name;
 		}
 
 		public override int GetHashCode ()
 		{
-			return (int) (0x80000000 + (regionId << 3) + regionId); // it i still based on regionId
+			return Name.GetHashCode ();
 		}
 
 		public override string ToString ()
 		{
 			return Name;
+		}
+
+		internal static void ClearCachedData ()
+		{
+			currentRegion = null;
 		}
 	}
 }

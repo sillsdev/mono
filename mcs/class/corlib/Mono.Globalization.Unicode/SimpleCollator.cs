@@ -86,7 +86,7 @@ namespace Mono.Globalization.Unicode
 
 		unsafe internal struct Context
 		{
-			public Context (CompareOptions opt, byte* alwaysMatchFlags, byte* neverMatchFlags, byte* buffer1, byte* buffer2, byte* prev1, bool quickCheckPossible)
+			public Context (CompareOptions opt, byte* alwaysMatchFlags, byte* neverMatchFlags, byte* buffer1, byte* buffer2, byte* prev1/*, bool quickCheckPossible*/)
 			{
 				Option = opt;
 				AlwaysMatchFlags = alwaysMatchFlags;
@@ -95,7 +95,7 @@ namespace Mono.Globalization.Unicode
 				Buffer2 = buffer2;
 				PrevSortKey = prev1;
 				PrevCode = -1;
-				QuickCheckPossible = quickCheckPossible;
+//				QuickCheckPossible = quickCheckPossible;
 			}
 
 			public readonly CompareOptions Option;
@@ -105,7 +105,7 @@ namespace Mono.Globalization.Unicode
 			public byte* Buffer2;
 			public int PrevCode;
 			public byte* PrevSortKey;
-			public readonly bool QuickCheckPossible;
+//			public readonly bool QuickCheckPossible;
 
 			public void ClearPrevInfo ()
 			{
@@ -139,19 +139,20 @@ namespace Mono.Globalization.Unicode
 			new SimpleCollator (CultureInfo.InvariantCulture);
 
 		readonly TextInfo textInfo; // for ToLower().
-		readonly bool frenchSort;
-		unsafe readonly byte* cjkCatTable;
-		unsafe readonly byte* cjkLv1Table;
 		readonly CodePointIndexer cjkIndexer;
-		unsafe readonly byte* cjkLv2Table;
-		readonly CodePointIndexer cjkLv2Indexer;
-		readonly int lcid;
 		readonly Contraction [] contractions;
 		readonly Level2Map [] level2Maps;
-
 		// This flag marks characters as "unsafe", where the character
 		// could be used as part of a contraction (whose length > 1).
 		readonly byte [] unsafeFlags;
+
+		unsafe readonly byte* cjkCatTable;
+		unsafe readonly byte* cjkLv1Table;
+		unsafe readonly byte* cjkLv2Table;
+		readonly CodePointIndexer cjkLv2Indexer;
+		readonly int lcid;
+		readonly bool frenchSort;
+
 
 		const int UnsafeFlagLength = 0x300 / 8;
 
@@ -541,7 +542,7 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 		{
 			byte* prevbuf = stackalloc byte [4];
 			ClearBuffer (prevbuf, 4);
-			Context ctx = new Context (opt, null, null, null, null, prevbuf, false);
+			Context ctx = new Context (opt, null, null, null, null, prevbuf);
 
 			for (int n = start; n < end; n++) {
 				int i = s [n];
@@ -683,14 +684,9 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 
 		public int Compare (string s1, string s2)
 		{
-			return Compare (s1, s2, CompareOptions.None);
+			return Compare (s1, 0, s1.Length, s2, 0, s2.Length, CompareOptions.None);
 		}
-
-		public int Compare (string s1, string s2, CompareOptions options)
-		{
-			return Compare (s1, 0, s1.Length, s2, 0, s2.Length, options);
-		}
-
+/*
 		private int CompareOrdinal (string s1, int idx1, int len1,
 			string s2, int idx2, int len2)
 		{
@@ -757,19 +753,10 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 			return len1 == len2 ? 0 :
 				len1 == min ? - 1 : 1;
 		}
-
-		public unsafe int Compare (string s1, int idx1, int len1,
+*/
+		internal unsafe int Compare (string s1, int idx1, int len1,
 			string s2, int idx2, int len2, CompareOptions options)
 		{
-			// quick equality check
-			if (idx1 == idx2 && len1 == len2 &&
-				Object.ReferenceEquals (s1, s2))
-				return 0;
-			if (options == CompareOptions.Ordinal)
-				return CompareOrdinal (s1, idx1, len1, s2, idx2, len2);
-			if (options == CompareOptions.OrdinalIgnoreCase)
-				return CompareOrdinalIgnoreCase (s1, idx1, len1, s2, idx2, len2);
-
 #if false // stable easy version, depends on GetSortKey().
 			SortKey sk1 = GetSortKey (s1, idx1, len1, options);
 			SortKey sk2 = GetSortKey (s2, idx2, len2, options);
@@ -785,8 +772,8 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 			byte* sk2 = stackalloc byte [4];
 			ClearBuffer (sk1, 4);
 			ClearBuffer (sk2, 4);
-			Context ctx = new Context (options, null, null, sk1, sk2, null,
-				QuickCheckPossible (s1, idx1, idx1 + len1, s2, idx2, idx2 + len2));
+			Context ctx = new Context (options, null, null, sk1, sk2, null);
+			//	QuickCheckPossible (s1, idx1, idx1 + len1, s2, idx2, idx2 + len2));
 
 			bool dummy, dummy2;
 			int ret = CompareInternal (s1, idx1, len1, s2, idx2, len2, out dummy, out dummy2, true, false, ref ctx);
@@ -800,6 +787,7 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 				buffer [i] = 0;
 		}
 
+/*
 		bool QuickCheckPossible (string s1, int idx1, int end1,
 			string s2, int idx2, int end2)
 		{
@@ -820,6 +808,7 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 			return true;
 #endif
 		}
+*/
 
 		unsafe int CompareInternal (string s1, int idx1, int len1, string s2,
 			int idx2, int len2,
@@ -836,8 +825,8 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 			sourceConsumed = false;
 			PreviousInfo prev2 = new PreviousInfo (false);
 
-			if (opt == CompareOptions.None && ctx.QuickCheckPossible)
-				return CompareQuick (s1, idx1, len1, s2, idx2, len2, out sourceConsumed, out targetConsumed, immediateBreakup);
+//			if (opt == CompareOptions.None && ctx.QuickCheckPossible)
+//				return CompareQuick (s1, idx1, len1, s2, idx2, len2, out sourceConsumed, out targetConsumed, immediateBreakup);
 
 			// It holds final result that comes from the comparison
 			// at level 2 or lower. Even if Compare() found the
@@ -1274,8 +1263,8 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 			byte* sk2 = stackalloc byte [4];
 			ClearBuffer (sk1, 4);
 			ClearBuffer (sk2, 4);
-			Context ctx = new Context (opt, null, null, sk1, sk2, null,
-				QuickCheckPossible (s, start, start + length, target, 0, target.Length));
+			Context ctx = new Context (opt, null, null, sk1, sk2, null); 
+				//QuickCheckPossible (s, start, start + length, target, 0, target.Length));
 			return IsPrefix (s, target, start, length, true, ref ctx);
 		}
 
@@ -1431,7 +1420,8 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 				bool no = false;
 				for (int j = 0; j < target.Length; j++) {
 					if (testedTargetPos < j) {
-						if (target [j] >= 0x80) {
+						char c = target [j];
+						if (c == 0 || c >= 0x80) {
 							testWasUnable = true;
 							return -1;
 						}
@@ -1439,7 +1429,8 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 							testedTargetPos = j;
 					}
 					if (testedSourcePos < i + j) {
-						if (s [i + j] >= 0x80) {
+						char c = s [i + j];
+						if (c == 0 || c >= 0x80) {
 							testWasUnable = true;
 							return -1;
 						}
@@ -1481,7 +1472,7 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 			ClearBuffer (targetSortKey, 4);
 			ClearBuffer (sk1, 4);
 			ClearBuffer (sk2, 4);
-			Context ctx = new Context (opt, alwaysMatchFlags, neverMatchFlags, sk1, sk2, null, false);
+			Context ctx = new Context (opt, alwaysMatchFlags, neverMatchFlags, sk1, sk2, null);
 
 			return IndexOf (s, target, start, length,
 				targetSortKey, ref ctx);
@@ -1559,7 +1550,7 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 			ClearBuffer (targetSortKey, 4);
 			ClearBuffer (sk1, 4);
 			ClearBuffer (sk2, 4);
-			Context ctx = new Context (opt, alwaysMatchFlags, neverMatchFlags, sk1, sk2, null, false);
+			Context ctx = new Context (opt, alwaysMatchFlags, neverMatchFlags, sk1, sk2, null);
 
 			// If target is contraction, then use string search.
 			Contraction ct = GetContraction (target);
@@ -1631,7 +1622,8 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 				if (!IsIgnorable (target [tidx], opt))
 					break;
 			if (tidx == target.Length)
-				return start;
+				// FIXME: this is likely a hack. A string that is consists of \0 differs from those of other ignorable characters.
+				return IndexOfOrdinal (target, '\0', 0, target.Length) >= 0 ? IndexOfOrdinal (s, target, start, length) : start;
 			Contraction ct = GetContraction (target, tidx, target.Length - tidx);
 			string replace = ct != null ? ct.Replacement : null;
 			byte* sk = replace == null ? targetSortKey : null;
@@ -1715,7 +1707,7 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 			ClearBuffer (sk1, 4);
 			ClearBuffer (sk2, 4);
 			// For some unknown reason CompareQuick() does not work fine w/ LastIndexOf().
-			Context ctx = new Context (opt, alwaysMatchFlags, neverMatchFlags, sk1, sk2, null, false);
+			Context ctx = new Context (opt, alwaysMatchFlags, neverMatchFlags, sk1, sk2, null);
 			return LastIndexOf (s, target, start, length,
 				targetSortKey, ref ctx);
 		}
@@ -1723,7 +1715,7 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 		int LastIndexOfOrdinal (string s, string target, int start, int length)
 		{
 			if (target.Length == 0)
-				return 0;
+				return start;
 			if (s.Length < target.Length || target.Length > length)
 				return -1;
 			int end = start - length + target.Length -1;
@@ -1751,7 +1743,7 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 		int LastIndexOfOrdinalIgnoreCase (string s, string target, int start, int length)
 		{
 			if (target.Length == 0)
-				return 0;
+				return start;
 			if (s.Length < length || target.Length > length)
 				return -1;
 			int end = start - length + target.Length - 1;
@@ -1799,7 +1791,7 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 			ClearBuffer (targetSortKey, 4);
 			ClearBuffer (sk1, 4);
 			ClearBuffer (sk2, 4);
-			Context ctx = new Context (opt, alwaysMatchFlags, neverMatchFlags, sk1, sk2, null, false);
+			Context ctx = new Context (opt, alwaysMatchFlags, neverMatchFlags, sk1, sk2, null);
 
 			// If target is a replacement contraction, then use 
 			// string search.
@@ -1879,7 +1871,8 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 				if (!IsIgnorable (target [tidx], opt))
 					break;
 			if (tidx == target.Length)
-				return start;
+				// FIXME: this is likely a hack. A string that is consists of \0 differs from those of other ignorable characters.
+				return IndexOfOrdinal (target, '\0', 0, target.Length) >= 0 ? LastIndexOfOrdinal (s, target, start, length) : start;
 			Contraction ct = GetContraction (target, tidx, target.Length - tidx);
 			string replace = ct != null ? ct.Replacement : null;
 			byte* sk = replace == null ? targetSortKey : null;

@@ -7,9 +7,8 @@
 //
 // (c) Copyright 2006 Novell, Inc. (http://www.novell.com)
 //
+// Slightly modified by Konrad M. Kruczynski (added baud rate value checking)
 
-
-#if NET_2_0
 
 using System;
 using System.IO;
@@ -34,6 +33,8 @@ namespace System.IO.Ports
 			fd = open_serial (portName);
 			if (fd == -1)
 				ThrowIOException ();
+				
+			TryBaudRate (baudRate);
 			
 			if (!set_attributes (fd, baudRate, parity, dataBits, stopBits, handshake))
 				ThrowIOException (); // Probably Win32Exc for compatibility
@@ -312,9 +313,20 @@ namespace System.IO.Ports
 
 			throw new IOException (error_message);
 		}
+		
+		[DllImport ("MonoPosixHelper")]
+		static extern bool is_baud_rate_legal (int baud_rate);
+		
+		private void TryBaudRate (int baudRate)
+		{
+			if (!is_baud_rate_legal (baudRate))
+			{
+				// this kind of exception to be compatible with MSDN API
+				throw new ArgumentOutOfRangeException ("baudRate",
+					"Given baud rate is not supported on this platform.");
+			}			
+		}
 	}
 }
-
-#endif
 
 

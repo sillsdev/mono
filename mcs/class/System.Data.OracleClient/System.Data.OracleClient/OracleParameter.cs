@@ -431,9 +431,8 @@ namespace System.Data.OracleClient
 			object v = value;
 			int status = 0;
 			bindType = ociType;
-			ulong rsize = 0;
-			UIntPtr rsizep = new UIntPtr (rsize);
-			
+			int rsize = 0;
+
 			string svalue;
 			string sDate;
 			DateTime dt;
@@ -483,10 +482,10 @@ namespace System.Data.OracleClient
 						// in this case using OCIUnicodeToCharSet
 						rsize = 0;
 						// Get size of buffer
-						status = OciCalls.OCIUnicodeToCharSet (statement.Parent, null, svalue, ref rsizep);
-						rsize = rsizep.ToUInt64 ();
+						status = OciCalls.OCIUnicodeToCharSet (statement.Parent, null, svalue, out rsize);
+
 						if (direction == ParameterDirection.Input)
-							bindSize = (int)rsize;
+							bindSize = rsize;
 						else {
 							// this cannot be rsize because you need room for the output after the execute
 							bindSize = Encoding.UTF8.GetMaxByteCount (Size + 1);
@@ -496,7 +495,7 @@ namespace System.Data.OracleClient
 						bytes = new byte [bindSize];
 
 						// Fill buffer
-						status = OciCalls.OCIUnicodeToCharSet (statement.Parent, bytes, svalue, ref rsizep);
+						status = OciCalls.OCIUnicodeToCharSet (statement.Parent, bytes, svalue, out rsize);
 					} else {
 						// for Output and ReturnValue parameters, get size in bytes 					
 						bindSize = Encoding.UTF8.GetMaxByteCount (size + 1);
@@ -613,17 +612,17 @@ namespace System.Data.OracleClient
 
 						rsize = 0;
 						// Get size of buffer
-						OciCalls.OCIUnicodeToCharSet (statement.Parent, null, svalue, ref rsizep);
+						OciCalls.OCIUnicodeToCharSet (statement.Parent, null, svalue, out rsize);
 
 						// Fill buffer 
-						rsize = rsizep.ToUInt64 ();
+						
 						if (direction == ParameterDirection.Input)
-							bindSize = (int)rsize;
+							bindSize = rsize;
 						else
 							bindSize = 30; // need room for output possibly being bigger than the input
 						
 						bytes = new byte [bindSize];
-						OciCalls.OCIUnicodeToCharSet (statement.Parent, bytes, svalue, ref rsizep);
+						OciCalls.OCIUnicodeToCharSet (statement.Parent, bytes, svalue, out rsize);
 					} else {
 						// Output and ReturnValue parameters allocate memory
 						bindSize = 30;
@@ -673,12 +672,11 @@ namespace System.Data.OracleClient
 						rsize = 0;
 
 						// Get size of buffer
-						OciCalls.OCIUnicodeToCharSet (statement.Parent, null, svalue, ref rsizep);
+						OciCalls.OCIUnicodeToCharSet (statement.Parent, null, svalue, out rsize);
 
 						// Fill buffer
-						rsize = rsizep.ToUInt64 ();
 						bytes = new byte[rsize];
-						OciCalls.OCIUnicodeToCharSet (statement.Parent, bytes, svalue, ref rsizep);
+						OciCalls.OCIUnicodeToCharSet (statement.Parent, bytes, svalue, out rsize);
 
 						bindType = OciDataType.Long;
 						bindSize = bytes.Length;
@@ -823,8 +821,11 @@ namespace System.Data.OracleClient
 					if (direction == ParameterDirection.Output || 
 						direction == ParameterDirection.InputOutput || 
 						direction == ParameterDirection.ReturnValue) {
-
-						cursor = IntPtr.Zero;
+						if (cursor != IntPtr.Zero) {
+							OciCalls.OCIHandleFree (cursor,
+								OciHandleType.Statement);
+							cursor = IntPtr.Zero;
+						}
 						OciCalls.OCIHandleAlloc (connection.Environment,
 							out cursor,
 							OciHandleType.Statement,
@@ -1118,8 +1119,14 @@ namespace System.Data.OracleClient
 
 		private void SetOracleType (OracleType type, bool inferring)
 		{
+			Type valType;
 			FreeHandle ();
-			Type valType = value.GetType ();
+
+			if (value == null)
+				valType = typeof(System.DBNull);
+			else
+				valType = value.GetType ();
+
 			string exception = String.Format ("No mapping exists from OracleType {0} to a known DbType.", type);
 			switch (type) {
 			case OracleType.BFile:
@@ -1247,8 +1254,7 @@ namespace System.Data.OracleClient
 			if (indicator == -1)
 				return;
 
-			ulong rsize = 0;
-			UIntPtr rsizep = new UIntPtr (rsize);
+			int rsize = 0;
 			IntPtr env = IntPtr.Zero;
 			StringBuilder ret = null;
 
@@ -1266,12 +1272,11 @@ namespace System.Data.OracleClient
 				// Get length of returned string
 				rsize = 0;
 				env = cmd.Connection.Environment;
-				OciCalls.OCICharSetToUnicode (env, null, bytes, ref rsizep);
+				OciCalls.OCICharSetToUnicode (env, null, bytes, out rsize);
 
 				// Get string
-				rsize = rsizep.ToUInt64 ();
-				ret = new StringBuilder((int)rsize);
-				OciCalls.OCICharSetToUnicode (env, ret, bytes, ref rsizep);
+				ret = new StringBuilder(rsize);
+				OciCalls.OCICharSetToUnicode (env, ret, bytes, out rsize);
 
 				value = ret.ToString ();
 				break;
@@ -1316,12 +1321,11 @@ namespace System.Data.OracleClient
 			case OciDataType.Float:
 				rsize = 0;
 				env = cmd.Connection.Environment;
-				OciCalls.OCICharSetToUnicode (env, null, bytes, ref rsizep);
+				OciCalls.OCICharSetToUnicode (env, null, bytes, out rsize);
 
 				// Get string
-				rsize = rsizep.ToUInt64 ();
-				ret = new StringBuilder((int)rsize);
-				OciCalls.OCICharSetToUnicode (env, ret, bytes, ref rsizep);
+				ret = new StringBuilder(rsize);
+				OciCalls.OCICharSetToUnicode (env, ret, bytes, out rsize);
 
 				// if not empty, parse string as a decimal using session format
 				if (ret.Length > 0) {

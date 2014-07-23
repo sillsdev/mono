@@ -44,20 +44,20 @@ namespace System {
 		{
 		}
 
-		public UriFormatException (string message)
-			: base (message)
+		public UriFormatException (string textString)
+			: base (textString)
 		{
 		}
 
-#if NET_2_1 || NET_4_0
-		public UriFormatException (string message, Exception exception)
-			: base (message, exception)
+#if NET_4_0
+		public UriFormatException (string textString, Exception e)
+			: base (textString, e)
 		{
 		}
 #endif
-		protected UriFormatException (SerializationInfo info, StreamingContext context)
-			: base (info, context)
-		{			
+		protected UriFormatException (SerializationInfo serializationInfo, StreamingContext streamingContext)
+			: base (serializationInfo, streamingContext)
+		{
 		}
 
 		// Methods

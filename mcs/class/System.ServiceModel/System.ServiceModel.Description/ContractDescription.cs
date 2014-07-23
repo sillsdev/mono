@@ -29,6 +29,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Security;
 using System.Reflection;
@@ -39,6 +40,7 @@ using System.ServiceModel.Dispatcher;
 
 namespace System.ServiceModel.Description
 {
+#if !NET_4_5	
 	internal static class Extensions
 	{
 		public static T GetCustomAttribute<T> (this MemberInfo mi, bool inherit) where T : Attribute
@@ -55,7 +57,9 @@ namespace System.ServiceModel.Description
 			return null;
 		}
 	}
+#endif
 
+	[DebuggerDisplay ("Name={name}, Namespace={ns}, ContractType={contractType}")]
 	public class ContractDescription
 	{		
 		public static ContractDescription GetContract (
@@ -117,6 +121,13 @@ namespace System.ServiceModel.Description
 		public KeyedByTypeCollection<IContractBehavior> Behaviors {
 			get { return behaviors; }
 		}
+
+#if NET_4_5
+		[MonoTODO]
+		public KeyedCollection<Type,IContractBehavior> ContractBehaviors {
+			get { throw new NotImplementedException (); }
+		}
+#endif
 
 		public Type CallbackContractType {
 			get { return callback_contract_type; }
@@ -220,10 +231,8 @@ namespace System.ServiceModel.Description
 				    md.Body.ReturnValue.Type == typeof (Message))
 					o.DeserializeReply = false;
 			}
-#if !NET_2_1
 			foreach (var fd in od.Faults)
 				o.FaultContractInfos.Add (new FaultContractInfo (fd.Action, fd.DetailType));
-#endif
 
 			// FIXME: at initialization time it does not seem to 
 			// fill default formatter. It should be filled after

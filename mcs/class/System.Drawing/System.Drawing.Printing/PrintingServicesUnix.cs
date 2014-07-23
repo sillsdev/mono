@@ -247,7 +247,7 @@ namespace System.Drawing.Printing
 				paper_sources = new NameValueCollection();
 				string defsize;
 				string defsource;
-				LoadPrinterOptions(printer_dest.options, printer_dest.num_options, ppd_handle, options,
+				LoadPrinterOptions (printer_dest.options, printer_dest.num_options, ppd_handle, options,
 					paper_names, out defsize,
 					paper_sources, out defsource);
 
@@ -355,7 +355,7 @@ namespace System.Drawing.Printing
 		/// <param name="option_name">Name of the option group to load</param>
 		/// <param name="list">List of loaded options</param>
 		/// <param name="defoption">The default option from the loaded options list</param>
-		private static void LoadOptionList(IntPtr ppd, string option_name, NameValueCollection list, out string defoption) {
+		private static void LoadOptionList (IntPtr ppd, string option_name, NameValueCollection list, out string defoption) {
 
 			IntPtr ptr = IntPtr.Zero;
 			PPD_OPTION ppd_option;
@@ -395,9 +395,9 @@ namespace System.Drawing.Printing
 			if (ppd_handle == IntPtr.Zero)
 				return;
 
-			LoadPrinterResolutionsAndDefault(printer, settings, ppd_handle);
+			LoadPrinterResolutionsAndDefault (printer, settings, ppd_handle);
 
-			ClosePrinter(ref ppd_handle);
+			ClosePrinter (ref ppd_handle);
 		}
 
 		/// <summary>
@@ -419,19 +419,15 @@ namespace System.Drawing.Printing
 
 			int x_resolution, y_resolution;
 			try {
-				if (resolution.Contains ("x"))
-				{
-					string[] resolutions = resolution.Split (new Char[] {'x'});
-					x_resolution = Convert.ToInt32 (resolutions[0]);
-					y_resolution = Convert.ToInt32 (resolutions[1]);
-				}
-				else
-				{
+				if (resolution.Contains ("x")) {
+					string[] resolutions = resolution.Split (new[] {'x'});
+					x_resolution = Convert.ToInt32 (resolutions [0]);
+					y_resolution = Convert.ToInt32 (resolutions [1]);
+				} else {
 					x_resolution = Convert.ToInt32 (resolution);
 					y_resolution = x_resolution;
 				}
-			}
-			catch (Exception) {
+			} catch (Exception) {
 				return null;
 			}
 
@@ -454,7 +450,7 @@ namespace System.Drawing.Printing
 			PPD_SIZE size;
 			PaperSize ps;
 
-			PaperSize defsize = new PaperSize("A4", 827, 1169, GetPaperKind(827, 1169), true);
+			PaperSize defsize = new PaperSize ("A4", 827, 1169, GetPaperKind (827, 1169), true);
 			ppd = (PPD_FILE) Marshal.PtrToStructure (ppd_handle, typeof (PPD_FILE));
 			ptr = ppd.sizes;
 			float w, h;
@@ -464,9 +460,9 @@ namespace System.Drawing.Printing
 				w = size.width * 100 / 72;
 				h = size.length * 100 / 72;
 				PaperKind kind = GetPaperKind ((int) w, (int) h);
-				ps = new PaperSize (real_name, (int) w, (int) h, kind, def_size == kind.ToString());
+				ps = new PaperSize (real_name, (int) w, (int) h, kind, def_size == kind.ToString ());
 				ps.SetKind (kind);
-				if (def_size == ps.Kind.ToString())
+				if (def_size == ps.Kind.ToString ())
 					defsize = ps;
 				settings.paper_sizes.Add (ps);
 				ptr = (IntPtr) ((long)ptr + Marshal.SizeOf (size));
@@ -534,8 +530,7 @@ namespace System.Drawing.Printing
 			var printer_resolutions = new NameValueCollection ();
 			string defresolution;
 			LoadOptionList (ppd_handle, "Resolution", printer_resolutions, out defresolution);
-			foreach (var resolution in printer_resolutions.Keys)
-			{
+			foreach (var resolution in printer_resolutions.Keys) {
 				var new_resolution = ParseResolution (resolution.ToString ());
 				settings.PrinterResolutions.Add (new_resolution);
 			}

@@ -3,6 +3,7 @@
 //	Atsushi Enomoto <atsushi@ximian.com>
 //
 // Copyright (C) 2011 Novell, Inc.  http://www.novell.com
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -34,9 +35,7 @@ using System.ServiceModel.Configuration;
 using System.ServiceModel.Diagnostics;
 using System.Threading;
 using System.Xml;
-#if !MOONLIGHT
 using System.Xml.XPath;
-#endif
 
 namespace System.ServiceModel
 {
@@ -70,7 +69,7 @@ namespace System.ServiceModel
 		const string xmlns = "http://schemas.microsoft.com/2004/06/ServiceModel/Management/MessageTrace";
 		static MessageLoggingSettings settings = new MessageLoggingSettings ();
 		static int event_id;
-		static TextWriter log_writer = TextWriter.Null;
+		static TextWriter log_writer;
 		static XmlWriter xml_writer;
 #if !NET_2_1
 		static readonly TraceSource source = new TraceSource ("System.ServiceModel");
@@ -101,7 +100,9 @@ namespace System.ServiceModel
 				break;
 #endif
 			}
-			xml_writer = XmlWriter.Create (log_writer, new XmlWriterSettings () { OmitXmlDeclaration = true });
+
+			if (log_writer != null)
+				xml_writer = XmlWriter.Create (log_writer, new XmlWriterSettings () { OmitXmlDeclaration = true });
 
 #if !NET_2_1
 			message_source.Switch.Level = SourceLevels.Information;
@@ -139,19 +140,21 @@ namespace System.ServiceModel
 
 		static void Log (TraceEventType eventType, string message, params object [] args)
 		{
-			lock (log_writer){
-				event_id++;
+			if (log_writer != null) {
+				lock (log_writer){
+					event_id++;
 #if NET_2_1
-				log_writer.Write ("[{0}] ", event_id);
+					log_writer.Write ("[{0}] ", event_id);
 #endif
-				TraceCore (TraceEventType.Information, event_id,
-					false, Guid.Empty, // FIXME
-					message, args);
-				log_writer.WriteLine (message, args);
-				log_writer.Flush ();
+					TraceCore (TraceEventType.Information, event_id,
+						false, Guid.Empty, // FIXME
+						message, args);
+					log_writer.WriteLine (message, args);
+					log_writer.Flush ();
 #if !NET_2_1
-				source.TraceEvent (eventType, event_id, message, args);
+					source.TraceEvent (eventType, event_id, message, args);
 #endif
+				}
 			}
 		}
 		
@@ -163,46 +166,50 @@ namespace System.ServiceModel
 		
 		public static void LogMessage (MessageLogSourceKind sourceKind, ref Message msg, long maxMessageSize)
 		{
-			if (maxMessageSize > int.MaxValue)
-				throw new ArgumentOutOfRangeException ("maxMessageSize");
-			var mb = msg.CreateBufferedCopy ((int) maxMessageSize);
-			msg = mb.CreateMessage ();
-			LogMessage (new MessageLogTraceRecord (sourceKind, msg.GetType (), mb));
+			if (log_writer != null) {
+				if (maxMessageSize > int.MaxValue)
+					throw new ArgumentOutOfRangeException ("maxMessageSize");
+				var mb = msg.CreateBufferedCopy ((int) maxMessageSize);
+				msg = mb.CreateMessage ();
+				LogMessage (new MessageLogTraceRecord (sourceKind, msg.GetType (), mb));
+			}
 		}
 		
 		public static void LogMessage (MessageLogTraceRecord log)
 		{
-			var sw = new StringWriter ();
+			if (log_writer != null) {
+				var sw = new StringWriter ();
 #if NET_2_1
-			var xw = XmlWriter.Create (sw, xws);
+				var xw = XmlWriter.Create (sw, xws);
 #else
-			var doc = new XmlDocument ();
-			var xw = doc.CreateNavigator ().AppendChild ();
+				var doc = new XmlDocument ();
+				var xw = doc.CreateNavigator ().AppendChild ();
 #endif
-			xw.WriteStartElement ("MessageLogTraceRecord", xmlns);
-			xw.WriteStartAttribute ("Time");
-			xw.WriteValue (log.Time);
-			xw.WriteEndAttribute ();
-			xw.WriteAttributeString ("Source", log.Source.ToString ());
-			xw.WriteAttributeString ("Type", log.Type.FullName);
-			var msg = log.Message.CreateMessage ();
-			if (!msg.IsEmpty)
-				msg.WriteMessage (xw);
-			xw.WriteEndElement ();
-			xw.Close ();
+				xw.WriteStartElement ("MessageLogTraceRecord", xmlns);
+				xw.WriteStartAttribute ("Time");
+				xw.WriteValue (log.Time);
+				xw.WriteEndAttribute ();
+				xw.WriteAttributeString ("Source", log.Source.ToString ());
+				xw.WriteAttributeString ("Type", log.Type.FullName);
+				var msg = log.Message.CreateMessage ();
+				if (!msg.IsEmpty)
+					msg.WriteMessage (xw);
+				xw.WriteEndElement ();
+				xw.Close ();
 
-			event_id++;
-			lock (log_writer){
+				event_id++;
+				lock (log_writer){
 #if NET_2_1
-				log_writer.Write ("[{0}] ", event_id);
+					log_writer.Write ("[{0}] ", event_id);
 
-				TraceCore (TraceEventType.Information, event_id, /*FIXME*/false, /*FIXME*/Guid.Empty, sw);
+					TraceCore (TraceEventType.Information, event_id, /*FIXME*/false, /*FIXME*/Guid.Empty, sw);
 #else
-				TraceCore (TraceEventType.Information, event_id, /*FIXME*/false, /*FIXME*/Guid.Empty, doc.CreateNavigator ());
+					TraceCore (TraceEventType.Information, event_id, /*FIXME*/false, /*FIXME*/Guid.Empty, doc.CreateNavigator ());
 
-				message_source.TraceData (TraceEventType.Information, event_id, doc.CreateNavigator ());
+					message_source.TraceData (TraceEventType.Information, event_id, doc.CreateNavigator ());
 #endif
-				log_writer.Flush ();
+					log_writer.Flush ();
+				}
 			}
 		}
 
@@ -269,18 +276,12 @@ namespace System.ServiceModel
 			foreach (object o in data) {
 				if (wrapData)
 					w.WriteStartElement ("DataItem", e2e_ns);
-#if MOONLIGHT
-				// in moonlight we don't have XPathNavigator, so just use raw string...
-				if (o != null)
-					w.WriteString (o.ToString ());
-#else
 				if (o is XPathNavigator)
 					// the output ignores xmlns difference between the parent (E2ETraceEvent and the content node).
 					// To clone such behavior, I took this approach.
 					w.WriteRaw (XPathNavigatorToString ((XPathNavigator) o));
 				else if (o != null)
 					w.WriteString (o.ToString ());
-#endif
 				if (wrapData)
 					w.WriteEndElement ();
 			}
@@ -296,7 +297,6 @@ namespace System.ServiceModel
 
 		static readonly XmlWriterSettings xml_writer_settings = new XmlWriterSettings () { OmitXmlDeclaration = true };
 
-#if !MOONLIGHT
 		// I avoided OuterXml which includes indentation.
 		static string XPathNavigatorToString (XPathNavigator nav)
 		{
@@ -305,7 +305,6 @@ namespace System.ServiceModel
 				nav.WriteSubtree (xw);
 			return sw.ToString ();
 		}
-#endif
 
 		static readonly string e2e_ns = "http://schemas.microsoft.com/2004/06/E2ETraceEvent";
 		static readonly string sys_ns = "http://schemas.microsoft.com/2004/06/windows/eventlog/system";

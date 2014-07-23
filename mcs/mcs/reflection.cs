@@ -22,7 +22,7 @@ namespace Mono.CSharp
 #if STATIC
 	public class ReflectionImporter
 	{
-		public ReflectionImporter (BuildinTypes buildin)
+		public ReflectionImporter (ModuleContainer module, BuiltinTypes builtin)
 		{
 			throw new NotSupportedException ();
 		}
@@ -45,9 +45,14 @@ namespace Mono.CSharp
 #else
 	public sealed class ReflectionImporter : MetadataImporter
 	{
-		public ReflectionImporter (BuildinTypes buildin)
+		public ReflectionImporter (ModuleContainer module, BuiltinTypes builtin)
+			: base (module)
 		{
-			Initialize (buildin);
+			Initialize (builtin);
+		}
+
+		public override void AddCompiledType (TypeBuilder builder, TypeSpec spec)
+		{
 		}
 
 		protected override MemberKind DetermineKindFromBaseType (Type baseType)
@@ -64,13 +69,6 @@ namespace Mono.CSharp
 			return MemberKind.Class;
 		}
 
-		public override void GetCustomAttributeTypeName (CustomAttributeData cad, out string typeNamespace, out string typeName)
-		{
-			var dt = cad.Constructor.DeclaringType;
-			typeNamespace = dt.Namespace;
-			typeName = dt.Name;
-		}
-
 		protected override bool HasVolatileModifier (Type[] modifiers)
 		{
 			foreach (var t in modifiers) {
@@ -85,7 +83,7 @@ namespace Mono.CSharp
 		{
 			// It can be used more than once when importing same assembly
 			// into 2 or more global aliases
-			var definition = GetAssemblyDefinition (assembly);
+		GetAssemblyDefinition (assembly);
 
 			//
 			// This part tries to simulate loading of top-level
@@ -100,12 +98,12 @@ namespace Mono.CSharp
 				all_types = e.Types;
 			}
 
-			ImportTypes (all_types, targetNamespace, definition.HasExtensionMethod);
+			ImportTypes (all_types, targetNamespace, true);
 		}
 
 		public ImportedModuleDefinition ImportModule (Module module, RootNamespace targetNamespace)
 		{
-			var module_definition = new ImportedModuleDefinition (module, this);
+			var module_definition = new ImportedModuleDefinition (module);
 			module_definition.ReadAttributes ();
 
 			Type[] all_types;
@@ -120,67 +118,46 @@ namespace Mono.CSharp
 			return module_definition;
 		}
 
-		void Initialize (BuildinTypes buildin)
+		void Initialize (BuiltinTypes builtin)
 		{
 			//
 			// Setup mapping for build-in types to avoid duplication of their definition
 			//
-			buildin_types.Add (typeof (object), buildin.Object);
-			buildin_types.Add (typeof (System.ValueType), buildin.ValueType);
-			buildin_types.Add (typeof (System.Attribute), buildin.Attribute);
+			compiled_types.Add (typeof (object), builtin.Object);
+			compiled_types.Add (typeof (System.ValueType), builtin.ValueType);
+			compiled_types.Add (typeof (System.Attribute), builtin.Attribute);
 
-			buildin_types.Add (typeof (int), buildin.Int);
-			buildin_types.Add (typeof (long), buildin.Long);
-			buildin_types.Add (typeof (uint), buildin.UInt);
-			buildin_types.Add (typeof (ulong), buildin.ULong);
-			buildin_types.Add (typeof (byte), buildin.Byte);
-			buildin_types.Add (typeof (sbyte), buildin.SByte);
-			buildin_types.Add (typeof (short), buildin.Short);
-			buildin_types.Add (typeof (ushort), buildin.UShort);
+			compiled_types.Add (typeof (int), builtin.Int);
+			compiled_types.Add (typeof (long), builtin.Long);
+			compiled_types.Add (typeof (uint), builtin.UInt);
+			compiled_types.Add (typeof (ulong), builtin.ULong);
+			compiled_types.Add (typeof (byte), builtin.Byte);
+			compiled_types.Add (typeof (sbyte), builtin.SByte);
+			compiled_types.Add (typeof (short), builtin.Short);
+			compiled_types.Add (typeof (ushort), builtin.UShort);
 
-			buildin_types.Add (typeof (System.Collections.IEnumerator), buildin.IEnumerator);
-			buildin_types.Add (typeof (System.Collections.IEnumerable), buildin.IEnumerable);
-			buildin_types.Add (typeof (System.IDisposable), buildin.IDisposable);
+			compiled_types.Add (typeof (System.Collections.IEnumerator), builtin.IEnumerator);
+			compiled_types.Add (typeof (System.Collections.IEnumerable), builtin.IEnumerable);
+			compiled_types.Add (typeof (System.IDisposable), builtin.IDisposable);
 
-			buildin_types.Add (typeof (char), buildin.Char);
-			buildin_types.Add (typeof (string), buildin.String);
-			buildin_types.Add (typeof (float), buildin.Float);
-			buildin_types.Add (typeof (double), buildin.Double);
-			buildin_types.Add (typeof (decimal), buildin.Decimal);
-			buildin_types.Add (typeof (bool), buildin.Bool);
-			buildin_types.Add (typeof (System.IntPtr), buildin.IntPtr);
-			buildin_types.Add (typeof (System.UIntPtr), buildin.UIntPtr);
+			compiled_types.Add (typeof (char), builtin.Char);
+			compiled_types.Add (typeof (string), builtin.String);
+			compiled_types.Add (typeof (float), builtin.Float);
+			compiled_types.Add (typeof (double), builtin.Double);
+			compiled_types.Add (typeof (decimal), builtin.Decimal);
+			compiled_types.Add (typeof (bool), builtin.Bool);
+			compiled_types.Add (typeof (System.IntPtr), builtin.IntPtr);
+			compiled_types.Add (typeof (System.UIntPtr), builtin.UIntPtr);
 
-			buildin_types.Add (typeof (System.MulticastDelegate), buildin.MulticastDelegate);
-			buildin_types.Add (typeof (System.Delegate), buildin.Delegate);
-			buildin_types.Add (typeof (System.Enum), buildin.Enum);
-			buildin_types.Add (typeof (System.Array), buildin.Array);
-			buildin_types.Add (typeof (void), buildin.Void);
-			buildin_types.Add (typeof (System.Type), buildin.Type);
-			buildin_types.Add (typeof (System.Exception), buildin.Exception);
-			buildin_types.Add (typeof (System.RuntimeFieldHandle), buildin.RuntimeFieldHandle);
-			buildin_types.Add (typeof (System.RuntimeTypeHandle), buildin.RuntimeTypeHandle);
-		}
-	}
-
-	public class MissingType
-	{
-		public Module Module {
-			get {
-				throw new NotSupportedException ();
-			}
-		}
-
-		public string Name {
-			get {
-				throw new NotSupportedException ();
-			}
-		}
-
-		public string Namespace {
-			get {
-				throw new NotSupportedException ();
-			}
+			compiled_types.Add (typeof (System.MulticastDelegate), builtin.MulticastDelegate);
+			compiled_types.Add (typeof (System.Delegate), builtin.Delegate);
+			compiled_types.Add (typeof (System.Enum), builtin.Enum);
+			compiled_types.Add (typeof (System.Array), builtin.Array);
+			compiled_types.Add (typeof (void), builtin.Void);
+			compiled_types.Add (typeof (System.Type), builtin.Type);
+			compiled_types.Add (typeof (System.Exception), builtin.Exception);
+			compiled_types.Add (typeof (System.RuntimeFieldHandle), builtin.RuntimeFieldHandle);
+			compiled_types.Add (typeof (System.RuntimeTypeHandle), builtin.RuntimeTypeHandle);
 		}
 	}
 
@@ -189,8 +166,11 @@ namespace Mono.CSharp
 	{
 		[System.Runtime.InteropServices.FieldOffset (0)]
 		int i;
+
+#pragma warning disable 414
 		[System.Runtime.InteropServices.FieldOffset (0)]
 		float f;
+#pragma warning restore 414
 
 		public static int SingleToInt32Bits (float v)
 		{
@@ -239,25 +219,17 @@ namespace Mono.CSharp
 		//
 		public bool Create (AppDomain domain, AssemblyBuilderAccess access)
 		{
-#if STATIC
+#if STATIC || FULL_AOT_RUNTIME
 			throw new NotSupportedException ();
 #else
 			ResolveAssemblySecurityAttributes ();
 			var an = CreateAssemblyName ();
 
-			try {
-				Builder = file_name == null ?
-					domain.DefineDynamicAssembly (an, access) :
-					domain.DefineDynamicAssembly (an, access, Dirname (file_name));
-			} catch (ArgumentException) {
-				// specified key may not be exportable outside it's container
-				if (RootContext.StrongNameKeyContainer != null) {
-					Report.Error (1548, "Could not access the key inside the container `" +
-						RootContext.StrongNameKeyContainer + "'.");
-				}
-				throw;
-			}
+			Builder = file_name == null ?
+				domain.DefineDynamicAssembly (an, access) :
+				domain.DefineDynamicAssembly (an, access, Dirname (file_name));
 
+			module.Create (this, CreateModuleBuilder ());
 			builder_extra = new AssemblyBuilderMonoSpecific (Builder, Compiler);
 			return true;
 #endif
@@ -452,9 +424,9 @@ namespace Mono.CSharp
 			default_references.Add ("System.Windows.Browser");
 #endif
 
-			if (RootContext.Version > LanguageVersion.ISO_2)
+			if (compiler.Settings.Version > LanguageVersion.ISO_2)
 				default_references.Add ("System.Core");
-			if (RootContext.Version > LanguageVersion.V_3)
+			if (compiler.Settings.Version > LanguageVersion.V_3)
 				default_references.Add ("Microsoft.CSharp");
 
 			return default_references.ToArray ();
@@ -470,15 +442,10 @@ namespace Mono.CSharp
 
 		public override bool HasObjectType (Assembly assembly)
 		{
-			return assembly.GetType (compiler.BuildinTypes.Object.FullName) != null;
+			return assembly.GetType (compiler.BuiltinTypes.Object.FullName) != null;
 		}
 
-		public override Assembly LoadAssemblyFile (string fileName)
-		{
-			return LoadAssemblyFile (fileName, false);
-		}
-
-		Assembly LoadAssemblyFile (string assembly, bool soft)
+		public override Assembly LoadAssemblyFile (string assembly, bool isImplicitReference)
 		{
 			Assembly a = null;
 
@@ -495,7 +462,7 @@ namespace Mono.CSharp
 						a = Assembly.Load (ass);
 					}
 				} catch (FileNotFoundException) {
-					bool err = !soft;
+					bool err = !isImplicitReference;
 					foreach (string dir in paths) {
 						string full_path = Path.Combine (dir, assembly);
 						if (!assembly.EndsWith (".dll") && !assembly.EndsWith (".exe"))
@@ -519,11 +486,6 @@ namespace Mono.CSharp
 			}
 
 			return a;
-		}
-
-		public override Assembly LoadAssemblyDefault (string fileName)
-		{
-			return LoadAssemblyFile (fileName, true);
 		}
 
 		Module LoadModuleFile (AssemblyDefinitionDynamic assembly, string module)
@@ -560,10 +522,7 @@ namespace Mono.CSharp
 
 		public void LoadModules (AssemblyDefinitionDynamic assembly, RootNamespace targetNamespace)
 		{
-			if (RootContext.Modules.Count == 0)
-				return;
-
-			foreach (var moduleName in RootContext.Modules) {
+			foreach (var moduleName in compiler.Settings.Modules) {
 				var m = LoadModuleFile (assembly, moduleName);
 				if (m == null)
 					continue;

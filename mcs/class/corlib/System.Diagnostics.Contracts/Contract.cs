@@ -39,7 +39,12 @@ namespace System.Diagnostics.Contracts
 {
 	public static class Contract
 	{
-		public static event EventHandler<ContractFailedEventArgs> ContractFailed;
+#if NET_4_0
+		public
+#else
+		internal
+#endif
+		static event EventHandler<ContractFailedEventArgs> ContractFailed;
 
 		// Used in test
 		internal static EventHandler<ContractFailedEventArgs> InternalContractFailedEvent {
@@ -68,20 +73,12 @@ namespace System.Diagnostics.Contracts
 
 		static void AssertMustUseRewriter (ContractFailureKind kind, string message)
 		{
-			if (Environment.UserInteractive) {
-				// FIXME: This should trigger an assertion.
-				// But code will never get here at the moment, as Environment.UserInteractive currently
-				// always returns false.
-				throw new ContractShouldAssertException (message);
-			} else {
-				// TODO: Note that FailFast() currently throws a NotImplementedException()
-				Environment.FailFast(message/*, new ExecutionEngineException()*/);
-			}
+			ContractHelper.TriggerFailure (kind, "Assembly must be re-written by the code contract rewritter", null, message, null);
 		}
 
-		[ConditionalAttribute("CONTRACTS_FULL")]
 		[ConditionalAttribute("DEBUG")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ConditionalAttribute("CONTRACTS_FULL")]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Assert (bool condition)
 		{
 			if (condition)
@@ -92,7 +89,7 @@ namespace System.Diagnostics.Contracts
 
 		[ConditionalAttribute("DEBUG")]
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Assert (bool condition, string userMessage)
 		{
 			if (condition)
@@ -103,7 +100,7 @@ namespace System.Diagnostics.Contracts
 
 		[ConditionalAttribute("DEBUG")]
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Assume(bool condition)
 		{
 			// At runtime, this behaves like assert
@@ -113,9 +110,9 @@ namespace System.Diagnostics.Contracts
 			ReportFailure (ContractFailureKind.Assume, null, null, null);
 		}
 
-		[ConditionalAttribute("CONTRACTS_FULL")]
 		[ConditionalAttribute("DEBUG")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ConditionalAttribute("CONTRACTS_FULL")]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Assume (bool condition, string userMessage)
 		{
 			// At runtime, this behaves like assert
@@ -133,34 +130,34 @@ namespace System.Diagnostics.Contracts
 		}
 
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Ensures (bool condition)
 		{
 			AssertMustUseRewriter (ContractFailureKind.Postcondition, "Contract.Ensures");
 		}
 
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Ensures (bool condition, string userMessage)
 		{
 			AssertMustUseRewriter (ContractFailureKind.Postcondition, "Contract.Ensures");
 		}
 
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void EnsuresOnThrow<TException> (bool condition) where TException : Exception
 		{
 			AssertMustUseRewriter (ContractFailureKind.Postcondition, "Contract.EnsuresOnThrow");
 		}
 
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void EnsuresOnThrow<TException> (bool condition, string userMessage) where TException : Exception
 		{
 			AssertMustUseRewriter (ContractFailureKind.Postcondition, "Contract.EnsuresOnThrow");
 		}
 
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static bool Exists<T> (IEnumerable<T> collection, Predicate<T> predicate)
 		{
 			if (predicate == null)
@@ -174,7 +171,7 @@ namespace System.Diagnostics.Contracts
 			return false;
 		}
 
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static bool Exists (int fromInclusive, int toExclusive, Predicate<int> predicate)
 		{
 			if (predicate == null)
@@ -189,7 +186,7 @@ namespace System.Diagnostics.Contracts
 			return false;
 		}
 
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static bool ForAll<T> (IEnumerable<T> collection, Predicate<T> predicate)
 		{
 			if (predicate == null)
@@ -204,7 +201,7 @@ namespace System.Diagnostics.Contracts
 			return true;
 		}
 
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static bool ForAll (int fromInclusive, int toExclusive, Predicate<int> predicate)
 		{
 			if (predicate == null)
@@ -220,14 +217,14 @@ namespace System.Diagnostics.Contracts
 		}
 
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Invariant (bool condition)
 		{
 			AssertMustUseRewriter (ContractFailureKind.Invariant, "Contract.Invariant");
 		}
 
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Invariant (bool condition, string userMessage)
 		{
 			AssertMustUseRewriter (ContractFailureKind.Invariant, "Contract.Invariant");
@@ -241,26 +238,26 @@ namespace System.Diagnostics.Contracts
 		}
 
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Requires (bool condition)
 		{
 			AssertMustUseRewriter (ContractFailureKind.Precondition, "Contract.Requires");
 		}
 
 		[ConditionalAttribute("CONTRACTS_FULL")]
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Requires (bool condition, string userMessage)
 		{
 			AssertMustUseRewriter (ContractFailureKind.Precondition, "Contract.Requires");
 		}
 
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Requires<TException> (bool condition) where TException : Exception
 		{
 			AssertMustUseRewriter (ContractFailureKind.Precondition, "Contract.Requires<TException>");
 		}
 
-		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.MayFail)]
 		public static void Requires<TException> (bool condition, string userMessage) where TException : Exception
 		{
 			AssertMustUseRewriter (ContractFailureKind.Precondition, "Contract.Requires<TException>");

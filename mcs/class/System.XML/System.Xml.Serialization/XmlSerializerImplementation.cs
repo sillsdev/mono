@@ -44,6 +44,7 @@ namespace System.Xml.Serialization
 		public virtual XmlSerializationReader Reader {
 			get { throw new NotSupportedException (); }
 		}
+
 		public virtual Hashtable ReadMethods {
 			get { throw new NotSupportedException (); }
 		}
@@ -53,6 +54,7 @@ namespace System.Xml.Serialization
 		public virtual Hashtable WriteMethods {
 			get { throw new NotSupportedException (); }
 		}
+
 		public virtual XmlSerializationWriter Writer {
 			get { throw new NotSupportedException (); }
 		}

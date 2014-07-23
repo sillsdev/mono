@@ -29,7 +29,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if !MOONLIGHT
+#if !NET_2_1
 
 using System.Collections;
 using System.Diagnostics;
@@ -97,7 +97,7 @@ namespace System.Security {
 			return true; // always true outside Moonlight
 		}
 
-		[Conditional ("MOONLIGHT")]
+		[Conditional ("ENABLE_SANDBOX")] //??
 		internal static void EnsureElevatedPermissions ()
 		{
 			// do nothing outside of Moonlight

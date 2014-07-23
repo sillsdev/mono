@@ -26,6 +26,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 using System;
+using System.Reflection;
 using System.Collections;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
@@ -43,6 +44,20 @@ namespace MonoTests.Microsoft.Build.Tasks {
 		public void ARFC (CommandLineBuilderExtension commandLine)
 		{
 			base.AddResponseFileCommands (commandLine);
+#if !NET_4_0
+			string s = commandLine.ToString ();
+			if (s.Length == 6)
+				Assert.AreEqual ("/sdk:2", s);
+			else
+				Assert.AreEqual ("/sdk:2 ", s.Substring (0, 7));
+
+			BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+			PropertyInfo pi = typeof (CommandLineBuilderExtension).GetProperty ("CommandLine", flags);
+			System.Text.StringBuilder sb = (System.Text.StringBuilder) pi.GetValue (commandLine, null);
+			sb.Length = 0;
+			if (s.Length > 6)
+				sb.Append (s.Substring (7));
+#endif
 		}
 
 		public void ACLC (CommandLineBuilderExtension commandLine)
@@ -187,6 +202,18 @@ namespace MonoTests.Microsoft.Build.Tasks {
 			csc.ARFC (clbe);
 
 			Assert.AreEqual ("/nowarn:A", clbe.ToString (), "A1");
+		}
+
+		[Test]
+		public void TestDisabledWarningsComma ()
+		{
+			CscExtended csc = new CscExtended ();
+			CommandLineBuilderExtension clbe = new CommandLineBuilderExtension ();
+
+			csc.DisabledWarnings = "A, B";
+			csc.ARFC (clbe);
+
+			Assert.AreEqual ("/nowarn:A;B", clbe.ToString (), "A1");
 		}
 
 		[Test]

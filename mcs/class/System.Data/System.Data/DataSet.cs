@@ -568,7 +568,8 @@ namespace System.Data
 			// add the current row
 			DataRow newRow = copyTable.NewNotInitializedRow ();
 			copyTable.Rows.AddInternal (newRow);
-			row.CopyValuesToRow (newRow);
+			// Don't check for ReadOnly, when cloning data to new uninitialized row.
+			row.CopyValuesToRow (newRow, false);
 			newRow.XmlRowID = row.XmlRowID;
 			addedRows.Add (row, row);
 		}
@@ -1328,7 +1329,6 @@ namespace System.Data
 
 			SplitColumns (table, out atts, out elements, out simple);
 			//sort out the namespacing
-			int relationCount = table.ParentRelations.Count;
 
 			foreach (DataRow row in rows) {
 				if (skipIfNested) {
@@ -1552,7 +1552,7 @@ namespace System.Data
 		private bool dataSetInitialized = true;
 		public event EventHandler Initialized;
 
-		protected DataSet (SerializationInfo info, StreamingContext context, bool constructSchema)
+		protected DataSet (SerializationInfo info, StreamingContext context, bool ConstructSchema)
 			: this ()
 		{
 			if (DetermineSchemaSerializationMode (info, context) == SchemaSerializationMode.ExcludeSchema) {
@@ -1564,7 +1564,7 @@ namespace System.Data
 				return;
 			}
 			
-			if (constructSchema) {
+			if (ConstructSchema) {
 				string s = info.GetValue ("XmlSchema", typeof (String)) as String;
 				XmlTextReader reader = new XmlTextReader (new StringReader (s));
 				ReadXmlSchema (reader);

@@ -28,7 +28,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0 && CONFIGURATION_DEP
+#if CONFIGURATION_DEP
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -90,5 +90,5 @@ namespace System.CodeDom.Compiler
                 }
 	}
 }
-#endif // NET_2_0
+#endif
 

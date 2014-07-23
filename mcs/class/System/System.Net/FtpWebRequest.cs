@@ -6,7 +6,6 @@
 //
 // (c) Copyright 2006 Novell, Inc. (http://www.novell.com)
 //
-#if NET_2_0
 
 using System;
 using System.IO;
@@ -174,6 +173,7 @@ namespace System.Net
 			}
 		}
 
+#if !NET_2_1
 		[MonoTODO]
 		public static new RequestCachePolicy DefaultCachePolicy
 		{
@@ -184,6 +184,7 @@ namespace System.Net
 				throw GetMustImplement ();
 			}
 		}
+#endif
 
 		public bool EnableSsl {
 			get {
@@ -248,9 +249,6 @@ namespace System.Net
 			}
 			set {
 				CheckRequestStarted ();
-				if (value == null)
-					throw new ArgumentNullException ();
-
 				proxy = value;
 			}
 		}
@@ -551,7 +549,12 @@ namespace System.Net
 				if (local_path [0] == '/')
 					local_path = local_path.Substring (1);
 
-				Uri initial = new Uri ("ftp://dummy-host" + initial_path);
+				UriBuilder initialBuilder = new UriBuilder () {
+					Scheme  = "ftp",
+					Host    = "dummy-host",
+					Path    = initial_path,
+				};
+				Uri initial = initialBuilder.Uri;
 				result = new Uri (initial, local_path).LocalPath;
 			}
 
@@ -996,7 +999,7 @@ namespace System.Net
 				}
 
 				s.Close ();
-				origDataStream = new NetworkStream (s, true);
+				origDataStream = new NetworkStream (incoming, true);
 				dataStream = origDataStream;
 				if (EnableSsl)
 					ChangeToSSLSocket (ref dataStream);
@@ -1197,5 +1200,4 @@ namespace System.Net
 	}
 }
 
-#endif
 

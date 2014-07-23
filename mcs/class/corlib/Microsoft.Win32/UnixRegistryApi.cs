@@ -134,8 +134,8 @@ namespace Microsoft.Win32 {
 			if (!Directory.Exists (actual_basedir)) {
 				try {
 					Directory.CreateDirectory (actual_basedir);
-				} catch (UnauthorizedAccessException){
-					throw new SecurityException ("No access to the given key");
+				} catch (UnauthorizedAccessException ex){
+					throw new SecurityException ("No access to the given key", ex);
 				}
 			}
 			Dir = basedir; // This is our identifier.
@@ -328,8 +328,9 @@ namespace Microsoft.Win32 {
 			try {
 				using (StreamWriter writer = new StreamWriter (path, false, Encoding.ASCII))
 					writer.WriteLine (btime.ToString ());
-			} catch (Exception e) {
-				Console.Error.WriteLine ("While saving registry data at {0}: {1}", path, e);
+			} catch (Exception) {
+				/* This can happen when a user process tries to write to MachineStore */
+				//Console.Error.WriteLine ("While saving registry data at {0}: {1}", path, e);
 			}
 		}
 			
@@ -621,17 +622,12 @@ namespace Microsoft.Win32 {
 				break;
 				
 			case RegistryValueKind.DWord:
-				if (value is long &&
-				    (((long) value) < Int32.MaxValue) &&
-				    (((long) value) > Int32.MinValue)){
-					values [name] = (int) ((long)value);
+				try {
+					values [name] = Convert.ToInt32 (value);
 					return;
+				} catch (OverflowException) {
+					break;
 				}
-				if (value is int){
-					values [name] = value;
-					return;
-				}
-				break;
 				
 			case RegistryValueKind.MultiString:
 				if (value is string []){
@@ -641,15 +637,13 @@ namespace Microsoft.Win32 {
 				break;
 				
 			case RegistryValueKind.QWord:
-				if (value is int){
-					values [name] = (long) ((int) value);
+				try {
+					values [name] = Convert.ToInt64 (value);
 					return;
+				} catch (OverflowException) {
+					break;
 				}
-				if (value is long){
-					values [name] = value;
-					return;
-				}
-				break;
+				
 			default:
 				throw new ArgumentException ("unknown value", "valueKind");
 			}

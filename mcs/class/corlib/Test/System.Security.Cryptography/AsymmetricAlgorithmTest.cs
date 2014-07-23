@@ -12,29 +12,29 @@ using System.Security.Cryptography;
 using NUnit.Framework;
 
 namespace MonoTests.System.Security.Cryptography {
-
-	public class AsymmetricAlgorithmTest : TestCase {
+	
+	[TestFixture]
+	public class AsymmetricAlgorithmTest
+	{
 		private AsymmetricAlgorithm _algo;
-		protected override void SetUp() {
+		[SetUp]
+		public void SetUp() {
 			_algo = AsymmetricAlgorithm.Create();
 		}
 
 		private void SetDefaultData() {
 		}
 		
+		[Test]
 		public void TestProperties() {
-			Assert("Properties (1)", _algo != null);
-			
-			bool thrown = false;
-			try {
-				KeySizes[] keys = _algo.LegalKeySizes;
-				foreach (KeySizes myKey in keys) {
-					for (int i=myKey.MinSize; i<=myKey.MaxSize; i+=myKey.SkipSize) {
-						_algo.KeySize = i;
-					}
+			Assert.IsNotNull(_algo, "Properties (1)");
+
+			KeySizes[] keys = _algo.LegalKeySizes;
+			foreach (KeySizes myKey in keys) {
+				for (int i = myKey.MinSize; i <= myKey.MaxSize; i += myKey.SkipSize) {
+					_algo.KeySize = i;
 				}
-			} catch (CryptographicException) {thrown=true;}
-			Assert("Properties (2)", !thrown);			
+			}
 		}
 	}
 }

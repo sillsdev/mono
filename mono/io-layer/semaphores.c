@@ -21,10 +21,15 @@
 #include <mono/io-layer/wapi-private.h>
 #include <mono/io-layer/misc-private.h>
 #include <mono/io-layer/handles-private.h>
-#include <mono/io-layer/mono-mutex.h>
 #include <mono/io-layer/semaphore-private.h>
 
-#undef DEBUG
+#include <mono/utils/mono-mutex.h>
+
+#if 0
+#define DEBUG(...) g_message(__VA_ARGS__)
+#else
+#define DEBUG(...)
+#endif
 
 static void sema_signal(gpointer handle);
 static gboolean sema_own (gpointer handle);
@@ -109,15 +114,11 @@ static gboolean sema_own (gpointer handle)
 		return(FALSE);
 	}
 	
-#ifdef DEBUG
-	g_message("%s: owning sem handle %p", __func__, handle);
-#endif
+	DEBUG("%s: owning sem handle %p", __func__, handle);
 
 	sem_handle->val--;
 	
-#ifdef DEBUG
-	g_message ("%s: sem %p val now %d", __func__, handle, sem_handle->val);
-#endif
+	DEBUG ("%s: sem %p val now %d", __func__, handle, sem_handle->val);
 
 	if(sem_handle->val==0) {
 		_wapi_handle_set_signal_state (handle, FALSE, FALSE);
@@ -137,9 +138,7 @@ static gboolean namedsema_own (gpointer handle)
 	struct _WapiHandle_namedsem *namedsem_handle;
 	gboolean ok;
 	
-#ifdef DEBUG
-	g_message ("%s: owning named sem handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: owning named sem handle %p", __func__, handle);
 
 	ok = _wapi_lookup_handle (handle, WAPI_HANDLE_NAMEDSEM,
 				  (gpointer *)&namedsem_handle);
@@ -151,10 +150,8 @@ static gboolean namedsema_own (gpointer handle)
 	
 	namedsem_handle->val--;
 	
-#ifdef DEBUG
-	g_message ("%s: named sem %p val now %d", __func__, handle,
+	DEBUG ("%s: named sem %p val now %d", __func__, handle,
 		   namedsem_handle->val);
-#endif
 
 	if (namedsem_handle->val == 0) {
 		_wapi_shared_handle_set_signal_state (handle, FALSE);
@@ -185,8 +182,6 @@ static gpointer sem_create (WapiSecurityAttributes *security G_GNUC_UNUSED,
 		return(NULL);
 	}
 
-	pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle,
-			      handle);
 	thr_ret = _wapi_handle_lock_handle (handle);
 	g_assert (thr_ret == 0);
 	
@@ -194,14 +189,11 @@ static gpointer sem_create (WapiSecurityAttributes *security G_GNUC_UNUSED,
 		_wapi_handle_set_signal_state (handle, TRUE, FALSE);
 	}
 
-#ifdef DEBUG
-	g_message ("%s: Created semaphore handle %p initial %d max %d",
+	DEBUG ("%s: Created semaphore handle %p initial %d max %d",
 		   __func__, handle, initial, max);
-#endif
 
 	thr_ret = _wapi_handle_unlock_handle (handle);
 	g_assert (thr_ret == 0);
-	pthread_cleanup_pop (0);
 
 	return(handle);
 }
@@ -230,9 +222,7 @@ static gpointer namedsem_create (WapiSecurityAttributes *security G_GNUC_UNUSED,
 
 	utf8_name = g_utf16_to_utf8 (name, -1, NULL, NULL, NULL);
 	
-#ifdef DEBUG
-	g_message ("%s: Creating named sem [%s]", __func__, utf8_name);
-#endif
+	DEBUG ("%s: Creating named sem [%s]", __func__, utf8_name);
 
 	offset = _wapi_search_handle_namespace (WAPI_HANDLE_NAMEDSEM,
 						utf8_name);
@@ -296,9 +286,7 @@ static gpointer namedsem_create (WapiSecurityAttributes *security G_GNUC_UNUSED,
 		_wapi_handle_unlock_shared_handles ();
 	}
 	
-#ifdef DEBUG
-	g_message ("%s: returning named sem handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: returning named sem handle %p", __func__, handle);
 
 cleanup:
 	g_free (utf8_name);
@@ -332,18 +320,14 @@ gpointer CreateSemaphore(WapiSecurityAttributes *security G_GNUC_UNUSED, gint32 
 	mono_once (&sem_ops_once, sem_ops_init);
 	
 	if (max <= 0) {
-#ifdef DEBUG
-		g_message ("%s: max <= 0", __func__);
-#endif
+		DEBUG ("%s: max <= 0", __func__);
 
 		SetLastError (ERROR_INVALID_PARAMETER);
 		return(NULL);
 	}
 	
 	if (initial > max || initial < 0) {
-#ifdef DEBUG
-		g_message ("%s: initial>max or < 0", __func__);
-#endif
+		DEBUG ("%s: initial>max or < 0", __func__);
 
 		SetLastError (ERROR_INVALID_PARAMETER);
 		return(NULL);
@@ -371,15 +355,11 @@ static gboolean sem_release (gpointer handle, gint32 count, gint32 *prevcount)
 		return(FALSE);
 	}
 
-	pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle,
-			      handle);
 	thr_ret = _wapi_handle_lock_handle (handle);
 	g_assert (thr_ret == 0);
 
-#ifdef DEBUG
-	g_message ("%s: sem %p val %d count %d", __func__, handle,
+	DEBUG ("%s: sem %p val %d count %d", __func__, handle,
 		   sem_handle->val, count);
-#endif
 	
 	/* Do this before checking for count overflow, because overflowing max
 	 * is a listed technique for finding the current value
@@ -390,9 +370,7 @@ static gboolean sem_release (gpointer handle, gint32 count, gint32 *prevcount)
 	
 	/* No idea why max is signed, but thats the spec :-( */
 	if (sem_handle->val + count > (guint32)sem_handle->max) {
-#ifdef DEBUG
-		g_message ("%s: sem %p max value would be exceeded: max %d current %d count %d", __func__, handle, sem_handle->max, sem_handle->val, count);
-#endif
+		DEBUG ("%s: sem %p max value would be exceeded: max %d current %d count %d", __func__, handle, sem_handle->max, sem_handle->val, count);
 
 		goto end;
 	}
@@ -402,14 +380,11 @@ static gboolean sem_release (gpointer handle, gint32 count, gint32 *prevcount)
 	
 	ret = TRUE;
 
-#ifdef DEBUG
-	g_message ("%s: sem %p val now %d", __func__, handle, sem_handle->val);
-#endif
+	DEBUG ("%s: sem %p val now %d", __func__, handle, sem_handle->val);
 	
 end:
 	thr_ret = _wapi_handle_unlock_handle (handle);
 	g_assert (thr_ret == 0);
-	pthread_cleanup_pop (0);
 
 	return(ret);
 }
@@ -433,10 +408,8 @@ static gboolean namedsem_release (gpointer handle, gint32 count,
 	thr_ret = _wapi_handle_lock_shared_handles ();
 	g_assert (thr_ret == 0);
 
-#ifdef DEBUG
-	g_message("%s: named sem %p val %d count %d", __func__, handle,
+	DEBUG("%s: named sem %p val %d count %d", __func__, handle,
 		  sem_handle->val, count);
-#endif
 	
 	/* Do this before checking for count overflow, because overflowing max
 	 * is a listed technique for finding the current value
@@ -447,9 +420,7 @@ static gboolean namedsem_release (gpointer handle, gint32 count,
 	
 	/* No idea why max is signed, but thats the spec :-( */
 	if (sem_handle->val + count > (guint32)sem_handle->max) {
-#ifdef DEBUG
-		g_message ("%s: named sem %p max value would be exceeded: max %d current %d count %d", __func__, handle, sem_handle->max, sem_handle->val, count);
-#endif
+		DEBUG ("%s: named sem %p max value would be exceeded: max %d current %d count %d", __func__, handle, sem_handle->max, sem_handle->val, count);
 
 		goto end;
 	}
@@ -459,10 +430,8 @@ static gboolean namedsem_release (gpointer handle, gint32 count,
 	
 	ret = TRUE;
 
-#ifdef DEBUG
-	g_message("%s: named sem %p val now %d", __func__, handle,
+	DEBUG("%s: named sem %p val now %d", __func__, handle,
 		  sem_handle->val);
-#endif
 	
 end:
 	_wapi_handle_unlock_shared_handles ();
@@ -520,9 +489,7 @@ gpointer OpenSemaphore (guint32 access G_GNUC_UNUSED, gboolean inherit G_GNUC_UN
 	
 	utf8_name = g_utf16_to_utf8 (name, -1, NULL, NULL, NULL);
 	
-#ifdef DEBUG
-	g_message ("%s: Opening named sem [%s]", __func__, utf8_name);
-#endif
+	DEBUG ("%s: Opening named sem [%s]", __func__, utf8_name);
 
 	offset = _wapi_search_handle_namespace (WAPI_HANDLE_NAMEDSEM,
 						utf8_name);
@@ -551,9 +518,7 @@ gpointer OpenSemaphore (guint32 access G_GNUC_UNUSED, gboolean inherit G_GNUC_UN
 	}
 	ret = handle;
 	
-#ifdef DEBUG
-	g_message ("%s: returning named sem handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: returning named sem handle %p", __func__, handle);
 
 cleanup:
 	g_free (utf8_name);

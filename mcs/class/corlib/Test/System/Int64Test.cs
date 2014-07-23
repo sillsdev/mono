@@ -52,8 +52,6 @@ public class Int64Test
 	private  string sval1Test5 = "  -"+NumberFormatInfo.InvariantInfo.CurrencySymbol+"1,234,567.00 ";
 	private  string sval1Test6 = "("+NumberFormatInfo.InvariantInfo.CurrencySymbol+"1,234,567.00)";
 	private const string sval1Test7 = "-1,234,567.00";
-	private const string sval1UserCur1 = "1234/5/67:000 XYZ-";
-	private const string sval2UserCur1 = "1234/5/67:000 XYZ";
 	private const string sval1UserPercent1 = "-%%%1~2~3~4~5~6~7~0~0;0";
 	private const string sval2UserPercent1 = "%%%1~2~3~4~5~6~7~0~0;0";
 	private const NumberStyles style1 =  NumberStyles.AllowLeadingWhite | NumberStyles.AllowLeadingSign
@@ -310,6 +308,12 @@ public class Int64Test
 		Assert.IsTrue(typeof(OverflowException) == e.GetType(), "#20");
 	}
 
+		try {
+			Int64.Parse ("５", NumberStyles.Any, CultureInfo.InvariantCulture);
+			Assert.Fail ("C#42");
+		} catch (FormatException) {
+		}
+
 	// Pass a DateTimeFormatInfo, it is unable to format
 	// numbers, but we should not crash
 	
@@ -319,7 +323,139 @@ public class Int64Test
 	Assert.AreEqual (734561, Int64.Parse ("734561\0\0\0    \0"), "#22");
 	Assert.AreEqual (734561, Int64.Parse ("734561\0\0\0    "), "#23");
 	Assert.AreEqual (734561, Int64.Parse ("734561\0\0\0"), "#24");
+
+	Assert.AreEqual (0, Int64.Parse ("0+", NumberStyles.Any), "#30");
     }
+
+	[Test]
+	public void TestParseExponent ()
+	{
+		Assert.AreEqual (2, long.Parse ("2E0", NumberStyles.AllowExponent), "A#1");
+		Assert.AreEqual (20, long.Parse ("2E1", NumberStyles.AllowExponent), "A#2");
+		Assert.AreEqual (200, long.Parse ("2E2", NumberStyles.AllowExponent), "A#3");
+		Assert.AreEqual (2000000, long.Parse ("2E6", NumberStyles.AllowExponent), "A#4");
+		Assert.AreEqual (200, long.Parse ("2E+2", NumberStyles.AllowExponent), "A#5");
+		Assert.AreEqual (2, long.Parse ("2", NumberStyles.AllowExponent), "A#6");
+		Assert.AreEqual (21, long.Parse ("2.1E1", NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent), "A#7");
+		Assert.AreEqual (520, long.Parse (".52E3", NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent), "A#8");
+		Assert.AreEqual (32500000, long.Parse ("32.5E6", NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent), "A#9");
+		Assert.AreEqual (890, long.Parse ("8.9000E2", NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent), "A#10");		
+
+		try {
+			long.Parse ("2E");
+			Assert.Fail ("B#1");
+		} catch (FormatException) {
+		}
+
+		try {
+			long.Parse ("2E3.0", NumberStyles.AllowExponent); // decimal notation for the exponent
+			Assert.Fail ("B#2");
+		} catch (FormatException) {
+		}
+
+		try {
+			long.Parse ("2E 2", NumberStyles.AllowExponent);
+			Assert.Fail ("B#3");
+		} catch (FormatException) {
+		}
+
+		try {
+			long.Parse ("2E2 ", NumberStyles.AllowExponent);
+			Assert.Fail ("B#4");
+		} catch (FormatException) {
+		}
+
+		try {
+			long.Parse ("2E66", NumberStyles.AllowExponent); // final result overflow
+			Assert.Fail ("B#5");
+		} catch (OverflowException) {
+		}
+
+		try {
+			long exponent = (long) Int32.MaxValue + 10;
+			long.Parse ("2E" + exponent.ToString (), NumberStyles.AllowExponent);
+			Assert.Fail ("B#6");
+		} catch (OverflowException) {
+		}
+
+		try {
+			long.Parse ("2E-1", NumberStyles.AllowExponent); // negative exponent
+			Assert.Fail ("B#7");
+		} catch (OverflowException) {
+		}
+		
+		try {
+			long.Parse ("2 math e1", NumberStyles.AllowExponent);
+			Assert.Fail ("B#8");
+		} catch (FormatException) {
+		}
+
+		try {
+			long.Parse ("2.09E1",  NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent);
+			Assert.Fail ("B#9");
+		} catch (OverflowException) {
+		}
+	}
+
+	[Test]
+	public void TestTryParse()
+	{
+		long result;
+
+		Assert.AreEqual (true, long.TryParse (MyString1, out result));
+		Assert.AreEqual (MyInt64_1, result);
+		Assert.AreEqual (true, long.TryParse (MyString2, out result));
+		Assert.AreEqual (MyInt64_2, result);
+		Assert.AreEqual (true, long.TryParse (MyString3, out result));
+		Assert.AreEqual (MyInt64_3, result);
+
+		Assert.AreEqual (true, long.TryParse ("1", out result));
+		Assert.AreEqual (1, result);
+		Assert.AreEqual (true, long.TryParse (" 1", out result));
+		Assert.AreEqual (1, result);
+		Assert.AreEqual (true, long.TryParse ("     1", out result));
+		Assert.AreEqual (1, result);
+		Assert.AreEqual (true, long.TryParse ("1    ", out result));
+		Assert.AreEqual (1, result);
+		Assert.AreEqual (true, long.TryParse ("+1", out result));
+		Assert.AreEqual (1, result);
+		Assert.AreEqual (true, long.TryParse ("-1", out result));
+		Assert.AreEqual (-1, result);
+		Assert.AreEqual (true, long.TryParse ("  -1", out result));
+		Assert.AreEqual (-1, result);
+		Assert.AreEqual (true, long.TryParse ("  -1  ", out result));
+		Assert.AreEqual (-1, result);
+		Assert.AreEqual (true, long.TryParse ("  -1  ", out result));
+		Assert.AreEqual (-1, result);
+
+		result = 1;
+		Assert.AreEqual (false, long.TryParse (null, out result));
+		Assert.AreEqual (0, result);
+
+		Assert.AreEqual (false, long.TryParse ("not-a-number", out result));
+
+		double OverInt = (double)long.MaxValue + 1;
+		Assert.AreEqual (false, long.TryParse (OverInt.ToString (), out result));
+		Assert.AreEqual (false, long.TryParse (OverInt.ToString (), NumberStyles.None, CultureInfo.InvariantCulture, out result));
+
+		Assert.AreEqual (false, long.TryParse ("$42", NumberStyles.Integer, null, out result));
+		Assert.AreEqual (false, long.TryParse ("%42", NumberStyles.Integer, Nfi, out result));
+		Assert.AreEqual (false, long.TryParse ("$42", NumberStyles.Integer, Nfi, out result));
+		Assert.AreEqual (false, long.TryParse (" - 1 ", out result));
+		Assert.AreEqual (false, long.TryParse (" - ", out result));
+		Assert.AreEqual (true, long.TryParse ("100000000", NumberStyles.HexNumber, Nfi, out result));
+		Assert.AreEqual (true, long.TryParse ("10000000000", out result));
+		Assert.AreEqual (true, long.TryParse ("-10000000000", out result));
+		Assert.AreEqual (true, long.TryParse ("7fffffff", NumberStyles.HexNumber, Nfi, out result));
+		Assert.AreEqual (int.MaxValue, result);
+		Assert.AreEqual (true, long.TryParse ("80000000", NumberStyles.HexNumber, Nfi, out result));
+		Assert.AreEqual (2147483648, result);
+		Assert.AreEqual (true, long.TryParse ("ffffffff", NumberStyles.HexNumber, Nfi, out result));
+		Assert.AreEqual (uint.MaxValue, result);
+		Assert.AreEqual (true, long.TryParse ("100000000", NumberStyles.HexNumber, Nfi, out result));
+		Assert.IsFalse (long.TryParse ("-", NumberStyles.AllowLeadingSign, Nfi, out result));
+		Assert.IsFalse (long.TryParse (Nfi.CurrencySymbol + "-", NumberStyles.AllowLeadingSign | NumberStyles.AllowCurrencySymbol, Nfi, out result));
+	}	
 
 	[Test]
     public void TestToString() 
@@ -356,36 +492,20 @@ public class Int64Test
     }
 
 	[Test]
-    public void TestUserCurrency()
-    {
-        string s= "";
-        long v;
-	int iTest = 1;
-	try {
-		s = val1.ToString("c", NfiUser);
-		iTest++;
-		Assert.AreEqual(sval1UserCur1, s, "Currency value type 1 is not what we want to try to parse");
-		iTest++;
-		v = Int64.Parse(s, NumberStyles.Currency, NfiUser);
-		iTest++;
-		Assert.IsTrue(v == val1);
-	} catch (Exception e) {
-		Assert.Fail ("1 Unexpected exception at iTest = " + iTest + ", s = " + s + ":e = " + e);
+	public void TestUserCurrency ()
+	{
+		string s = "";
+		long v;
+		s = val1.ToString ("c", NfiUser);
+		Assert.AreEqual ("1234/5/67:000 XYZ-", s, "Currency value type 1 is not what we want to try to parse");
+		v = Int64.Parse ("1234/5/67:000   XYZ-", NumberStyles.Currency, NfiUser);
+		Assert.AreEqual (val1, v);
+
+		s = val2.ToString ("c", NfiUser);
+		Assert.AreEqual ("1234/5/67:000 XYZ", s, "Currency value type 2 is not what we want to try to parse");
+		v = Int64.Parse (s, NumberStyles.Currency, NfiUser);
+		Assert.AreEqual (val2, v);
 	}
-   
-	iTest = 1;
-	try {
-		s = val2.ToString("c", NfiUser);
-		iTest++;
-		Assert.AreEqual(sval2UserCur1, s, "Currency value type 2 is not what we want to try to parse");
-		iTest++;
-		v = Int64.Parse(s, NumberStyles.Currency, NfiUser);
-		iTest++;
-		Assert.IsTrue(v == val2);
-	} catch (Exception e) {
-		Assert.Fail ("2 Unexpected exception at iTest = " + iTest + ":e = " + e);
-	}
-    }
 
 	[Test]
     public void TestUserPercent()

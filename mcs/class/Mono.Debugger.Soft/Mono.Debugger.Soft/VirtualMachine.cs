@@ -61,7 +61,10 @@ namespace Mono.Debugger.Soft
 
 		public EndPoint EndPoint {
 			get {
-				return conn.EndPoint;
+				var tcpConn = conn as TcpConnection;
+				if (tcpConn != null)
+					return tcpConn.EndPoint;
+				return null;
 			}
 		}
 
@@ -121,7 +124,7 @@ namespace Mono.Debugger.Soft
 				conn.VM_Resume ();
 			} catch (CommandException ex) {
 				if (ex.ErrorCode == ErrorCode.NOT_SUSPENDED)
-					throw new InvalidOperationException ("The vm is not suspended.");
+					throw new VMNotSuspendedException ();
 				else
 					throw;
 			}
@@ -131,10 +134,21 @@ namespace Mono.Debugger.Soft
 			conn.VM_Exit (exitCode);
 		}
 
-		public void Dispose () {
+		public void Detach () {
 			conn.VM_Dispose ();
 			conn.Close ();
-			notify_vm_event (EventType.VMDisconnect, SuspendPolicy.None, 0, 0, null);
+			notify_vm_event (EventType.VMDisconnect, SuspendPolicy.None, 0, 0, null, 0);
+		}
+
+		[Obsolete ("This method was poorly named; use the Detach() method instead")]
+		public void Dispose ()
+		{
+			Detach ();
+		}
+
+		public void ForceDisconnect ()
+		{
+			conn.ForceDisconnect ();
 		}
 
 		public IList<ThreadMirror> GetThreads () {
@@ -208,11 +222,19 @@ namespace Mono.Debugger.Soft
 			return new AssemblyLoadEventRequest (this);
 		}
 
+		public TypeLoadEventRequest CreateTypeLoadRequest () {
+			return new TypeLoadEventRequest (this);
+		}
+
 		public void EnableEvents (params EventType[] events) {
+			EnableEvents (events, SuspendPolicy.All);
+		}
+
+		public void EnableEvents (EventType[] events, SuspendPolicy suspendPolicy) {
 			foreach (EventType etype in events) {
-				if (etype == EventType.Breakpoint || etype == EventType.Step)
-					throw new ArgumentException ("Breakpoint/Step events cannot be requested using EnableEvents", "events");
-				conn.EnableEvent (etype, SuspendPolicy.All, null);
+				if (etype == EventType.Breakpoint)
+					throw new ArgumentException ("Breakpoint events cannot be requested using EnableEvents", "events");
+				conn.EnableEvent (etype, suspendPolicy, null);
 			}
 		}
 
@@ -227,7 +249,37 @@ namespace Mono.Debugger.Soft
 		public void ClearAllBreakpoints () {
 			conn.ClearAllBreakpoints ();
 		}
+		
+		public void Disconnect () {
+			conn.Close ();
+		}
 
+		//
+		// Return a list of TypeMirror objects for all loaded types which reference the
+		// source file FNAME. Might return false positives.
+		// Since protocol version 2.7.
+		//
+		public IList<TypeMirror> GetTypesForSourceFile (string fname, bool ignoreCase) {
+			long[] ids = conn.VM_GetTypesForSourceFile (fname, ignoreCase);
+			var res = new TypeMirror [ids.Length];
+			for (int i = 0; i < ids.Length; ++i)
+				res [i] = GetType (ids [i]);
+			return res;
+		}
+
+		//
+		// Return a list of TypeMirror objects for all loaded types named 'NAME'.
+		// NAME should be in the the same for as with Assembly.GetType ().
+		// Since protocol version 2.9.
+		//
+		public IList<TypeMirror> GetTypes (string name, bool ignoreCase) {
+			long[] ids = conn.VM_GetTypes (name, ignoreCase);
+			var res = new TypeMirror [ids.Length];
+			for (int i = 0; i < ids.Length; ++i)
+				res [i] = GetType (ids [i]);
+			return res;
+		}
+		
 		internal void queue_event_set (EventSet es) {
 			lock (queue_monitor) {
 				queue.Enqueue (es);
@@ -242,7 +294,7 @@ namespace Mono.Debugger.Soft
 			case ErrorCode.INVALID_FRAMEID:
 				throw new InvalidStackFrameException ();
 			case ErrorCode.NOT_SUSPENDED:
-				throw new InvalidOperationException ("The vm is not suspended.");
+				throw new VMNotSuspendedException ();
 			case ErrorCode.NOT_IMPLEMENTED:
 				throw new NotSupportedException ("This request is not supported by the protocol version implemented by the debuggee.");
 			case ErrorCode.ABSENT_INFORMATION:
@@ -267,7 +319,7 @@ namespace Mono.Debugger.Soft
 			root_domain = GetDomain (root_domain_id);
 		}
 
-		internal void notify_vm_event (EventType evtype, SuspendPolicy spolicy, int req_id, long thread_id, string vm_uri) {
+		internal void notify_vm_event (EventType evtype, SuspendPolicy spolicy, int req_id, long thread_id, string vm_uri, int exit_code) {
 			//Console.WriteLine ("Event: " + evtype + "(" + vm_uri + ")");
 
 			switch (evtype) {
@@ -279,7 +331,7 @@ namespace Mono.Debugger.Soft
 				queue_event_set (new EventSet (this, spolicy, new Event[] { new VMStartEvent (vm, req_id, thread_id) }));
 				break;
 			case EventType.VMDeath:
-				queue_event_set (new EventSet (this, spolicy, new Event[] { new VMDeathEvent (vm, req_id) }));
+				queue_event_set (new EventSet (this, spolicy, new Event[] { new VMDeathEvent (vm, req_id, exit_code) }));
 				break;
 			case EventType.VMDisconnect:
 				queue_event_set (new EventSet (this, spolicy, new Event[] { new VMDisconnectEvent (vm, req_id) }));
@@ -408,6 +460,13 @@ namespace Mono.Debugger.Soft
 			}
 	    }
 
+		internal TypeMirror[] GetTypes (long[] ids) {
+			var res = new TypeMirror [ids.Length];
+			for (int i = 0; i < ids.Length; ++i)
+				res [i] = GetType (ids [i]);
+			return res;
+		}
+
 		Dictionary <long, ObjectMirror> objects;
 		object objects_lock = new object ();
 
@@ -421,12 +480,19 @@ namespace Mono.Debugger.Soft
 					 * Obtain the domain/type of the object to determine the type of
 					 * object we need to create.
 					 */
-					if (domain_id == 0)
-						domain_id = conn.Object_GetDomain (id);
+					if (domain_id == 0 || type_id == 0) {
+						if (conn.Version.AtLeast (2, 5)) {
+							var info = conn.Object_GetInfo (id);
+							domain_id = info.domain_id;
+							type_id = info.type_id;
+						} else {
+							if (domain_id == 0)
+								domain_id = conn.Object_GetDomain (id);
+							if (type_id == 0)
+								type_id = conn.Object_GetType (id);
+						}
+					}
 					AppDomainMirror d = GetDomain (domain_id);
-
-					if (type_id == 0)
-						type_id = conn.Object_GetType (id);
 					TypeMirror t = GetType (type_id);
 
 					if (t.Assembly == d.Corlib && t.Namespace == "System.Threading" && t.Name == "Thread")
@@ -531,6 +597,11 @@ namespace Mono.Debugger.Soft
 				res [i] = EncodeValue (values [i]);
 			return res;
 		}
+
+		internal void CheckProtocolVersion (int major, int minor) {
+			if (!conn.Version.AtLeast (major, minor))
+				throw new NotSupportedException ("This request is not supported by the protocol version implemented by the debuggee.");
+		}
     }
 
 	class EventHandler : MarshalByRefObject, IEventHandler
@@ -553,10 +624,10 @@ namespace Mono.Debugger.Soft
 
 				switch (ei.EventType) {
 				case EventType.VMStart:
-					vm.notify_vm_event (EventType.VMStart, suspend_policy, req_id, thread_id, null);
+					vm.notify_vm_event (EventType.VMStart, suspend_policy, req_id, thread_id, null, 0);
 					break;
 				case EventType.VMDeath:
-					vm.notify_vm_event (EventType.VMDeath, suspend_policy, req_id, thread_id, null);
+					vm.notify_vm_event (EventType.VMDeath, suspend_policy, req_id, thread_id, null, ei.ExitCode);
 					break;
 				case EventType.ThreadStart:
 					l.Add (new ThreadStartEvent (vm, req_id, id));
@@ -594,6 +665,12 @@ namespace Mono.Debugger.Soft
 				case EventType.AppDomainUnload:
 					l.Add (new AppDomainUnloadEvent (vm, req_id, thread_id, id));
 					break;
+				case EventType.UserBreak:
+					l.Add (new UserBreakEvent (vm, req_id, thread_id));
+					break;
+				case EventType.UserLog:
+					l.Add (new UserLogEvent (vm, req_id, thread_id, ei.Level, ei.Category, ei.Message));
+					break;
 				default:
 					break;
 				}
@@ -604,18 +681,25 @@ namespace Mono.Debugger.Soft
 		}
 
 		public void VMDisconnect (int req_id, long thread_id, string vm_uri) {
-			vm.notify_vm_event (EventType.VMDisconnect, SuspendPolicy.None, req_id, thread_id, vm_uri);
+			vm.notify_vm_event (EventType.VMDisconnect, SuspendPolicy.None, req_id, thread_id, vm_uri, 0);
         }
     }
 
-	internal class CommandException : Exception {
+	public class CommandException : Exception {
 
-		public CommandException (ErrorCode error_code) : base ("Debuggee returned error code " + error_code + ".") {
+		internal CommandException (ErrorCode error_code) : base ("Debuggee returned error code " + error_code + ".") {
 			ErrorCode = error_code;
 		}
 
 		public ErrorCode ErrorCode {
 			get; set;
+		}
+	}
+
+	public class VMNotSuspendedException : InvalidOperationException
+	{
+		public VMNotSuspendedException () : base ("The vm is not suspended.")
+		{
 		}
 	}
 }

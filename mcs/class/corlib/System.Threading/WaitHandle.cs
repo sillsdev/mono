@@ -40,7 +40,9 @@ using System.Runtime.ConstrainedExecution;
 namespace System.Threading
 {
 	[ComVisible (true)]
-	public abstract class WaitHandle : MarshalByRefObject, IDisposable
+	[StructLayout (LayoutKind.Sequential)]
+	public abstract class WaitHandle
+		: MarshalByRefObject, IDisposable
 	{
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private static extern bool WaitAll_internal(WaitHandle[] handles, int ms, bool exitContext);
@@ -232,12 +234,12 @@ namespace System.Threading
 			// FIXME
 		}
 
-		public virtual void Close() {
+		public virtual void Close ()
+		{
 			Dispose(true);
-			GC.SuppressFinalize (this);
 		}
 
-#if NET_4_0 || MOBILE
+#if NET_4_0
 		public void Dispose ()
 #else		
 		void IDisposable.Dispose ()
@@ -275,7 +277,6 @@ namespace System.Threading
 		protected virtual void Dispose (bool explicitDisposing)
 		{
 			if (!disposed){
-				disposed = true;
 
 				//
 				// This is only the case if the handle was never properly initialized
@@ -285,6 +286,10 @@ namespace System.Threading
 					return;
 
 				lock (this){
+					if (disposed)
+						return;
+
+					disposed = true;
 					if (safe_wait_handle != null)
 						safe_wait_handle.Dispose ();
 				}
@@ -366,17 +371,17 @@ namespace System.Threading
 			bool release = false;
 			try {
 				if (exitContext) {
-#if MONOTOUCH
-					throw new NotSupportedException ("exitContext == true is not supported");
-#else
+#if !MONOTOUCH
 					SynchronizationAttribute.ExitContext ();
 #endif
 				}
 				safe_wait_handle.DangerousAddRef (ref release);
 				return (WaitOne_internal(safe_wait_handle.DangerousGetHandle (), millisecondsTimeout, exitContext));
 			} finally {
+#if !MONOTOUCH
 				if (exitContext)
 					SynchronizationAttribute.EnterContext ();
+#endif
 				if (release)
 					safe_wait_handle.DangerousRelease ();
 			}
@@ -402,9 +407,7 @@ namespace System.Threading
 			bool release = false;
 			try {
 				if (exitContext) {
-#if MONOTOUCH
-					throw new NotSupportedException ("exitContext == true is not supported");
-#else
+#if !MONOTOUCH
 					SynchronizationAttribute.ExitContext ();
 #endif
 				}
@@ -412,8 +415,10 @@ namespace System.Threading
 				return (WaitOne_internal(safe_wait_handle.DangerousGetHandle (), (int) ms, exitContext));
 			}
 			finally {
+#if !MONOTOUCH
 				if (exitContext)
 					SynchronizationAttribute.EnterContext ();
+#endif
 				if (release)
 					safe_wait_handle.DangerousRelease ();
 			}
@@ -437,9 +442,5 @@ namespace System.Threading
 		
 		protected static readonly IntPtr InvalidHandle = (IntPtr) (-1);
 		bool disposed = false;
-
-		~WaitHandle() {
-			Dispose(false);
-		}
 	}
 }

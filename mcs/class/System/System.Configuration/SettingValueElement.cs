@@ -26,8 +26,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using System;
+using System.Reflection;
 #if (XML_DEP)
 using System.Xml;
 #endif
@@ -40,7 +40,7 @@ namespace System.Configuration
 #endif
 	{
 #if XML_DEP
-		XmlNode node;
+		XmlNode node, original;
 #endif
 
 		[MonoTODO]
@@ -67,7 +67,8 @@ namespace System.Configuration
 		[MonoTODO]
 		protected override void DeserializeElement (XmlReader reader, bool serializeCollectionKey)
 		{
-			node = new XmlDocument ().ReadNode (reader);
+			original = new XmlDocument ().ReadNode (reader);
+			node = original.CloneNode (true);
 		}
 #endif
 #endif
@@ -85,7 +86,7 @@ namespace System.Configuration
 #if (CONFIGURATION_DEP)
 		protected override bool IsModified ()
 		{
-			throw new NotImplementedException ();
+			return original != node;
 		}
 
 		protected override void Reset (ConfigurationElement parentElement)
@@ -95,7 +96,7 @@ namespace System.Configuration
 
 		protected override void ResetModified ()
 		{
-			throw new NotImplementedException ();
+			node = original;
 		}
 #endif
 
@@ -112,11 +113,82 @@ namespace System.Configuration
 #if (CONFIGURATION_DEP)
 		protected override void Unmerge (ConfigurationElement sourceElement, ConfigurationElement parentElement, ConfigurationSaveMode saveMode)
 		{
-			throw new NotImplementedException ();
+			if (parentElement != null && sourceElement.GetType() != parentElement.GetType())
+				throw new ConfigurationErrorsException ("Can't unmerge two elements of different type");
+
+			bool isMinimalOrModified = saveMode == ConfigurationSaveMode.Minimal ||
+				saveMode == ConfigurationSaveMode.Modified;
+
+			foreach (PropertyInformation prop in sourceElement.ElementInformation.Properties)
+			{
+				if (prop.ValueOrigin == PropertyValueOrigin.Default)
+					continue;
+				
+				PropertyInformation unmergedProp = ElementInformation.Properties [prop.Name];
+				
+				object sourceValue = prop.Value;
+				if (parentElement == null || !HasValue (parentElement, prop.Name)) {
+					unmergedProp.Value = sourceValue;
+					continue;
+				}
+
+				if (sourceValue == null)
+					continue;
+
+				object parentValue = GetItem (parentElement, prop.Name);
+				if (!PropertyIsElement (prop)) {
+					if (!object.Equals (sourceValue, parentValue) || 
+					    (saveMode == ConfigurationSaveMode.Full) ||
+					    (saveMode == ConfigurationSaveMode.Modified && prop.ValueOrigin == PropertyValueOrigin.SetHere))
+						unmergedProp.Value = sourceValue;
+					continue;
+				}
+
+				var sourceElem = (ConfigurationElement) sourceValue;
+				if (isMinimalOrModified && !ElementIsModified (sourceElem))
+					continue;
+				if (parentValue == null) {
+					unmergedProp.Value = sourceValue;
+					continue;
+				}
+
+				var parentElem = (ConfigurationElement) parentValue;
+				ConfigurationElement copy = (ConfigurationElement) unmergedProp.Value;
+				ElementUnmerge (copy, sourceElem, parentElem, saveMode);
+			}
+		}
+
+		bool HasValue (ConfigurationElement element, string propName)
+		{
+			PropertyInformation info = element.ElementInformation.Properties [propName];
+			return info != null && info.ValueOrigin != PropertyValueOrigin.Default;
+		}
+
+		object GetItem (ConfigurationElement element, string property)
+		{
+			PropertyInformation pi = ElementInformation.Properties [property];
+			if (pi == null)
+				throw new InvalidOperationException ("Property '" + property + "' not found in configuration element");
+
+			return pi.Value;
+		}
+		
+		bool PropertyIsElement (PropertyInformation prop)
+		{
+			return (typeof(ConfigurationElement).IsAssignableFrom (prop.Type));
+		}
+		
+		bool ElementIsModified (ConfigurationElement element)
+		{
+			return (bool) element.GetType ().GetMethod ("IsModified", BindingFlags.NonPublic | BindingFlags.Instance).Invoke (element, new object [0]);
+		}
+		
+		void ElementUnmerge (ConfigurationElement target, ConfigurationElement sourceElement, ConfigurationElement parentElement, ConfigurationSaveMode saveMode)
+		{
+			target.GetType ().GetMethod ("Unmerge", BindingFlags.NonPublic | BindingFlags.Instance).Invoke (target, new object [] {sourceElement, parentElement, saveMode});
 		}
 #endif
 	}
 
 }
 
-#endif

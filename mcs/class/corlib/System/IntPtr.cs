@@ -148,9 +148,9 @@ namespace System
 		public string ToString (string format)
 		{
 			if (Size == 4)
-				return ((int) m_value).ToString (format);
+				return ((int) m_value).ToString (format, null);
 			else
-				return ((long) m_value).ToString (format);
+				return ((long) m_value).ToString (format, null);
 		}
 
 		[ReliabilityContractAttribute (Consistency.WillNotCorruptState, Cer.Success)]
@@ -223,6 +223,12 @@ namespace System
 		public static IntPtr operator - (IntPtr pointer, int offset)
 		{
 			return (IntPtr) (unchecked (((byte *) pointer) - offset));
+		}
+#else
+		/* Needed by Marshal.cs */
+		internal static IntPtr Add (IntPtr pointer, int offset)
+		{
+			return (IntPtr) (unchecked (((byte *) pointer) + offset));
 		}
 #endif
 	}

@@ -220,15 +220,13 @@ namespace System.Data.OracleClient
 			OciCalls.OCIServerVersion (sh, eh, ref buffer,  bufflen, OciHandleType.Service);
 			
 			// Get length of returned string
-			ulong 	rsize = 0;
-			UIntPtr rsizep = new UIntPtr (rsize);
+			int 	rsize = 0;
 			IntPtr	env = oci.Environment;
-			OciCalls.OCICharSetToUnicode (env, null, buffer, ref rsizep);
+			OciCalls.OCICharSetToUnicode (env, null, buffer, out rsize);
 			
 			// Get string
-			rsize = rsizep.ToUInt64 ();
-			StringBuilder ret = new StringBuilder((int)rsize);
-			OciCalls.OCICharSetToUnicode (env, ret, buffer, ref rsizep);
+			StringBuilder ret = new StringBuilder(rsize);
+			OciCalls.OCICharSetToUnicode (env, ret, buffer, out rsize);
 
 			return ret.ToString ();
 		}
@@ -373,14 +371,12 @@ namespace System.Data.OracleClient
 				ref buffer, bufflen, (ushort) item);
 
 			// Get length of returned string
-			ulong rsize = 0;
-			UIntPtr rsizep = new UIntPtr (rsize);
-			OciCalls.OCICharSetToUnicode (Environment, null, buffer, ref rsizep);
+			int rsize = 0;
+			OciCalls.OCICharSetToUnicode (Environment, null, buffer, out rsize);
 			
 			// Get string
-			rsize = rsizep.ToUInt64 ();
-			StringBuilder ret = new StringBuilder ((int)rsize);
-			OciCalls.OCICharSetToUnicode (Environment, ret, buffer, ref rsizep);
+			StringBuilder ret = new StringBuilder (rsize);
+			OciCalls.OCICharSetToUnicode (Environment, ret, buffer, out rsize);
 
 			return ret.ToString ();
 		}

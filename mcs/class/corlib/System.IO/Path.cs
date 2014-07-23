@@ -5,6 +5,7 @@
 // Copyright (C) 2001 Moonlight Enterprises, All Rights Reserved
 // Copyright (C) 2002 Ximian, Inc. (http://www.ximian.com)
 // Copyright (C) 2003 Ben Maurer
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 // 
 // Author:         Jim Richardson, develop@wtfo-guru.com
 //                 Dan Lewis (dihlewis@yahoo.co.uk)
@@ -221,6 +222,8 @@ namespace System.IO {
 
 				if (l >= 2 && DirectorySeparatorChar == '\\' && ret [l - 1] == VolumeSeparatorChar)
 					return ret + DirectorySeparatorChar;
+				else if (l == 1 && DirectorySeparatorChar == '\\' && path.Length >= 2 && path [nLast] == VolumeSeparatorChar)
+					return ret + VolumeSeparatorChar;
 				else {
 					//
 					// Important: do not use CanonicalizePath here, use
@@ -286,6 +289,29 @@ namespace System.IO {
 			return fullpath;
 		}
 
+		// http://msdn.microsoft.com/en-us/library/windows/desktop/aa364963%28v=vs.85%29.aspx
+		[DllImport("Kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+		private static extern int GetFullPathName(string path, int numBufferChars, StringBuilder buffer, ref IntPtr lpFilePartOrNull); 
+
+		internal static string GetFullPathName(string path)
+		{
+			const int MAX_PATH = 260;
+			StringBuilder buffer = new StringBuilder(MAX_PATH);
+			IntPtr ptr = IntPtr.Zero;
+			int length = GetFullPathName(path, MAX_PATH, buffer, ref ptr);
+			if (length == 0)
+			{
+				int error = Marshal.GetLastWin32Error();
+				throw new IOException("Windows API call to GetFullPathName failed, Windows error code: " + error);
+			}
+			else if (length > MAX_PATH)
+			{
+				buffer = new StringBuilder(length);
+				GetFullPathName(path, length, buffer, ref ptr);
+			}
+			return buffer.ToString();
+		}
+
 		internal static string WindowsDriveAdjustment (string path)
 		{
 			// two special cases to consider when a drive is specified
@@ -294,14 +320,14 @@ namespace System.IO {
 			if ((path [1] != ':') || !Char.IsLetter (path [0]))
 				return path;
 
-			string current = Directory.GetCurrentDirectory ();
+			string current = Directory.InsecureGetCurrentDirectory ();
 			// first, only the drive is specified
 			if (path.Length == 2) {
 				// then if the current directory is on the same drive
 				if (current [0] == path [0])
 					path = current; // we return it
 				else
-					path += '\\';
+					path = GetFullPathName(path); // we have to use the GetFullPathName Windows API
 			} else if ((path [2] != Path.DirectorySeparatorChar) && (path [2] != Path.AltDirectorySeparatorChar)) {
 				// second, the drive + a directory is specified *without* a separator between them (e.g. C:dir).
 				// If the current directory is on the specified drive...
@@ -309,8 +335,8 @@ namespace System.IO {
 					// then specified directory is appended to the current drive directory
 					path = Path.Combine (current, path.Substring (2, path.Length - 2));
 				} else {
-					// if not, then just pretend there was a separator (Path.Combine won't work in this case)
-					path = String.Concat (path.Substring (0, 2), DirectorySeparatorStr, path.Substring (2, path.Length - 2));
+					// we have to use the GetFullPathName Windows API
+					path = GetFullPathName(path);
 				}
 			}
 			return path;
@@ -348,23 +374,25 @@ namespace System.IO {
 				if (!IsPathRooted (path)) {
 					
 					// avoid calling expensive CanonicalizePath when possible
-					var start = 0;
-					while ((start = path.IndexOf ('.', start)) != -1) {
-						if (++start == path.Length || path [start] == DirectorySeparatorChar || path [start] == AltDirectorySeparatorChar)
-							break;
+					if (!Environment.IsRunningOnWindows) {
+						var start = 0;
+						while ((start = path.IndexOf ('.', start)) != -1) {
+							if (++start == path.Length || path [start] == DirectorySeparatorChar || path [start] == AltDirectorySeparatorChar)
+								break;
+						}
+						canonicalize = start > 0;
 					}
-					canonicalize = start > 0;
-					
-					path = Directory.GetCurrentDirectory () + DirectorySeparatorStr + path;
+
+					path = Directory.InsecureGetCurrentDirectory() + DirectorySeparatorStr + path;
 				} else if (DirectorySeparatorChar == '\\' &&
 					path.Length >= 2 &&
 					IsDsc (path [0]) &&
 					!IsDsc (path [1])) { // like `\abc\def'
-					string current = Directory.GetCurrentDirectory ();
+					string current = Directory.InsecureGetCurrentDirectory();
 					if (current [1] == VolumeSeparatorChar)
 						path = current.Substring (0, 2) + path;
 					else
-						path = current.Substring (0, current.IndexOf ('\\', current.IndexOf ("\\\\") + 1));
+						path = current.Substring (0, current.IndexOf ('\\', current.IndexOfOrdinalUnchecked ("\\\\") + 1));
 				}
 			}
 			
@@ -456,6 +484,10 @@ namespace System.IO {
 				catch (IOException ex){
 					if (ex.hresult != MonoIO.FileAlreadyExistsHResult || count ++ > 65536)
 						throw;
+				}
+				catch (UnauthorizedAccessException ex) {
+					if (count ++ > 65536)
+						throw new IOException (ex.Message, ex);
 				}
 			} while (f == null);
 			
@@ -709,6 +741,9 @@ namespace System.IO {
 						else
 							return current + ret;
 					}
+				} else {
+					if (root != "" && ret.Length > 0 && ret [0] != '/')
+						ret = root + ret;
 				}
 				return ret;
 			}
@@ -738,7 +773,7 @@ namespace System.IO {
 			return String.Compare (subset, slast, path, slast, subset.Length - slast) == 0;
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public
 #else
                 internal
@@ -752,13 +787,21 @@ namespace System.IO {
 			var ret = new StringBuilder ();
 			int pathsLen = paths.Length;
 			int slen;
+			need_sep = false;
+
 			foreach (var s in paths) {
-				need_sep = false;
 				if (s == null)
 					throw new ArgumentNullException ("One of the paths contains a null value", "paths");
+				if (s.Length == 0)
+					continue;
 				if (s.IndexOfAny (InvalidPathChars) != -1)
 					throw new ArgumentException ("Illegal characters in path.");
-				
+
+				if (need_sep) {
+					need_sep = false;
+					ret.Append (DirectorySeparatorStr);
+				}
+
 				pathsLen--;
 				if (IsPathRooted (s))
 					ret.Length = 0;
@@ -770,15 +813,12 @@ namespace System.IO {
 					if (p1end != DirectorySeparatorChar && p1end != AltDirectorySeparatorChar && p1end != VolumeSeparatorChar)
 						need_sep = true;
 				}
-				
-				if (need_sep)
-					ret.Append (DirectorySeparatorStr);
 			}
 
 			return ret.ToString ();
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public
 #else
                 internal
@@ -797,7 +837,7 @@ namespace System.IO {
 			return Combine (new string [] { path1, path2, path3 });
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public
 #else
                 internal
@@ -837,11 +877,6 @@ namespace System.IO {
 				if (idx >= 0 && idx != 1)
 					throw new ArgumentException (parameterName);
 			}
-#if MOONLIGHT
-			// On Moonlight (SL4+) there are some limitations in "Elevated Trust"
-			if (SecurityManager.HasElevatedPermissions) {
-			}
-#endif
 		}
 	}
 }

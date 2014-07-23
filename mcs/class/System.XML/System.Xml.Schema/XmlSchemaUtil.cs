@@ -416,7 +416,7 @@ namespace System.Xml.Schema
 		{
 			innerExcpetion = null;
 			XmlSchemaForm val = XmlSchemaForm.None;
-			switch(reader.Value)
+			switch(reader.Value != null ? reader.Value.Trim () : null)
 			{
 				case "qualified":
 					val = XmlSchemaForm.Qualified; break;
@@ -432,7 +432,7 @@ namespace System.Xml.Schema
 		{
 			innerExcpetion = null;
 			XmlSchemaContentProcessing val = XmlSchemaContentProcessing.None;
-			switch(reader.Value)
+			switch(reader.Value != null ? reader.Value.Trim () : null)
 			{
 				case "lax":
 					val = XmlSchemaContentProcessing.Lax; break;
@@ -451,7 +451,7 @@ namespace System.Xml.Schema
 		{
 			innerExcpetion = null;
 			XmlSchemaUse val = XmlSchemaUse.None;
-			switch(reader.Value)
+			switch(reader.Value != null ? reader.Value.Trim () : null)
 			{
 				case "optional":
 					val = XmlSchemaUse.Optional; break;
@@ -584,7 +584,7 @@ namespace System.Xml.Schema
 						else if (!skipEquivalent || !AreAttributesEqual (attr, attributesResolved [attr.QualifiedName] as XmlSchemaAttribute))
 							AddToTable (attributesResolved, attr, attr.QualifiedName, h);
 					} else {
-						if (anyAttribute == null) {
+						if (anyAttribute != null) {
 							anyAttributeUse = (XmlSchemaAnyAttribute) xsobj;
 							anyAttribute.Validate (h, schema);
 						}

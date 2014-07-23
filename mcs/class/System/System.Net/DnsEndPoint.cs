@@ -28,13 +28,16 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_1 || NET_4_0
+#if NET_4_0
 
 using System.Net.Sockets;
 
 namespace System.Net { 
 
-	public sealed class DnsEndPoint : EndPoint {
+#if NET_2_1
+	sealed
+#endif
+	public class DnsEndPoint : EndPoint {
 		string host;
 		int port;
 		AddressFamily addressFamily = AddressFamily.Unspecified;
@@ -66,11 +69,10 @@ namespace System.Net {
 			}
 		}
 
-		public override bool Equals (object other)
+		public override bool Equals (object comparand)
 		{
-			if (other is DnsEndPoint)
-				return Equals (other as DnsEndPoint);
-			return false;
+			DnsEndPoint dep = (comparand as DnsEndPoint);
+			return (comparand != null) && Equals (dep);
 		}
 
 		private bool Equals (DnsEndPoint other)

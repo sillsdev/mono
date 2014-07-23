@@ -64,9 +64,7 @@ namespace System.Net
 			this.exception = exception;
 		}
 		
-#if NET_2_0
 		[Obsolete ("Serialization is obsoleted for this type", false)]
-#endif
 		protected FileWebResponse (SerializationInfo serializationInfo, StreamingContext streamingContext)
 		{
 			SerializationInfo info = serializationInfo;
@@ -120,10 +118,7 @@ namespace System.Net
 			GetObjectData (serializationInfo, streamingContext);
 		}
 
-#if NET_2_0
-		protected override
-#endif
-		void GetObjectData (SerializationInfo serializationInfo, StreamingContext streamingContext)
+		protected override void GetObjectData (SerializationInfo serializationInfo, StreamingContext streamingContext)
 		{
 			SerializationInfo info = serializationInfo;
 
@@ -162,9 +157,9 @@ namespace System.Net
 			GC.SuppressFinalize (this);  
 		}
 		
-#if !NET_2_0
-		protected virtual
-#endif
+#if NET_4_0
+		protected override
+#endif		
 		void Dispose (bool disposing)
 		{
 			if (this.disposed)
@@ -182,6 +177,9 @@ namespace System.Net
 			fileStream = null;
 			if (stream != null)
 				stream.Close (); // also closes webRequest
+#if NET_4_0
+			base.Dispose (disposing);
+#endif
 		}
 		
 		private void CheckDisposed ()

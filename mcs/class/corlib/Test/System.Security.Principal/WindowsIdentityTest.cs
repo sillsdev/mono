@@ -180,10 +180,8 @@ namespace MonoTests.System.Security.Principal {
 
 			IDeserializationCallback dc = (id as IDeserializationCallback);
 			Assert.IsNotNull (dc, "IDeserializationCallback");
-#if NET_1_1
 			ISerializable s = (id as ISerializable);
 			Assert.IsNotNull (s, "ISerializable");
-#endif
 		}
 
 		// This is clearly a hack - but I've seen it too many times so I think we 
@@ -202,7 +200,7 @@ namespace MonoTests.System.Security.Principal {
 		{
 			// remove g_warning from being show during unit tests
 			if (IsPosix)
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			WindowsIdentity wi = WindowsIdentity.GetCurrent ();
 			WindowsPrincipal wp = new WindowsPrincipal (wi);

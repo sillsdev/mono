@@ -49,13 +49,7 @@ namespace System {
 			if (!(value is System.Int16))
 				throw new ArgumentException (Locale.GetText ("Value is not a System.Int16"));
 
-			short xv = (short) value;
-			if (m_value == xv)
-				return 0;
-			if (m_value > xv)
-				return 1;
-			else
-				return -1;
+			return CompareTo ((short) value);
 		}
 
 		public override bool Equals (object obj)
@@ -73,12 +67,7 @@ namespace System {
 
 		public int CompareTo (short value)
 		{
-			if (m_value == value)
-				return 0;
-			if (m_value > value)
-				return 1;
-			else
-				return -1;
+			return m_value - value;
 		}
 
 		public bool Equals (short obj)
@@ -187,10 +176,14 @@ namespace System {
 		public static short Parse (string s, NumberStyles style, IFormatProvider provider)
 		{
 			int tmpResult = Int32.Parse (s, style, provider);
-			if (tmpResult > Int16.MaxValue || tmpResult < Int16.MinValue)
-				throw new OverflowException ("Value too large or too small.");
+			if ((style & NumberStyles.AllowHexSpecifier) != 0) {
+				if (tmpResult >= 0 && tmpResult <= ushort.MaxValue)
+					return (short) tmpResult;
+			} else if (tmpResult <= MaxValue && tmpResult >= MinValue) {
+				return (short) tmpResult;
+			}
 
-			return (short) tmpResult;
+			throw new OverflowException ("Value too large or too small.");
 		}
 
 		public static short Parse (string s) 

@@ -1,10 +1,14 @@
 //
 // BasicHttpBinding.cs
 //
+// See BasicHttpBinding_4_5.cs and HttpBindingBase.cs for the .NET 4.5
+// version of this class.
+//
 // Author:
 //	Atsushi Enomoto <atsushi@ximian.com>
 //
 // Copyright (C) 2005-2006 Novell, Inc.  http://www.novell.com
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -25,6 +29,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
+#if !NET_4_5 && !MOBILE
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -52,7 +57,8 @@ namespace System.ServiceModel
 		XmlDictionaryReaderQuotas reader_quotas
 			= new XmlDictionaryReaderQuotas ();
 		EnvelopeVersion env_version = EnvelopeVersion.Soap11;
-		Encoding text_encoding = new UTF8Encoding ();
+		static readonly Encoding default_text_encoding = new UTF8Encoding ();
+		Encoding text_encoding = default_text_encoding;
 		TransferMode transfer_mode
 			 = TransferMode.Buffered;
 		bool use_default_web_proxy = true;
@@ -92,7 +98,15 @@ namespace System.ServiceModel
 		}
 
 #if NET_2_1
-		public bool EnableHttpCookieContainer { get; set; }
+		public bool EnableHttpCookieContainer {
+			get; set;
+		}
+#elif NET_4_5
+		[Obsolete ("Use AllowCookies.")]
+		public bool EnableHttpCookieContainer {
+			get { return AllowCookies; }
+			set { AllowCookies = value; }
+		}
 #endif
 
 		public HostNameComparisonMode HostNameComparisonMode {
@@ -162,6 +176,10 @@ namespace System.ServiceModel
 			get { return env_version; }
 		}
 
+		internal static Encoding DefaultTextEncoding {
+			get { return default_text_encoding; }
+		}
+		
 		public Encoding TextEncoding {
 			get { return text_encoding; }
 			set { text_encoding = value; }
@@ -309,3 +327,4 @@ namespace System.ServiceModel
 		}
 	}
 }
+#endif

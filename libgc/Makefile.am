@@ -18,11 +18,11 @@
 ## files that should be in the distribution are not mentioned in this
 ## Makefile.am.
 
-AUTOMAKE_OPTIONS = foreign
+ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = include doc
+SUBDIRS = m4 include doc
 
-INCLUDES = -I$(top_builddir)/.. -I$(top_srcdir)/..
+AM_CPPFLAGS = -I$(top_builddir)/.. -I$(top_srcdir)/..
 
 #
 # libtool is not capable of creating shared/static versions of a convenience
@@ -115,7 +115,7 @@ endif
 
 ## We have our own definition of LTCOMPILE because we want to use our
 ## CFLAGS, not those passed in from the top level make.
-LTCOMPILE = $(LIBTOOL) --mode=compile --tag=CC $(CC) $(DEFS) $(INCLUDES) \
+LTCOMPILE = $(LIBTOOL) --mode=compile --tag=CC $(CC) $(DEFS) \
 	-I$(top_srcdir)/include $(AM_CPPFLAGS) $(CPPFLAGS) \
 	$(AM_CFLAGS) $(MY_CFLAGS) $(GC_CFLAGS) 
 LINK = $(LIBTOOL) --mode=link $(CC) $(AM_CFLAGS) $(MY_CFLAGS) $(LDFLAGS) -o $@

@@ -35,6 +35,7 @@ using System.IO;
 using System.Text;
 using System.Globalization;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Security;
 using System.Security.Permissions;
@@ -61,7 +62,7 @@ namespace System.Web
 	public sealed class HttpRuntime
 	{
 		static bool domainUnloading;
-		
+		static SplitOrderedList <string, string> registeredAssemblies;
 #if TARGET_J2EE
 		static QueueManager queue_manager { get { return _runtime._queue_manager; } }
 		static TraceManager trace_manager { get { return _runtime._trace_manager; } }
@@ -166,6 +167,7 @@ namespace System.Web
 				}
 			}
 
+			registeredAssemblies = new SplitOrderedList <string, string> (StringComparer.Ordinal);
 			cache = new Cache ();
 			internalCache = new Cache ();
 			internalCache.DependencyCache = internalCache;
@@ -176,6 +178,10 @@ namespace System.Web
 				} catch {}
 				});
 			end_of_send_cb = new HttpWorkerRequest.EndOfSendNotification (EndOfSend);
+		}
+
+		internal static SplitOrderedList <string, string> RegisteredAssemblies {
+			get { return registeredAssemblies; }
 		}
 		
 #region AppDomain handling
@@ -323,6 +329,21 @@ namespace System.Web
 		internal static HttpRuntimeSection Section { get { return runtime_section; } }
 
 		public static bool UsingIntegratedPipeline { get { return false; } }
+
+#if NET_4_5
+		public static Version IISVersion {
+			get {
+				// Null means not hosted by IIS
+				return null;
+			}
+		}
+		
+		public static Version TargetFramework {
+			get {
+				return runtime_section.TargetFramework;
+			}
+		}
+#endif
 		
 		[SecurityPermission (SecurityAction.Demand, UnmanagedCode = true)]
 		public static void Close ()
@@ -715,22 +736,29 @@ namespace System.Web
 			AssemblyName an = new AssemblyName (e.Name);
 			string dynamic_base = AppDomain.CurrentDomain.SetupInformation.DynamicBase;
 			string compiled = Path.Combine (dynamic_base, an.Name + ".compiled");
+			string asmPath;
 
-			if (!File.Exists (compiled))
-				return null;
-
-			PreservationFile pf;
-			try {
-				pf = new PreservationFile (compiled);
-			} catch (Exception ex) {
-				throw new HttpException (
-					String.Format ("Failed to read preservation file {0}", an.Name + ".compiled"),
-					ex);
+			if (!File.Exists (compiled)) {
+				string fn = an.FullName;
+				if (!RegisteredAssemblies.Find ((uint)fn.GetHashCode (), fn, out asmPath))
+					return null;
+			} else {
+				PreservationFile pf;
+				try {
+					pf = new PreservationFile (compiled);
+				} catch (Exception ex) {
+					throw new HttpException (
+						String.Format ("Failed to read preservation file {0}", an.Name + ".compiled"),
+						ex);
+				}
+				asmPath = Path.Combine (dynamic_base, pf.Assembly + ".dll");
 			}
+
+			if (String.IsNullOrEmpty (asmPath))
+				return null;
 			
 			Assembly ret = null;
 			try {
-				string asmPath = Path.Combine (dynamic_base, pf.Assembly + ".dll");
 				ret = Assembly.LoadFrom (asmPath);
 			} catch (Exception) {
 				// ignore

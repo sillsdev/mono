@@ -2,14 +2,16 @@
 // visit.cs: Visitors for parsed dom
 //
 // Authors: Mike Krüger (mkrueger@novell.com)
-//			Marek Safar (marek.safar@gmail.com)
+//          Marek Safar (marek.safar@gmail.com)
 //
 // Dual licensed under the terms of the MIT X11 or GNU GPL
 //
 // Copyright (c) 2010 Novell, Inc (http://www.novell.com)
+// Copyright 2011 Xamarin Inc
 //
 
 using System;
+using System.Diagnostics;
 
 namespace Mono.CSharp
 {
@@ -17,14 +19,48 @@ namespace Mono.CSharp
 	{
 		public virtual void Visit (MemberCore member)
 		{
-			Console.WriteLine ("unknown member: " + member);
+			Debug.Fail ("unknown member type: " + member.GetType ());
 		}
 
 		void VisitTypeContainer (TypeContainer tc)
 		{
-			//foreach (var member in tc.OrderedAllMembers) {
-			//    member.Accept (this);
-			//}
+			foreach (var container in tc.Containers) {
+				container.Accept (this);
+			}
+		}
+
+		void VisitTypeContainer (TypeDefinition tc)
+		{
+			foreach (var member in tc.Members) {
+				member.Accept (this);
+			}
+		}
+
+		public virtual void Visit (ModuleContainer module)
+		{
+			VisitTypeContainer (module);
+		}
+
+		public virtual void Visit (UsingNamespace un)
+		{
+		}
+
+		public virtual void Visit (UsingAliasNamespace uan)
+		{
+		}
+		
+		public virtual void Visit (UsingExternAlias uea)
+		{
+		}
+
+		public virtual void Visit (NamespaceContainer ns)
+		{
+			VisitTypeContainer (ns);
+		}
+
+		public virtual void Visit (CompilationSourceFile csf)
+		{
+			VisitTypeContainer (csf);
 		}
 
 		public virtual void Visit (Class c)
@@ -53,6 +89,10 @@ namespace Mono.CSharp
 		}
 
 		public virtual void Visit (FixedField f)
+		{
+		}
+
+		public virtual void Visit (Const c)
 		{
 		}
 
@@ -97,16 +137,36 @@ namespace Mono.CSharp
 
 		public virtual object Visit (Statement stmt)
 		{
-			Console.WriteLine ("unknown statement:" + stmt);
+			Debug.Fail ("unknown statement:" + stmt);
 			return null;
 		}
-
+		
+		public virtual object Visit (BlockVariable blockVariableDeclaration)
+		{
+			return null;
+		}
+		
+		public virtual object Visit (BlockConstant blockConstantDeclaration)
+		{
+			return null;
+		}
+		
 		public virtual object Visit (EmptyStatement emptyStatement)
 		{
 			return null;
 		}
 
 		public virtual object Visit (EmptyExpressionStatement emptyExpressionStatement)
+		{
+			return null;
+		}
+
+		public virtual object Visit (EmptyExpression emptyExpression)
+		{
+			return null;
+		}
+		
+		public virtual object Visit (ErrorExpression errorExpression)
 		{
 			return null;
 		}
@@ -122,102 +182,100 @@ namespace Mono.CSharp
 			return null;
 		}
 
-
 		public virtual object Visit (While whileStatement)
 		{
 			return null;
 		}
-
 
 		public virtual object Visit (For forStatement)
 		{
 			return null;
 		}
 
-
 		public virtual object Visit (StatementExpression statementExpression)
 		{
 			return null;
 		}
 
+		public virtual object Visit (StatementErrorExpression errorStatement)
+		{
+			return null;
+		}
 
 		public virtual object Visit (Return returnStatement)
 		{
 			return null;
 		}
 
-
 		public virtual object Visit (Goto gotoStatement)
 		{
 			return null;
 		}
-
 
 		public virtual object Visit (LabeledStatement labeledStatement)
 		{
 			return null;
 		}
 
+		public virtual object Visit (SwitchLabel switchLabel)
+		{
+			return null;
+		}
 
 		public virtual object Visit (GotoDefault gotoDefault)
 		{
 			return null;
 		}
 
-
 		public virtual object Visit (GotoCase gotoCase)
 		{
 			return null;
 		}
-
 
 		public virtual object Visit (Throw throwStatement)
 		{
 			return null;
 		}
 
-
 		public virtual object Visit (Break breakStatement)
 		{
 			return null;
 		}
-
 
 		public virtual object Visit (Continue continueStatement)
 		{
 			return null;
 		}
 
-
 		public virtual object Visit (Block blockStatement)
 		{
 			return null;
 		}
-
-
+		
 		public virtual object Visit (Switch switchStatement)
 		{
 			return null;
 		}
-
-
+		
+		public virtual object Visit (StatementList statementList)
+		{
+			return null;
+		}
+		
 		public virtual object Visit (Lock lockStatement)
 		{
 			return null;
 		}
-
 
 		public virtual object Visit (Unchecked uncheckedStatement)
 		{
 			return null;
 		}
 
-
 		public virtual object Visit (Checked checkedStatement)
 		{
 			return null;
 		}
-
 
 		public virtual object Visit (Unsafe unsafeStatement)
 		{
@@ -235,7 +293,6 @@ namespace Mono.CSharp
 		{
 			return null;
 		}
-
 
 		public virtual object Visit (TryCatch tryCatchStatement)
 		{
@@ -264,11 +321,16 @@ namespace Mono.CSharp
 
 		public virtual object Visit (Expression expression)
 		{
-			Console.WriteLine ("Visit unknown expression:" + expression);
+			Debug.Fail ("Visit unknown expression:" + expression);
 			return null;
 		}
 
 		public virtual object Visit (MemberAccess memberAccess)
+		{
+			return null;
+		}
+
+		public virtual object Visit (QualifiedAliasMember qualifiedAliasMember)
 		{
 			return null;
 		}
@@ -338,7 +400,12 @@ namespace Mono.CSharp
 		{
 			return null;
 		}
-
+		
+		public virtual object Visit (DefaultParameterValueExpression defaultParameterValueExpression)
+		{
+			return null;
+		}
+		
 		public virtual object Visit (Binary binaryExpression)
 		{
 			return null;
@@ -348,7 +415,6 @@ namespace Mono.CSharp
 		{
 			return null;
 		}
-
 
 		public virtual object Visit (Conditional conditionalExpression)
 		{
@@ -361,6 +427,11 @@ namespace Mono.CSharp
 		}
 
 		public virtual object Visit (New newExpression)
+		{
+			return null;
+		}
+
+		public virtual object Visit (NewAnonymousType newAnonymousType)
 		{
 			return null;
 		}
@@ -435,21 +506,41 @@ namespace Mono.CSharp
 			return null;
 		}
 
+		public virtual object Visit (TypeExpression typeExpression)
+		{
+			return null;
+		}
+
 		public virtual object Visit (AnonymousMethodExpression anonymousMethodExpression)
 		{
 			return null;
 		}
-
+		
 		public virtual object Visit (LambdaExpression lambdaExpression)
 		{
 			return null;
 		}
-
+		
+		public virtual object Visit (ConstInitializer constInitializer)
+		{
+			return null;
+		}
+		
+		public virtual object Visit (ArrayInitializer arrayInitializer)
+		{
+			return null;
+		}
+		
 		public virtual object Visit (Linq.QueryExpression queryExpression)
 		{
 			return null;
 		}
 
+		public virtual object Visit (Linq.QueryStartClause queryExpression)
+		{
+			return null;
+		}
+		
 		public virtual object Visit (Linq.SelectMany selectMany)
 		{
 			return null;
@@ -501,6 +592,27 @@ namespace Mono.CSharp
 		}
 
 		public virtual object Visit (Linq.ThenByDescending thenByDescending)
+		{
+			return null;
+		}
+		
+		// undocumented expressions
+		public virtual object Visit (RefValueExpr refValueExpr)
+		{
+			return null;
+		}
+		
+		public virtual object Visit (RefTypeExpr refTypeExpr)
+		{
+			return null;
+		}
+		
+		public virtual object Visit (MakeRefExpr makeRefExpr)
+		{
+			return null;
+		}
+
+		public virtual object Visit (Await awaitExpr)
 		{
 			return null;
 		}

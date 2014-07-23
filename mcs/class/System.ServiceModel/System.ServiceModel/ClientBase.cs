@@ -39,29 +39,10 @@ namespace System.ServiceModel
 {
 	[MonoTODO ("It somehow rejects classes, but dunno how we can do that besides our code wise.")]
 	public abstract class ClientBase<TChannel> :
-#if !MOONLIGHT
 		IDisposable,
-#endif
 		ICommunicationObject where TChannel : class
 	{
 		static InstanceContext initialContxt = new InstanceContext (null);
-#if MOONLIGHT
-		static readonly PropertyInfo dispatcher_main_property;
-		static readonly MethodInfo dispatcher_begin_invoke_method;
-
-		static ClientBase ()
-		{
-			Type dispatcher_type = Type.GetType ("System.Windows.Threading.Dispatcher, System.Windows, Version=2.0.5.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e", true);
-
-			dispatcher_main_property = dispatcher_type.GetProperty ("Main", BindingFlags.NonPublic | BindingFlags.Static);
-			if (dispatcher_main_property == null)
-				throw new SystemException ("Dispatcher.Main not found");
-
-			dispatcher_begin_invoke_method = dispatcher_type.GetMethod ("BeginInvoke", new Type [] {typeof (Delegate), typeof (object [])});
-			if (dispatcher_begin_invoke_method == null)
-				throw new SystemException ("Dispatcher.BeginInvoke not found");
-		}
-#endif
 
 		ChannelFactory<TChannel> factory;
 		IClientChannel inner_channel;
@@ -241,25 +222,7 @@ namespace System.ServiceModel
 
 		void RunCompletedCallback (SendOrPostCallback callback, InvokeAsyncCompletedEventArgs args)
 		{
-#if !MOONLIGHT
 			callback (args);
-#else
-			object dispatcher = dispatcher_main_property.GetValue (null, null);
-			if (dispatcher == null) {
-				callback (args);
-				return;
-			}
-			EventHandler a = delegate {
-				try {
-					callback (args); 
-					//Console.WriteLine ("ClientBase<TChannel>: operationCompletedCallback is successfully done (unless the callback has further async operations)");
-				} catch (Exception ex) {
-					//Console.WriteLine ("ClientBase<TChannel> caught an error during operationCompletedCallback: " + ex);
-					throw;
-				}
-			};
-			dispatcher_begin_invoke_method.Invoke (dispatcher, new object [] {a, new object [] {this, new EventArgs ()}});
-#endif
 		}
 
 		protected void InvokeAsync (BeginOperationDelegate beginOperationDelegate,
@@ -295,12 +258,11 @@ namespace System.ServiceModel
 		}
 		IAsyncResult begin_async_result;
 
-#if !MOONLIGHT
 		void IDisposable.Dispose ()
 		{
 			Close ();
 		}
-#endif
+
 		protected virtual TChannel CreateChannel ()
 		{
 			return ChannelFactory.CreateChannel ();
@@ -391,7 +353,7 @@ namespace System.ServiceModel
 			public object [] Results { get; private set; }
 		}
 
-#if NET_2_1
+#if NET_4_0
 		protected internal
 #else
 		internal
@@ -421,7 +383,6 @@ namespace System.ServiceModel
 				}
 			}
 
-#if !MOONLIGHT
 			protected object Invoke (string methodName, object [] args)
 			{
 				var cd = endpoint.Contract;
@@ -430,7 +391,6 @@ namespace System.ServiceModel
 					throw new ArgumentException (String.Format ("Operation '{0}' not found in the service contract '{1}' in namespace '{2}'", methodName, cd.Name, cd.Namespace));
 				return Inner.Process (od.SyncMethod, methodName, args);
 			}
-#endif
 
 			protected IAsyncResult BeginInvoke (string methodName, object [] args, AsyncCallback callback, object state)
 			{

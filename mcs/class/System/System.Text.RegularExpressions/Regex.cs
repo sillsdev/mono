@@ -31,7 +31,9 @@ using System;
 using System.Text;
 using System.Collections;
 using System.Reflection;
+#if !FULL_AOT_RUNTIME
 using System.Reflection.Emit;
+#endif
 using System.Runtime.Serialization;
 
 using RegularExpression = System.Text.RegularExpressions.Syntax.RegularExpression;
@@ -45,7 +47,7 @@ namespace System.Text.RegularExpressions {
 	[Serializable]
 	public partial class Regex : ISerializable {
 
-#if !TARGET_JVM
+#if !TARGET_JVM && !FULL_AOT_RUNTIME
 		[MonoTODO]
 		public static void CompileToAssembly (RegexCompilationInfo [] regexes, AssemblyName aname)
 		{
@@ -177,7 +179,6 @@ namespace System.Text.RegularExpressions {
 			return re.Split (input);
 		}
 
-#if NET_2_0
 		static FactoryCache cache = new FactoryCache (15);
 		public static int CacheSize {
 			get { return cache.Capacity; }
@@ -188,9 +189,6 @@ namespace System.Text.RegularExpressions {
 				cache.Capacity = value;	
 			}
 		}
-#else
-		static FactoryCache cache = new FactoryCache (200);
-#endif
 
 		// private
 
@@ -216,6 +214,67 @@ namespace System.Text.RegularExpressions {
 			this.roptions = options;
 			Init ();
 		}
+		
+#if NET_4_5
+		[MonoTODO ("Timeouts are ignored.")]
+		public Regex (string pattern, RegexOptions options, TimeSpan matchTimeout)
+			: this (pattern, options)
+		{
+			MatchTimeout = matchTimeout;
+		}
+		
+		[MonoTODO ("Timeouts are ignored.")]
+		public TimeSpan MatchTimeout {
+			get;
+			private set;
+		}
+		
+		[MonoTODO ("Timeouts are ignored.")]
+		public static bool IsMatch (
+			string input, string pattern, RegexOptions options, TimeSpan matchTimeout)
+		{
+			return IsMatch (input, pattern, options);
+		}
+		
+		[MonoTODO ("Timeouts are ignored.")]
+		public static Match Match (
+			string input, string pattern, RegexOptions options, TimeSpan matchTimeout)
+		{
+			return Match (input, pattern, options);
+		}
+		
+		[MonoTODO ("Timeouts are ignored.")]
+		public static MatchCollection Matches (
+			string input, string pattern, RegexOptions options, TimeSpan matchTimeout)
+		{
+			return Matches (input, pattern, options, matchTimeout);
+		}
+		
+		[MonoTODO ("Timeouts are ignored.")]
+		public static string Replace (
+			string input, string pattern, string replacement, RegexOptions options,
+			TimeSpan matchTimeout)
+		{
+			return Replace (input, pattern, replacement, options);
+		}
+		
+		[MonoTODO ("Timeouts are ignored.")]
+		public static string Replace (
+			string input, string pattern, MatchEvaluator evaluator, RegexOptions options,
+			TimeSpan matchTimeout)
+		{
+			return Replace (input, pattern, evaluator, options);
+		}
+		
+		[MonoTODO ("Timeouts are ignored.")]
+		public static string[] Split (
+			string input, string pattern, RegexOptions options, TimeSpan matchTimeout)
+		{
+			return Split (input, pattern, options);
+		}
+
+		public static readonly TimeSpan InfiniteMatchTimeout = TimeSpan.FromMilliseconds (-1);
+#endif
 
 		static void validate_options (RegexOptions options)
 		{
@@ -311,23 +370,12 @@ namespace System.Text.RegularExpressions {
 			return machineFactory;
 		}
 
-#if NET_2_0
-		protected
-#else
-		private
-#endif
-		Regex (SerializationInfo info, StreamingContext context) :
+		protected Regex (SerializationInfo info, StreamingContext context) :
 			this (info.GetString ("pattern"), 
 			      (RegexOptions) info.GetValue ("options", typeof (RegexOptions)))
 		{
 		}
 
-#if ONLY_1_1 && !TARGET_JVM
-		// fixes public API signature
-		~Regex ()
-		{
-		}
-#endif
 		// public instance properties
 		
 		public RegexOptions Options {
@@ -413,15 +461,15 @@ namespace System.Text.RegularExpressions {
 			return CreateMachine ().Scan (this, input, startat, input.Length);
 		}
 
-		public Match Match (string input, int startat, int length)
+		public Match Match (string input, int beginning, int length)
 		{
 			if (input == null)
 				throw new ArgumentNullException ("input");
-			if (startat < 0 || startat > input.Length)
-				throw new ArgumentOutOfRangeException ("startat");
-			if (length < 0 || length > input.Length - startat)
+			if (beginning < 0 || beginning > input.Length)
+				throw new ArgumentOutOfRangeException ("beginning");
+			if (length < 0 || length > input.Length - beginning)
 				throw new ArgumentOutOfRangeException ("length");
-			return CreateMachine ().Scan (this, input, startat, startat + length);
+			return CreateMachine ().Scan (this, input, beginning, beginning + length);
 		}
 
 		public MatchCollection Matches (string input)

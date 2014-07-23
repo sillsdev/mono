@@ -23,7 +23,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -34,6 +36,12 @@ using System.Xaml.Schema;
 using System.Xml;
 using System.Xml.Schema;
 using System.Xml.Serialization;
+
+[assembly: XmlnsDefinition ("http://www.domain.com/path", "XamlTest")] // bug #680385
+[assembly: XmlnsDefinition ("http://www.domain.com/path", "SecondTest")] // bug #681045, same xmlns key for different clrns.
+
+[assembly: XmlnsDefinition ("http://schemas.example.com/test", "XamarinBug3003")] // bug #3003
+[assembly: XmlnsPrefix ("http://schemas.example.com/test", "test")] // bug #3003
 
 namespace MonoTests.System.Xaml
 {
@@ -732,4 +740,566 @@ namespace MonoTests.System.Xaml
 	public class Attached : Attachable
 	{
 	}
+
+	public class Attached2
+	{
+		internal String Property { get; set; }
+	}
+	
+	public class AttachedWrapper3
+	{
+		public static void SetProperty (Attached2 a, string value)
+		{
+			a.Property = value;
+		}
+	}
+
+	public class EventStore
+	{
+		public bool Method1Invoked;
+
+		public event EventHandler<EventArgs> Event1;
+		public event Func<object> Event2;
+
+		public object Examine ()
+		{
+			if (Event1 != null)
+				Event1 (this, EventArgs.Empty);
+			if (Event2 != null)
+				return Event2 ();
+			else
+				return null;
+		}
+
+		public void Method1 ()
+		{
+			throw new Exception ();
+		}
+
+		public void Method1 (object o, EventArgs e)
+		{
+			Method1Invoked = true;
+		}
+
+		public object Method2 ()
+		{
+			return "foo";
+		}
+	}
+
+	public class EventStore2<TEventArgs> where TEventArgs : EventArgs
+	{
+		public bool Method1Invoked;
+
+		public event EventHandler<TEventArgs> Event1;
+		public event Func<object> Event2;
+
+		public object Examine ()
+		{
+			if (Event1 != null)
+				Event1 (this, default (TEventArgs));
+			if (Event2 != null)
+				return Event2 ();
+			else
+				return null;
+		}
+
+		public void Method1 ()
+		{
+			throw new Exception ();
+		}
+
+		public void Method1 (object o, EventArgs e)
+		{
+			throw new Exception ();
+		}
+
+		public void Method1 (object o, TEventArgs e)
+		{
+			Method1Invoked = true;
+		}
+
+		public object Method2 ()
+		{
+			return "foo";
+		}
+	}
+
+	public class AbstractContainer
+	{
+		public AbstractObject Value1 { get; set; }
+		public AbstractObject Value2 { get; set; }
+	}
+	
+	public abstract class AbstractObject
+	{
+		public abstract string Foo { get; set; }
+	}
+
+	public class DerivedObject : AbstractObject
+	{
+		public override string Foo { get; set; }
+	}
+
+	public class ReadOnlyPropertyContainer
+	{
+		string foo;
+		public string Foo {
+			get { return foo; }
+			set { foo = Bar = value; }
+		}
+		public string Bar { get; private set; }
+	}
+
+	public class EnumContainer
+	{
+		public EnumValueType EnumProperty { get; set; }
+	}
+
+	public enum EnumValueType
+	{
+		One,
+		Two,
+		Three,
+		Four
+	}
+
+	[ContentProperty ("ListOfItems")]
+	public class CollectionContentProperty
+	{
+		public IList<SimpleClass> ListOfItems { get; set; }
+
+		public CollectionContentProperty ()
+		{
+			this.ListOfItems = new List<SimpleClass> ();
+		}
+	}
+
+	[ContentProperty ("ListOfItems")]
+	public class CollectionContentPropertyX
+	{
+		public IList ListOfItems { get; set; }
+
+		public CollectionContentPropertyX ()
+		{
+			this.ListOfItems = new List<IEnumerable> ();
+		}
+	}
+
+	public class SimpleClass
+	{
+	}
+
+	public class NullableContainer
+	{
+		public int? TestProp { get; set; }
+	}
+
+	public class DirectListContainer // for such xml that directly contains items in <*.Items> element.
+	{
+		public IList<DirectListContent> Items { get; set; }
+
+		public DirectListContainer ()
+		{
+			this.Items = new List<DirectListContent> ();
+		}
+	}
+
+	public class DirectListContent
+	{
+		public string Value { get; set; }
+	}
+
+	public class DirectDictionaryContainer // for such xml that directly contains items in <*.Items> element.
+	{
+		public IDictionary<EnumValueType,int> Items { get; set; }
+
+		public DirectDictionaryContainer ()
+		{
+			this.Items = new Dictionary<EnumValueType,int> ();
+		}
+	}
 }
+
+namespace XamlTest
+{
+	public class Configurations : List<Configuration>
+	{
+		private Configuration active;
+		private bool isFrozen;
+
+		public Configuration Active {
+			get { return this.active; }
+			set {
+				if (this.isFrozen) {
+				throw new InvalidOperationException ("The 'Active' configuration can only be changed via modifying the source file (" + this.Source + ").");
+				}
+
+				this.active = value;
+			}
+		}
+
+		public string Source { get; private set; }
+	}
+
+	public class Configuration
+	{
+		public string Version { get; set; }
+
+		public string Path { get; set; }
+	}
+}
+
+// see bug #681480
+namespace SecondTest
+{
+	public class TypeOtherAssembly
+	{
+		[TypeConverter (typeof (NullableUintListConverter))]
+		public List<uint?> Values { get; set; }
+
+		public TypeOtherAssembly ()
+		{
+			this.Values = new List<uint?> ();
+		}
+	}
+
+	public class NullableUintListConverter : CustomTypeConverterBase
+	{
+		public override object ConvertFrom (System.ComponentModel.ITypeDescriptorContext context, System.Globalization.CultureInfo culture, object value)
+		{
+			string configValue = value as string;
+			if (string.IsNullOrWhiteSpace (configValue))
+				return null;
+
+			string delimiterStr = ", ";
+			char [] delimiters = delimiterStr.ToCharArray ();
+			string [] tokens = configValue.Split (delimiters, StringSplitOptions.RemoveEmptyEntries);
+
+			List<uint?> parsedList = new List<uint?> (tokens.Length);
+			foreach (string token in tokens)
+				parsedList.Add(uint.Parse(token));
+
+			return parsedList;
+		}
+
+		public override object ConvertTo (ITypeDescriptorContext context, CultureInfo culture, object value, Type destinationType)
+		{
+			var v = (List<uint?>) value;
+			return String.Join (", ", (from i in v select i.ToString ()).ToArray ());
+		}
+	}
+	
+	public class CustomTypeConverterBase : TypeConverter
+	{
+		public override bool CanConvertFrom (ITypeDescriptorContext context, Type sourceType)
+		{
+			if (sourceType == typeof (string))
+			{
+				return true;
+			}
+			return base.CanConvertFrom (context, sourceType);
+		}
+	}
+
+	#region bug #681202
+
+	[MarkupExtensionReturnType (typeof (object))]
+	public class ResourceExtension : MarkupExtension
+	{
+		[ConstructorArgument ("key")]
+		public object Key { get; set; }
+
+		public ResourceExtension (object key)
+		{
+			this.Key = key;
+		}
+
+		public override object ProvideValue (IServiceProvider serviceProvider)
+		{
+			IXamlSchemaContextProvider service = serviceProvider.GetService (typeof (IXamlSchemaContextProvider)) as IXamlSchemaContextProvider;
+			IAmbientProvider provider = serviceProvider.GetService (typeof (IAmbientProvider)) as IAmbientProvider;
+			Debug.Assert (provider != null, "The provider should not be null!");
+
+			XamlSchemaContext schemaContext = service.SchemaContext;
+			XamlType[] types = new XamlType [] { schemaContext.GetXamlType (typeof (ResourcesDict)) };
+
+			// ResourceDict is marked as Ambient, so the instance current being deserialized should be in this list.
+			List<AmbientPropertyValue> list = provider.GetAllAmbientValues (null, false, types) as List<AmbientPropertyValue>;
+			if (list.Count != 1)
+				throw new Exception ("expected ambient property count == 1 but " + list.Count);
+			for (int i = 0; i < list.Count; i++) {
+				AmbientPropertyValue value = list [i];
+				ResourcesDict dict = value.Value as ResourcesDict;
+
+				// For this example, we know that dict should not be null and that it is the only value in list.
+				object result = dict [this.Key];
+				return result;
+			}
+
+			return null;
+		}
+	}
+
+	[UsableDuringInitialization (true), Ambient]
+	public class ResourcesDict : Dictionary<object, object>
+	{
+	}
+
+	public class TestObject
+	{
+		public TestObject TestProperty { get; set; }
+	}
+
+	#endregion
+
+	public class ResourcesDict2 : Dictionary<object, object>
+	{
+	}
+
+	public class TestObject2
+	{
+		public string TestProperty { get; set; }
+	}
+
+	#region bug #683290
+	[ContentProperty ("Items")]
+	public class SimpleType
+	{
+		public IList<SimpleType> Items { get; set; }
+		
+		public IList<SimpleType> NonContentItems { get; set; }
+		
+		public string TestProperty { get; set; }
+		
+		public SimpleType ()
+		{
+			this.Items = new List<SimpleType> ();
+			this.NonContentItems=new List<SimpleType> ();
+		}
+	}
+	
+	public class ContentPropertyContainer : Dictionary<object, object>
+	{
+	}
+	#endregion
+}
+
+#region "xamarin bug #2927"
+namespace XamarinBug2927
+{
+	public class RootClass
+	{
+		public RootClass ()
+		{
+			Child = new MyChildClass ();
+		}
+		
+		public bool Invoked;
+		
+		public ChildClass Child { get; set; }
+	}
+
+	public class MyRootClass : RootClass
+	{
+		public void HandleMyEvent (object sender, EventArgs e)
+		{
+			Invoked = true;
+		}
+	}
+
+	public class RootClass2
+	{
+		public RootClass2 ()
+		{
+			Child = new MyChildClass ();
+		}
+		
+		public bool Invoked;
+		
+		public ChildClass Child { get; set; }
+		
+		public void HandleMyEvent (object sender, EventArgs e)
+		{
+			Invoked = true;
+		}
+	}
+
+	public class MyRootClass2 : RootClass2
+	{
+	}
+
+	public class ChildClass
+	{
+		public bool Invoked;
+		
+		public DescendantClass Descendant { get; set; }
+	}
+
+	public class MyChildClass : ChildClass
+	{
+		public MyChildClass ()
+		{
+			Descendant = new DescendantClass () { Value = "x" };
+		}
+	
+		public void HandleMyEvent (object sender, EventArgs e)
+		{
+			Invoked = true;
+		}
+	}
+
+	public class DescendantClass
+	{
+		public bool Invoked;
+		public event EventHandler DoWork;
+		public string Value { get; set; }
+	
+		public void Work ()
+		{
+			DoWork (this, EventArgs.Empty);
+		}
+	
+		public void HandleMyEvent (object sender, EventArgs e)
+		{
+			Invoked = true;
+		}
+	}
+}
+#endregion
+
+#region "xamarin bug 3003"
+
+namespace XamarinBug3003
+{
+	public static class TestContext
+	{
+		public static StringWriter Writer = new StringWriter ();
+		
+		public const string XmlInput = @"<Parent xmlns='http://schemas.example.com/test' Title='Parent Title'>
+	<Child Parent.AssociatedProperty='child 1' Title='Child Title 1'></Child>	
+	<Child Parent.AssociatedProperty='child 2' Title='Child Title 2'></Child>	
+</Parent>";
+		
+		// In bug #3003 repro, there is output "Item 'Child' inserted at index 'x'" , but I couldn't get it in the output either on .NET or Mono.
+		// On the other hand, in the standalone repro case they are in the output either in mono or in .NET. So I just stopped caring about that as it works as expected.
+		public const string ExpectedResult = @"
+Parent Constructed
+ISupportInitialize.BeginInit: Parent
+XamlObjectWriterSettings.AfterBeginInit: Parent
+XamlObjectWriterSettings.BeforeProperties: Parent
+XamlObjectWriterSettings.XamlSetValue: Parent Title, Member: Title
+Parent.Title_set: Parent
+Child Constructed
+ISupportInitialize.BeginInit: Child
+XamlObjectWriterSettings.AfterBeginInit: Child
+XamlObjectWriterSettings.BeforeProperties: Child
+XamlObjectWriterSettings.XamlSetValue: child 1, Member: AssociatedProperty
+Parent.SetAssociatedProperty: child 1
+XamlObjectWriterSettings.XamlSetValue: Child Title 1, Member: Title
+Child.Title_set: Child
+XamlObjectWriterSettings.AfterProperties: Child
+ISupportInitialize.EndInit: Child
+XamlObjectWriterSettings.AfterEndInit: Child
+Child Constructed
+ISupportInitialize.BeginInit: Child
+XamlObjectWriterSettings.AfterBeginInit: Child
+XamlObjectWriterSettings.BeforeProperties: Child
+XamlObjectWriterSettings.XamlSetValue: child 2, Member: AssociatedProperty
+Parent.SetAssociatedProperty: child 2
+XamlObjectWriterSettings.XamlSetValue: Child Title 2, Member: Title
+Child.Title_set: Child
+XamlObjectWriterSettings.AfterProperties: Child
+ISupportInitialize.EndInit: Child
+XamlObjectWriterSettings.AfterEndInit: Child
+XamlObjectWriterSettings.AfterProperties: Parent
+ISupportInitialize.EndInit: Parent
+XamlObjectWriterSettings.AfterEndInit: Parent
+Loaded Parent
+";
+	}
+
+	public class BaseItemCollection : Collection<BaseItem>
+	{
+		protected override void InsertItem (int index, BaseItem item)
+		{
+			base.InsertItem (index, item);
+			Console.WriteLine ("Item '{0}' inserted at index '{1}'", item, index);
+		}
+	}
+
+	public class BaseItem : ISupportInitialize
+	{
+		Dictionary<string, object> properties = new Dictionary<string, object> ();
+		
+		public Dictionary<string, object> Properties
+		{
+			get { return properties; }
+		}
+
+		string title;
+
+		public string Title
+		{
+			get { return title; }
+			set
+			{
+				title = value;
+				TestContext.Writer.WriteLine ("{0}.Title_set: {0}", this.GetType ().Name, value);
+			}
+		}
+
+		public BaseItem ()
+		{
+			TestContext.Writer.WriteLine ("{0} Constructed", this.GetType ().Name);
+		}
+
+
+		public void BeginInit ()
+		{
+			TestContext.Writer.WriteLine ("ISupportInitialize.BeginInit: {0}", this);
+		}
+
+		public void EndInit ()
+		{
+			TestContext.Writer.WriteLine ("ISupportInitialize.EndInit: {0}", this);
+		}
+
+		public override string ToString ()
+		{
+			return this.GetType ().Name.ToString ();
+		}
+	}
+
+	public class Child : BaseItem
+	{
+	}
+
+	[ContentProperty ("Children")]
+	public class Parent : BaseItem
+	{
+		BaseItemCollection children = new BaseItemCollection ();
+		
+		public BaseItemCollection Children
+		{
+			get { return children; }
+		}
+		
+		
+		public static string GetAssociatedProperty (Child child)
+		{
+			object value;
+			if (child.Properties.TryGetValue ("myassociatedproperty", out value)) return value as string;
+			return null;
+		}
+		
+		public static void SetAssociatedProperty (Child child, string value)
+		{
+			TestContext.Writer.WriteLine ("Parent.SetAssociatedProperty: {0}", value);
+			child.Properties ["myassociatedproperty"] = value;
+		}
+		
+	}
+}
+
+#endregion

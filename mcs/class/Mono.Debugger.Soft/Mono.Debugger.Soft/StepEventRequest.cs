@@ -14,11 +14,28 @@ namespace Mono.Debugger.Soft
 		Line = 1
 	}
 
+	/*
+	 * Filter which kinds of methods to skip during single stepping
+	 */
+	[Flags]
+	public enum StepFilter {
+		None = 0,
+		StaticCtor = 1,
+		/* Since protocol version 2.20 */
+		/* Methods which have the [DebuggerHidden] attribute */
+		/* Before protocol version 2.26, this includes [DebuggerStepThrough] as well */
+		DebuggerHidden = 2,
+		/* Since protocol version 2.26 */
+		/* Methods which have the [DebuggerStepThrough] attribute */
+		DebuggerStepThrough = 4,
+	}
+
 	public sealed class StepEventRequest : EventRequest {
 
 		ThreadMirror step_thread;
 		StepDepth depth;
 		StepSize size;
+		StepFilter filter;
 		
 		internal StepEventRequest (VirtualMachine vm, ThreadMirror thread) : base (vm, EventType.Step) {
 			if (thread == null)
@@ -31,7 +48,7 @@ namespace Mono.Debugger.Soft
 
 		public override void Enable () {
 			var mods = new List <Modifier> ();
-			mods.Add (new StepModifier () { Thread = step_thread.Id, Depth = (int)Depth, Size = (int)Size });
+			mods.Add (new StepModifier () { Thread = step_thread.Id, Depth = (int)Depth, Size = (int)Size, Filter = (int)Filter });
 			SendReq (mods);
 		}
 
@@ -58,6 +75,16 @@ namespace Mono.Debugger.Soft
 			set {
 				CheckDisabled ();
 				size = value;
+			}
+		}
+
+		public StepFilter Filter {
+			get {
+				return filter;
+			}
+			set {
+				CheckDisabled ();
+				filter = value;
 			}
 		}
 	}

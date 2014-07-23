@@ -29,7 +29,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-#if NET_2_0
 using System;
 using System.Collections.Generic;
 using System.Collections;
@@ -42,16 +41,21 @@ using System.Globalization;
 
 namespace System.Net.NetworkInformation {
 	public abstract class NetworkInterface {
+#if MONOTOUCH
+		internal const bool runningOnUnix = true;
+#else
 		static Version windowsVer51 = new Version (5, 1);
 		static internal readonly bool runningOnUnix = (Environment.OSVersion.Platform == PlatformID.Unix);
-		
+#endif	
 		protected NetworkInterface ()
 		{
 		}
 
-		[MonoTODO("Only works on Linux and Windows")]
 		public static NetworkInterface [] GetAllNetworkInterfaces ()
 		{
+#if MONOTOUCH
+			return MacOsNetworkInterface.ImplGetAllNetworkInterfaces ();
+#else
 			if (runningOnUnix) {
 				try {
 					if (Platform.IsMacOS)
@@ -68,6 +72,7 @@ namespace System.Net.NetworkInformation {
 					return Win32NetworkInterface2.ImplGetAllNetworkInterfaces ();
 				return new NetworkInterface [0];
 			}
+#endif
 		}
 
 		[MonoTODO("Always returns true")]
@@ -466,10 +471,11 @@ namespace System.Net.NetworkInformation {
 							MacOsStructs.sockaddr_in sockaddrin = (MacOsStructs.sockaddr_in) Marshal.PtrToStructure (addr.ifa_addr, typeof (MacOsStructs.sockaddr_in));
 							address = new IPAddress (sockaddrin.sin_addr);
 						} else if (sockaddr.sa_family == AF_LINK) {
-							MacOsStructs.sockaddr_dl sockaddrdl = (MacOsStructs.sockaddr_dl) Marshal.PtrToStructure (addr.ifa_addr, typeof (MacOsStructs.sockaddr_dl));
+							MacOsStructs.sockaddr_dl sockaddrdl = new MacOsStructs.sockaddr_dl ();
+							sockaddrdl.Read (addr.ifa_addr);
 
 							macAddress = new byte [(int) sockaddrdl.sdl_alen];
-							Array.Copy (sockaddrdl.sdl_data, sockaddrdl.sdl_nlen, macAddress, 0, Math.Min (macAddress.Length, sockaddrdl.sdl_data.Length - macAddress.Length));
+							Array.Copy (sockaddrdl.sdl_data, sockaddrdl.sdl_nlen, macAddress, 0, Math.Min (macAddress.Length, sockaddrdl.sdl_data.Length - sockaddrdl.sdl_nlen));
 							index = sockaddrdl.sdl_index;
 
 							int hwtype = (int) sockaddrdl.sdl_type;
@@ -712,5 +718,4 @@ namespace System.Net.NetworkInformation {
 		}
 	}
 }
-#endif
 

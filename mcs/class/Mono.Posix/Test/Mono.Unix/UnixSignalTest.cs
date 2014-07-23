@@ -15,6 +15,8 @@ using System.Threading;
 using Mono.Unix;
 using Mono.Unix.Native;
 
+namespace NUnit.Framework.SyntaxHelpers { class Dummy {} }
+
 namespace MonoTests.Mono.Unix {
 
 	[TestFixture]
@@ -326,6 +328,7 @@ namespace MonoTests.Mono.Unix {
 			UnixSignal b = new UnixSignal (Signum.SIGINT);
 
 			Stdlib.raise (Signum.SIGINT);
+			SleepUntilSignaled (a);
 
 			Assert.AreEqual (a.Count, 1);
 			Assert.AreEqual (b.Count, 1);
@@ -334,9 +337,19 @@ namespace MonoTests.Mono.Unix {
 			b.Reset ();
 
 			Stdlib.raise (Signum.SIGINT);
+			SleepUntilSignaled (b);
 			Assert.AreEqual (b.Count, 1);
 
 			b.Close ();
+		}
+
+		static void SleepUntilSignaled (UnixSignal s)
+		{
+			for (int i = 0; i < 10; ++i) {
+				if (s.Count > 0)
+					break;
+				Thread.Sleep (100);
+			}
 		}
 
 		[Test]
@@ -346,6 +359,7 @@ namespace MonoTests.Mono.Unix {
 			UnixSignal b = new UnixSignal (Signum.SIGINT);
 
 			Stdlib.raise (Signum.SIGINT);
+			SleepUntilSignaled (a);
 
 			Assert.AreEqual (a.Count, 1);
 			Assert.AreEqual (b.Count, 1);
@@ -354,6 +368,7 @@ namespace MonoTests.Mono.Unix {
 			a.Reset ();
 
 			Stdlib.raise (Signum.SIGINT);
+			SleepUntilSignaled (a);
 			Assert.AreEqual (a.Count, 1);
 
 			a.Close ();

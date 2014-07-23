@@ -76,13 +76,15 @@ namespace Microsoft.Build.Tasks {
 			if (outputResources == null) {
 				foreach (ITaskItem source in sources) {
 					string sourceFile = source.ItemSpec;
-					string outputFile = Path.ChangeExtension (sourceFile, "resources");
+					string outputFile = source.GetMetadata ("AutoGen").Equals ("true", StringComparison.OrdinalIgnoreCase) ?
+						source.ItemSpec.Replace ('\\', '.').Replace ('/', '.') :
+						Path.ChangeExtension (sourceFile, "resources");
 
 					if (IsResgenRequired (sourceFile, outputFile))
 						result &= CompileResourceFile (sourceFile, outputFile);
 
 					ITaskItem newItem = new TaskItem (source);
-					source.ItemSpec = outputFile;
+					newItem.ItemSpec = outputFile;
 
 					temporaryFilesWritten.Add (newItem);
 				}
@@ -186,7 +188,7 @@ namespace Microsoft.Build.Tasks {
 		private IResourceReader GetReader (Stream stream, string name)
 		{
 			string format = Path.GetExtension (name);
-			switch (format.ToLower ()) {
+			switch (format.ToLowerInvariant ()) {
 			case ".po":
 				return new PoResourceReader (stream);
 			case ".txt":
@@ -210,7 +212,7 @@ namespace Microsoft.Build.Tasks {
 		private IResourceWriter GetWriter (Stream stream, string name)
 		{
 			string format = Path.GetExtension (name);
-			switch (format.ToLower ()) {
+			switch (format.ToLowerInvariant ()) {
 			case ".po":
 				return new PoResourceWriter (stream);
 			case ".txt":
@@ -376,7 +378,9 @@ namespace Microsoft.Build.Tasks {
 
 		protected override string GenerateFullPathToTool ()
 		{
-			return Path.Combine (ToolPath, ToolExe);
+			if (!string.IsNullOrEmpty (ToolPath))
+				return Path.Combine (ToolPath, ToolExe);
+			return ToolLocationHelper.GetPathToDotNetFrameworkFile (ToolExe, TargetDotNetFrameworkVersion.VersionLatest);
 		}
 
 		protected override MessageImportance StandardOutputLoggingImportance {
@@ -384,7 +388,7 @@ namespace Microsoft.Build.Tasks {
 		}
 
 		protected override string ToolName {
-			get { return MSBuildUtils.RunningOnWindows ? "resgen2.bat" : "resgen2"; }
+			get { return "resgen.exe"; }
 		}
 
 		public string SourceFile { get; set; }

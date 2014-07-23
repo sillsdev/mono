@@ -1,4 +1,3 @@
-#if NET_4_0
 // AggregateExceptionTests.cs
 //
 // Copyright (c) 2008 Jérémie "Garuma" Laval
@@ -23,18 +22,19 @@
 //
 //
 
+#if NET_4_0
+
 using System;
 using System.Linq;
 using System.Threading;
 using System.Collections.Generic;
 
 using NUnit;
-using NUnit.Core;
 using NUnit.Framework;
 
 namespace MonoTests.System
 {
-	[TestFixture()]
+	[TestFixture]
 	public class AggregateExceptionTest
 	{
 		AggregateException e;
@@ -59,6 +59,7 @@ namespace MonoTests.System
 			Assert.AreEqual (1, ex.InnerExceptions.Count);
 			Assert.AreEqual (inner, ex.InnerExceptions[0]);
 			Assert.AreEqual (message, ex.InnerException.Message);
+			Assert.AreEqual (inner, ex.GetBaseException ());
 		}
 		
 		[TestAttribute]
@@ -81,6 +82,49 @@ namespace MonoTests.System
 		{
 			Throws (typeof (ArgumentNullException), () => new AggregateException ((IEnumerable<Exception>)null));
 			Throws (typeof (ArgumentNullException), () => new AggregateException ((Exception[])null));
+		}
+
+		[Test]
+		[ExpectedException (typeof (ArgumentNullException))]
+		public void Handle_Invalid ()
+		{
+			e.Handle (null);
+		}
+
+		[Test]
+		public void Handle_AllHandled ()
+		{
+			e.Handle (l => true);
+		}
+
+		[Test]
+		public void Handle_Unhandled ()
+		{
+			try {
+				e.Handle (l => l is AggregateException);
+				Assert.Fail ();
+			} catch (AggregateException e) {
+				Assert.AreEqual (1, e.InnerExceptions.Count);
+			}
+		}
+
+		[Test]
+		public void GetBaseWithInner ()
+		{
+			var ae = new AggregateException ("x", new [] { new ArgumentException (), new ArgumentNullException () });
+			Assert.AreEqual (ae, ae.GetBaseException (), "#1");
+
+			var expected = new ArgumentException ();
+			var ae2 = new AggregateException ("x", new AggregateException (expected, new Exception ()));
+			Assert.AreEqual (expected, ae2.GetBaseException ().InnerException, "#2");
+		}
+
+		[Test]
+		public void GetBaseException_stops_at_first_inner_exception_that_is_not_AggregateException()
+		{
+			var inner = new ArgumentNullException ();
+			var outer = new InvalidOperationException ("x", inner);
+			Assert.AreEqual (outer, new AggregateException (outer).GetBaseException ());
 		}
 
 		static void Throws (Type t, Action action)

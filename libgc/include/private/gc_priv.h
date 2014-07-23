@@ -403,9 +403,9 @@ void GC_print_callers GC_PROTO((struct callinfo info[NFRAMES]));
 #     define ENABLE_SIGNALS()
 #   else
 #     define DISABLE_SIGNALS() GC_disable_signals()
-	void GC_disable_signals();
+	void GC_disable_signals(void);
 #     define ENABLE_SIGNALS() GC_enable_signals()
-	void GC_enable_signals();
+	void GC_enable_signals(void);
 #   endif
 # endif
 
@@ -425,8 +425,8 @@ void GC_print_callers GC_PROTO((struct callinfo info[NFRAMES]));
 # else
 #   if defined(GC_SOLARIS_THREADS) || defined(GC_WIN32_THREADS) \
 	|| defined(GC_PTHREADS)
-      void GC_stop_world();
-      void GC_start_world();
+      void GC_stop_world(void);
+      void GC_start_world(void);
 #     define STOP_WORLD() GC_stop_world()
 #     define START_WORLD() GC_start_world()
 #   else
@@ -1688,6 +1688,9 @@ void GC_finalize GC_PROTO((void));
   			/* for processing by GC_invoke_finalizers.	*/
   			/* Invoked with lock.				*/
 
+void GC_process_togglerefs (void);
+	/*Process the togglerefs before GC starts */
+
 void GC_notify_or_invoke_finalizers GC_PROTO((void));
 			/* If GC_finalize_on_demand is not set, invoke	*/
 			/* eligible finalizers. Otherwise:		*/
@@ -1842,7 +1845,7 @@ void GC_dump GC_PROTO((void));
 #   ifdef __DMC__
       GC_API void GC_noop(...);
 #   else
-      GC_API void GC_noop();
+      GC_API void GC_noop(void*,...);
 #   endif
 # endif
 
@@ -1931,17 +1934,17 @@ void GC_err_puts GC_PROTO((GC_CONST char *s));
     /* GC_notify_all_builder() is called when GC_fl_builder_count	*/
     /* reaches 0.							*/
 
-     extern void GC_acquire_mark_lock();
-     extern void GC_release_mark_lock();
-     extern void GC_notify_all_builder();
+     extern void GC_acquire_mark_lock(void);
+     extern void GC_release_mark_lock(void);
+     extern void GC_notify_all_builder(void);
      /* extern void GC_wait_builder(); */
-     extern void GC_wait_for_reclaim();
+     extern void GC_wait_for_reclaim(void);
 
      extern word GC_fl_builder_count;	/* Protected by mark lock.	*/
 # endif /* PARALLEL_MARK || THREAD_LOCAL_ALLOC */
 # ifdef PARALLEL_MARK
-     extern void GC_notify_all_marker();
-     extern void GC_wait_marker();
+     extern void GC_notify_all_marker(void);
+     extern void GC_wait_marker(void);
      extern word GC_mark_no;		/* Protected by mark lock.	*/
 
      extern void GC_help_marker(word my_mark_no);

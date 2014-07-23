@@ -26,7 +26,6 @@
 // Copyright (C) 2005 Novell, Inc (http://www.novell.com)
 //
 
-#if NET_2_0
 using System.ComponentModel;
 
 namespace System.Configuration
@@ -83,7 +82,6 @@ namespace System.Configuration
 			get { return property.IsRequired; }
 		}
 		
-		[MonoTODO]
 		public int LineNumber {
 			get { return lineNumber; }
 			internal set { lineNumber = value; }
@@ -93,7 +91,6 @@ namespace System.Configuration
 			get { return property.Name; }
 		}
 		
-		[MonoTODO]
 		public string Source {
 			get { return source; }
 			internal set { source = value; }
@@ -171,4 +168,4 @@ namespace System.Configuration
 		}
 	}
 }
-#endif
+

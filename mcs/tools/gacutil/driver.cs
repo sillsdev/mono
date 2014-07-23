@@ -299,6 +299,14 @@ namespace Mono.Tools {
 			string full_path = Path.Combine (Path.Combine (gacdir, an.Name), version_token);
 			string asmb_file = Path.GetFileName (name);
 			string asmb_path = Path.Combine (full_path, asmb_file);
+			string asmb_name = assembly.GetName ().Name;
+			
+			if (Path.GetFileNameWithoutExtension (asmb_file) != asmb_name) {
+				WriteLine (string.Format (failure_msg, name) +
+				    string.Format ("the filename \"{0}\" doesn't match the assembly name \"{1}\"",
+				    	asmb_file, asmb_name));
+				return false;
+			}
 
 			try {
 				if (Directory.Exists (full_path)) {
@@ -344,7 +352,8 @@ namespace Mono.Tools {
 					Environment.Exit (1);
 				}
  				if (Path.DirectorySeparatorChar == '/') {
-					string pkg_path = "../gac/" + an.Name + "/" + version_token + "/" + asmb_file;
+					string pkg_path_abs = Path.Combine (gacdir, Path.Combine (an.Name, Path.Combine (version_token, asmb_file)));
+					string pkg_path = AbsoluteToRelativePath (ref_dir, pkg_path_abs);
  					symlink (pkg_path, ref_path);
 
 					foreach (string ext in siblings) {
@@ -375,6 +384,88 @@ namespace Mono.Tools {
 				gacdir);
 
 			return true;
+		}
+
+		//from MonoDevelop.Core.FileService
+		unsafe static string AbsoluteToRelativePath (string baseDirectoryPath, string absPath)
+		{
+			if (!Path.IsPathRooted (absPath) || string.IsNullOrEmpty (baseDirectoryPath))
+				return absPath;
+
+			absPath = Path.GetFullPath (absPath);
+			baseDirectoryPath = Path.GetFullPath (baseDirectoryPath).TrimEnd (Path.DirectorySeparatorChar);
+
+			fixed (char* bPtr = baseDirectoryPath, aPtr = absPath) {
+				var bEnd = bPtr + baseDirectoryPath.Length;
+				var aEnd = aPtr + absPath.Length;
+				char* lastStartA = aEnd;
+				char* lastStartB = bEnd;
+
+				int indx = 0;
+				// search common base path
+				var a = aPtr;
+				var b = bPtr;
+				while (a < aEnd) {
+					if (*a != *b)
+						break;
+					if (IsSeparator (*a)) {
+						indx++;
+						lastStartA = a + 1;
+						lastStartB = b;
+					}
+					a++;
+					b++;
+					if (b >= bEnd) {
+						if (a >= aEnd || IsSeparator (*a)) {
+							indx++;
+							lastStartA = a + 1;
+							lastStartB = b;
+						}
+						break;
+					}
+				}
+				if (indx == 0)
+					return absPath;
+
+				if (lastStartA >= aEnd)
+					return ".";
+
+				// handle case a: some/path b: some/path/deeper...
+				if (a >= aEnd) {
+					if (IsSeparator (*b)) {
+						lastStartA = a + 1;
+						lastStartB = b;
+					}
+				}
+
+				// look how many levels to go up into the base path
+				int goUpCount = 0;
+				while (lastStartB < bEnd) {
+					if (IsSeparator (*lastStartB))
+						goUpCount++;
+					lastStartB++;
+				}
+				var size = goUpCount * 2 + goUpCount + aEnd - lastStartA;
+				var result = new char [size];
+				fixed (char* rPtr = result) {
+					// go paths up
+					var r = rPtr;
+					for (int i = 0; i < goUpCount; i++) {
+						*(r++) = '.';
+						*(r++) = '.';
+						*(r++) = Path.DirectorySeparatorChar;
+					}
+					// copy the remaining absulute path
+					while (lastStartA < aEnd)
+						*(r++) = *(lastStartA++);
+				}
+				return new string (result);
+			}
+		}
+
+		static bool IsSeparator (char ch)
+		{
+			return ch == Path.DirectorySeparatorChar || ch == Path.AltDirectorySeparatorChar || ch == Path.VolumeSeparatorChar;
 		}
 
 		private static void Uninstall (string name, string package, string gacdir, string libdir, bool listMode, ref int uninstalled, ref int failures)
@@ -419,15 +510,29 @@ namespace Mono.Tools {
 					break;
 
 				string dir = directories [i];
+				string extension = null;
+
+				if (File.Exists (Path.Combine (dir, assembly_name + ".dll"))) {
+					extension = ".dll";
+				} else if (File.Exists (Path.Combine (dir, assembly_name + ".exe"))) {
+					extension = ".exe";
+				} else {
+					failures++;
+					WriteLine("Cannot find the assembly: " + assembly_name);
+					continue;
+				}
+
+				string assembly_filename = assembly_name + extension;
 
 				AssemblyName an = AssemblyName.GetAssemblyName (
-					Path.Combine (dir, assembly_name + ".dll"));
+					Path.Combine (dir, assembly_filename));
 				WriteLine ("Assembly: " + an.FullName);
 
 				Directory.Delete (dir, true);
 				if (package != null) {
 					string link_dir = Path.Combine (libdir, package);
-					string link = Path.Combine (link_dir, assembly_name + ".dll");
+					string link = Path.Combine (link_dir, assembly_filename);
+
 					try { 
 						File.Delete (link);
 					} catch {
@@ -723,7 +828,7 @@ namespace Mono.Tools {
 
 		private static bool IsSwitch (string arg)
 		{
-			return (arg [0] == '-' || (arg [0] == '/' && !arg.EndsWith(".dll") && arg.IndexOf('/', 1) < 0 ) );
+			return (arg [0] == '-' || (arg [0] == '/' && !arg.EndsWith (".dll") && !arg.EndsWith (".exe") && arg.IndexOf ('/', 1) < 0 ) );
 		}
 
 		private static Command GetCommand (string arg)

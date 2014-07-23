@@ -11,13 +11,13 @@ namespace testcase
 
 	public class Program
 	{
-		private static int Main ()
+		public static int Main ()
 		{
 			var t = typeof (Init);
 			var m = t.GetMethod ("testcase.IInitializationExpression.AddRegistry", BindingFlags.NonPublic | BindingFlags.Instance);
 			Console.WriteLine (m.Attributes);
 
-			if (m.Attributes != (MethodAttributes.PrivateScope | MethodAttributes.Virtual | MethodAttributes.HideBySig | MethodAttributes.VtableLayoutMask | MethodAttributes.CheckAccessOnOverride))
+			if (m.Attributes != (MethodAttributes.Private | MethodAttributes.Virtual | MethodAttributes.Final | MethodAttributes.HideBySig | MethodAttributes.VtableLayoutMask | MethodAttributes.CheckAccessOnOverride))
 				return 1;
 
 			IInitializationExpression expression = new Init ();

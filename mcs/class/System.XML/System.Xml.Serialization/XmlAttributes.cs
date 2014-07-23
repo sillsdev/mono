@@ -66,7 +66,8 @@ namespace System.Xml.Serialization
 			{
 				if(obj is XmlAnyAttributeAttribute)
 					xmlAnyAttribute = (XmlAnyAttributeAttribute) obj;
-				else if(obj is XmlAnyElementAttribute)
+				else
+				if(obj is XmlAnyElementAttribute)
 					xmlAnyElements.Add((XmlAnyElementAttribute) obj);
 				else if(obj is XmlArrayAttribute)
 					xmlArray = (XmlArrayAttribute) obj;
@@ -93,6 +94,22 @@ namespace System.Xml.Serialization
 				else if(obj is XmlTypeAttribute)
 					xmlType = (XmlTypeAttribute) obj;
 			}
+			
+			if (xmlIgnore) {
+				xmlAnyAttribute = null;
+				xmlAnyElements.Clear ();
+				xmlArray = null;
+				xmlArrayItems.Clear ();
+				xmlAttribute = null;
+				xmlChoiceIdentifier = null;
+				xmlDefaultValue = null;
+				xmlElements.Clear ();
+				xmlEnum = null;
+				xmlns = false;
+				xmlRoot = null;
+				xmlText = null;
+				xmlType = null;
+			}
 		}
 
 		#region public properties
@@ -107,6 +124,7 @@ namespace System.Xml.Serialization
 				xmlAnyAttribute = value;
 			}
 		}
+
 		public XmlAnyElementAttributes XmlAnyElements 
 		{
 			get 

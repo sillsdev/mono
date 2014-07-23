@@ -7,7 +7,8 @@
 // (c) 2007 Novell, Inc.
 //
 
-#if NET_2_0
+#if !MOBILE
+
 using System;
 using System.ComponentModel;
 using System.Globalization;
@@ -230,7 +231,7 @@ namespace MonoTests.System.ComponentModel
 		}
 
 		[Test]
-		[ExpectedException (typeof (IndexOutOfRangeException), "-1")]
+		[ExpectedException (typeof (IndexOutOfRangeException), ExpectedMessage = "-1")]
 		public void ItemTestExceptionNegative1 ()
 		{
 			MaskedTextProvider mtp;
@@ -240,7 +241,7 @@ namespace MonoTests.System.ComponentModel
 		}
 
 		[Test]
-		[ExpectedException (typeof (IndexOutOfRangeException), "4")]
+		[ExpectedException (typeof (IndexOutOfRangeException), ExpectedMessage = "4")]
 		public void ItemTestExceptionLength ()
 		{
 			MaskedTextProvider mtp;

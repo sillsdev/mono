@@ -3,6 +3,7 @@
 
 #include <mono/arch/amd64/amd64-codegen.h>
 #include <mono/utils/mono-sigcontext.h>
+#include <mono/utils/mono-context.h>
 #include <glib.h>
 
 #ifdef __native_client_codegen__
@@ -14,7 +15,15 @@
 /* image-writer.c doesn't happen                       */
 #define kNaClLengthOfCallImm kNaClAlignmentAMD64
 
-int is_nacl_call_reg_sequence(guint8* code);
+int is_nacl_call_reg_sequence (guint8* code);
+void amd64_nacl_clear_legacy_prefix_tag ();
+void amd64_nacl_tag_legacy_prefix (guint8* code);
+void amd64_nacl_tag_rex (guint8* code);
+guint8* amd64_nacl_get_legacy_prefix_tag ();
+guint8* amd64_nacl_get_rex_tag ();
+void amd64_nacl_instruction_pre ();
+void amd64_nacl_instruction_post (guint8 **start, guint8 **end);
+void amd64_nacl_membase_handler (guint8** code, gint8 basereg, gint32 offset, gint8 dreg);
 #endif
 
 #ifdef HOST_WIN32
@@ -38,7 +47,7 @@ struct sigcontext {
 	guint64 eip;
 };
 
-typedef void (* MonoW32ExceptionHandler) (int _dummy, EXCEPTION_RECORD *info, void *context);
+typedef void (* MonoW32ExceptionHandler) (int _dummy, EXCEPTION_POINTERS *info, void *context);
 void win32_seh_init(void);
 void win32_seh_cleanup(void);
 void win32_seh_set_handler(int type, MonoW32ExceptionHandler handler);
@@ -88,8 +97,6 @@ struct sigcontext {
 };
 #endif  // sun, Solaris x86
 
-#define MONO_ARCH_SUPPORT_SIMD_INTRINSICS 1
-
 #ifndef DISABLE_SIMD
 #define MONO_ARCH_SIMD_INTRINSICS 1
 #define MONO_ARCH_NEED_SIMD_BANK 1
@@ -98,7 +105,11 @@ struct sigcontext {
 
 
 
+#if defined(__APPLE__)
+#define MONO_ARCH_SIGNAL_STACK_SIZE MINSIGSTKSZ
+#else
 #define MONO_ARCH_SIGNAL_STACK_SIZE (16 * 1024)
+#endif
 
 #define MONO_ARCH_HAVE_RESTORE_STACK_SUPPORT 1
 
@@ -148,16 +159,17 @@ struct sigcontext {
 
 struct MonoLMF {
 	/* 
-	 * If the lowest bit is set to 1, then this LMF has the rip field set. Otherwise,
+	 * If the lowest bit is set, then this LMF has the rip field set. Otherwise,
 	 * the rip field is not set, and the rsp field points to the stack location where
 	 * the caller ip is saved.
-	 * If the second lowest bit is set to 1, then this is a MonoLMFExt structure, and
+	 * If the second lowest bit is set, then this is a MonoLMFExt structure, and
 	 * the other fields are not valid.
+	 * If the third lowest bit is set, then this is a MonoLMFTramp structure.
 	 */
 	gpointer    previous_lmf;
+#ifdef HOST_WIN32
 	gpointer    lmf_addr;
-	/* This is only set in trampoline LMF frames */
-	MonoMethod *method;
+#endif
 #if defined(__default_codegen__) || defined(HOST_WIN32)
 	guint64     rip;
 #elif defined(__native_client_codegen__)
@@ -178,8 +190,14 @@ struct MonoLMF {
 #endif
 };
 
+/* LMF structure used by the JIT trampolines */
+typedef struct {
+	struct MonoLMF lmf;
+	guint64 *regs;
+	gpointer lmf_addr;
+} MonoLMFTramp;
+
 typedef struct MonoCompileArch {
-	gint32 lmf_offset;
 	gint32 localloc_offset;
 	gint32 reg_save_area_offset;
 	gint32 stack_alloc_size;
@@ -191,32 +209,10 @@ typedef struct MonoCompileArch {
 #ifdef HOST_WIN32
 	gpointer	unwindinfo;
 #endif
+	gpointer seq_point_info_var;
 	gpointer ss_trigger_page_var;
+	gpointer lmf_var;
 } MonoCompileArch;
-
-typedef struct {
-	guint64 rax;
-	guint64 rbx;
-	guint64 rcx;
-	guint64 rdx;
-	guint64 rbp;
-	guint64 rsp;
-    guint64 rsi;
-	guint64 rdi;
-	guint64 rip;
-	guint64 r12;
-	guint64 r13;
-	guint64 r14;
-	guint64 r15;
-} MonoContext;
-
-#define MONO_CONTEXT_SET_IP(ctx,ip) do { (ctx)->rip = (guint64)(ip); } while (0); 
-#define MONO_CONTEXT_SET_BP(ctx,bp) do { (ctx)->rbp = (guint64)(bp); } while (0); 
-#define MONO_CONTEXT_SET_SP(ctx,esp) do { (ctx)->rsp = (guint64)(esp); } while (0); 
-
-#define MONO_CONTEXT_GET_IP(ctx) ((gpointer)((ctx)->rip))
-#define MONO_CONTEXT_GET_BP(ctx) ((gpointer)((ctx)->rbp))
-#define MONO_CONTEXT_GET_SP(ctx) ((gpointer)((ctx)->rsp))
 
 #define MONO_CONTEXT_SET_LLVM_EXC_REG(ctx, exc) do { (ctx)->rax = (gsize)exc; } while (0)
 
@@ -353,9 +349,8 @@ typedef struct {
 #define MONO_ARCH_HAVE_ATOMIC_EXCHANGE 1
 #define MONO_ARCH_HAVE_ATOMIC_CAS 1
 #define MONO_ARCH_HAVE_FULL_AOT_TRAMPOLINES 1
-#define MONO_ARCH_HAVE_FULL_AOT_TRAMPOLINES_2 1
 #define MONO_ARCH_HAVE_IMT 1
-#define MONO_ARCH_HAVE_TLS_GET 1
+#define MONO_ARCH_HAVE_TLS_GET (mono_amd64_have_tls_get ())
 #define MONO_ARCH_IMT_REG AMD64_R10
 #define MONO_ARCH_IMT_SCRATCH_REG AMD64_R11
 #define MONO_ARCH_VTABLE_REG MONO_AMD64_ARG_REG1
@@ -364,7 +359,7 @@ typedef struct {
  * used by the trampoline as a scratch register and hence might be
  * clobbered across method call boundaries.
  */
-#define MONO_ARCH_RGCTX_REG AMD64_R10
+#define MONO_ARCH_RGCTX_REG MONO_ARCH_IMT_REG
 #define MONO_ARCH_HAVE_CMOV_OPS 1
 #define MONO_ARCH_HAVE_NOTIFY_PENDING_EXC 1
 #define MONO_ARCH_HAVE_EXCEPTIONS_INIT 1
@@ -376,14 +371,11 @@ typedef struct {
 #if !defined(HOST_WIN32)
 #define MONO_ARCH_MONITOR_OBJECT_REG MONO_AMD64_ARG_REG1
 #endif
-#define MONO_ARCH_HAVE_STATIC_RGCTX_TRAMPOLINE 1
 #define MONO_ARCH_HAVE_GET_TRAMPOLINES 1
 
 #define MONO_ARCH_AOT_SUPPORTED 1
 #if !defined( HOST_WIN32 ) && !defined( __native_client__ )
 #define MONO_ARCH_SOFT_DEBUG_SUPPORTED 1
-#else
-#define DISABLE_DEBUGGER_AGENT 1
 #endif
 
 #if !defined(HOST_WIN32) || defined(__sun)
@@ -407,11 +399,16 @@ typedef struct {
 #define MONO_ARCH_HAVE_CARD_TABLE_WBARRIER 1
 #define MONO_ARCH_HAVE_SETUP_RESUME_FROM_SIGNAL_HANDLER_CTX 1
 #define MONO_ARCH_GC_MAPS_SUPPORTED 1
+#define MONO_ARCH_HAVE_CONTEXT_SET_INT_REG 1
+#define MONO_ARCH_HAVE_SETUP_ASYNC_CALLBACK 1
+#define MONO_ARCH_HAVE_CREATE_LLVM_NATIVE_THUNK 1
+#define MONO_ARCH_HAVE_OP_TAIL_CALL 1
+#define MONO_ARCH_HAVE_TRANSLATE_TLS_OFFSET 1
+#define MONO_ARCH_HAVE_DUMMY_INIT 1
 
-gboolean
-mono_amd64_tail_call_supported (MonoMethodSignature *caller_sig, MonoMethodSignature *callee_sig) MONO_INTERNAL;
-
-#define MONO_ARCH_USE_OP_TAIL_CALL(caller_sig, callee_sig) mono_amd64_tail_call_supported (caller_sig, callee_sig)
+#if defined(TARGET_OSX) || defined(__linux__)
+#define MONO_ARCH_HAVE_TLS_GET_REG 1
+#endif
 
 /* Used for optimization, not complete */
 #define MONO_ARCH_IS_OP_MEMBASE(opcode) ((opcode) == OP_X86_PUSH_MEMBASE)
@@ -447,8 +444,14 @@ mono_amd64_get_original_ip (void) MONO_INTERNAL;
 guint8*
 mono_amd64_emit_tls_get (guint8* code, int dreg, int tls_offset) MONO_INTERNAL;
 
+gboolean
+mono_amd64_have_tls_get (void) MONO_INTERNAL;
+
 GSList*
 mono_amd64_get_exception_trampolines (gboolean aot) MONO_INTERNAL;
+
+int
+mono_amd64_get_tls_gs_offset (void) MONO_LLVM_INTERNAL;
 
 typedef struct {
 	guint8 *address;

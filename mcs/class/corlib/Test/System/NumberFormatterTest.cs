@@ -2954,19 +2954,20 @@ namespace MonoTests.System
 		[Test]
 		public void TestNaNToString ()
 		{
-			Assert.AreEqual ("Infinity", Double.PositiveInfinity.ToString(), "#01");
-			Assert.AreEqual ("-Infinity", Double.NegativeInfinity.ToString(), "#02");
-			Assert.AreEqual ("NaN", Double.NaN.ToString(), "#03");
-			Assert.AreEqual ("Infinity", Single.PositiveInfinity.ToString(), "#04");
-			Assert.AreEqual ("-Infinity", Single.NegativeInfinity.ToString(), "#05");
-			Assert.AreEqual ("NaN", Single.NaN.ToString(), "#06");
+			var nfi = CultureInfo.CurrentCulture.NumberFormat;
+			Assert.AreEqual (nfi.PositiveInfinitySymbol, Double.PositiveInfinity.ToString(), "#01");
+			Assert.AreEqual (nfi.NegativeInfinitySymbol, Double.NegativeInfinity.ToString(), "#02");
+			Assert.AreEqual (nfi.NaNSymbol, Double.NaN.ToString(), "#03");
+			Assert.AreEqual (nfi.PositiveInfinitySymbol, Single.PositiveInfinity.ToString(), "#04");
+			Assert.AreEqual (nfi.NegativeInfinitySymbol, Single.NegativeInfinity.ToString(), "#05");
+			Assert.AreEqual (nfi.NaNSymbol, Single.NaN.ToString(), "#06");
 
-			Assert.AreEqual ("Infinity", Double.PositiveInfinity.ToString("R"), "#07");
-			Assert.AreEqual ("-Infinity", Double.NegativeInfinity.ToString("R"), "#08");
-			Assert.AreEqual ("NaN", Double.NaN.ToString("R"), "#09");
-			Assert.AreEqual ("Infinity", Single.PositiveInfinity.ToString("R"), "#10");
-			Assert.AreEqual ("-Infinity", Single.NegativeInfinity.ToString("R"), "#11");
-			Assert.AreEqual ("NaN", Single.NaN.ToString("R"), "#12");
+			Assert.AreEqual (nfi.PositiveInfinitySymbol, Double.PositiveInfinity.ToString("R"), "#07");
+			Assert.AreEqual (nfi.NegativeInfinitySymbol, Double.NegativeInfinity.ToString("R"), "#08");
+			Assert.AreEqual (nfi.NaNSymbol, Double.NaN.ToString("R"), "#09");
+			Assert.AreEqual (nfi.PositiveInfinitySymbol, Single.PositiveInfinity.ToString("R"), "#10");
+			Assert.AreEqual (nfi.NegativeInfinitySymbol, Single.NegativeInfinity.ToString("R"), "#11");
+			Assert.AreEqual (nfi.NaNSymbol, Single.NaN.ToString("R"), "#12");
 		}
 
 		[Test]
@@ -4365,6 +4366,16 @@ namespace MonoTests.System
 		public void Test17000 ()
 		{
 			Assert.AreEqual ("", 0.0.ToString ("X99", _nfi) , "#01");
+		}
+
+		[Test]
+		public void Test18000 ()
+		{
+			string formatString = "p 00.0000\\';n 0000.00\\';0.#\\'";
+
+			Assert.AreEqual ("p 08.3266'", 8.32663472.ToString (formatString, CultureInfo.InvariantCulture), "#1");
+			Assert.AreEqual ("n 0001.13'", (-1.1345343).ToString (formatString, CultureInfo.InvariantCulture), "#2");
+			Assert.AreEqual ("0'", 0.0.ToString (formatString, CultureInfo.InvariantCulture), "#3");
 		}
 	}
 }

@@ -19,14 +19,14 @@ namespace Mono.CSharp {
 
 	public class Const : FieldBase
 	{
-		public const Modifiers AllowedModifiers =
+		const Modifiers AllowedModifiers =
 			Modifiers.NEW |
 			Modifiers.PUBLIC |
 			Modifiers.PROTECTED |
 			Modifiers.INTERNAL |
 			Modifiers.PRIVATE;
 
-		public Const (DeclSpace parent, FullNamedExpression type, Modifiers mod_flags, MemberName name, Attributes attrs)
+		public Const (TypeDefinition parent, FullNamedExpression type, Modifiers mod_flags, MemberName name, Attributes attrs)
 			: base (parent, type, mod_flags, AllowedModifiers, name, attrs)
 		{
 			ModFlags |= Modifiers.STATIC;
@@ -46,7 +46,7 @@ namespace Mono.CSharp {
 
 			FieldAttributes field_attr = FieldAttributes.Static | ModifiersExtensions.FieldAttr (ModFlags);
 			// Decimals cannot be emitted into the constant blob.  So, convert to 'readonly'.
-			if (member_type == TypeManager.decimal_type) {
+			if (member_type.BuiltinType == BuiltinTypeSpec.Type.Decimal) {
 				field_attr |= FieldAttributes.InitOnly;
 			} else {
 				field_attr |= FieldAttributes.Literal;
@@ -59,16 +59,16 @@ namespace Mono.CSharp {
 
 			if ((field_attr & FieldAttributes.InitOnly) != 0)
 				Parent.PartialContainer.RegisterFieldForInitialization (this,
-					new FieldInitializer (spec, initializer, this));
+					new FieldInitializer (this, initializer, Location));
 
 			if (declarators != null) {
 				var t = new TypeExpression (MemberType, TypeExpression.Location);
-				int index = Parent.PartialContainer.Constants.IndexOf (this);
 				foreach (var d in declarators) {
 					var c = new Const (Parent, t, ModFlags & ~Modifiers.STATIC, new MemberName (d.Name.Value, d.Name.Location), OptAttributes);
 					c.initializer = d.Initializer;
 					((ConstInitializer) c.initializer).Name = d.Name.Value;
-					Parent.PartialContainer.Constants.Insert (++index, c);
+					c.Define ();
+					Parent.PartialContainer.Members.Add (c);
 				}
 			}
 
@@ -87,7 +87,7 @@ namespace Mono.CSharp {
 		public override void Emit ()
 		{
 			var c = ((ConstSpec) spec).Value as Constant;
-			if (c.Type == TypeManager.decimal_type) {
+			if (c.Type.BuiltinType == BuiltinTypeSpec.Type.Decimal) {
 				Module.PredefinedAttributes.DecimalConstant.EmitAttribute (FieldBuilder, (decimal) c.GetValue (), c.Location);
 			} else {
 				FieldBuilder.SetConstant (c.GetValue ());
@@ -100,11 +100,16 @@ namespace Mono.CSharp {
 		{
 			if (t.IsGenericParameter) {
 				Report.Error (1959, loc,
-					"Type parameter `{0}' cannot be declared const", TypeManager.CSharpName (t));
+					"Type parameter `{0}' cannot be declared const", t.GetSignatureForError ());
 			} else {
 				Report.Error (283, loc,
-					"The type `{0}' cannot be declared const", TypeManager.CSharpName (t));
+					"The type `{0}' cannot be declared const", t.GetSignatureForError ());
 			}
+		}
+
+		public override void Accept (StructuralVisitor visitor)
+		{
+			visitor.Visit (this);
 		}
 	}
 
@@ -195,12 +200,12 @@ namespace Mono.CSharp {
 					c = field.ConvertInitializer (rc, c);
 
 				if (c == null) {
-					if (TypeManager.IsReferenceType (field.MemberType))
+					if (TypeSpec.IsReferenceType (field.MemberType))
 						Error_ConstantCanBeInitializedWithNullOnly (rc, field.MemberType, expr.Location, GetSignatureForError ());
 					else if (!(expr is Constant))
 						Error_ExpressionMustBeConstant (rc, expr.Location, GetSignatureForError ());
 					else
-						expr.Error_ValueCannotBeConverted (rc, expr.Location, field.MemberType, false);
+						expr.Error_ValueCannotBeConverted (rc, field.MemberType, false);
 				}
 
 				expr = c;
@@ -222,6 +227,11 @@ namespace Mono.CSharp {
 				return field.GetSignatureForError ();
 
 			return field.Parent.GetSignatureForError () + "." + Name;
+		}
+
+		public override object Accept (StructuralVisitor visitor)
+		{
+			return visitor.Visit (this);
 		}
 	}
 }

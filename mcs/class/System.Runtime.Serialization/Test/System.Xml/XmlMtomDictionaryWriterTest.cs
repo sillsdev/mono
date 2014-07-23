@@ -26,6 +26,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !MOBILE
+
 using System;
 using System.IO;
 using System.Text;
@@ -80,7 +82,7 @@ Content-Type: application/xop+xml;charset=utf-8;type=""sTaRt""
 &#xD;
 666</foo></root>
 --myboundary--
-<root/><root/><root/>".Replace ("\n", "\r\n").Replace ("&#xD;\r\n", "&#xD;\n");
+<root/><root/><root/>".Replace ("\n", "\r\n");
 	}
 
 	class MyStreamProvider : IStreamProvider
@@ -95,3 +97,5 @@ Content-Type: application/xop+xml;charset=utf-8;type=""sTaRt""
 		}
 	}
 }
+
+#endif

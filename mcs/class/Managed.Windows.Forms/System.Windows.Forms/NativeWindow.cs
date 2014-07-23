@@ -39,10 +39,7 @@ using System.Drawing;
 
 namespace System.Windows.Forms
 {
-	public class NativeWindow : MarshalByRefObject
-#if NET_2_0
-		, IWin32Window
-#endif
+	public class NativeWindow : MarshalByRefObject, IWin32Window
 	{
 		IntPtr window_handle = IntPtr.Zero;
 		static Hashtable window_collection = new Hashtable();
@@ -266,13 +263,13 @@ namespace System.Windows.Forms
 						// Replace control with a red cross
 						var control = ((Control.ControlNativeWindow)window).Owner;
 						control.Hide ();
-						var redCross = new Control(control.Parent, string.Empty);
+						var redCross = new Control (control.Parent, string.Empty);
 						redCross.BackColor = Color.White;
 						redCross.ForeColor = Color.Red;
 						redCross.Bounds = control.Bounds;
 						redCross.Paint += HandleRedCrossPaint;
 					}
-					window.OnThreadException (ex);
+ 					window.OnThreadException (ex);
 				}
 #else
 				throw;
@@ -301,8 +298,8 @@ namespace System.Windows.Forms
 				//e.Graphics.DrawRectangle (pen, paintRect);
 				e.Graphics.DrawLine (pen, paintRect.Location,
 					paintRect.Location + paintRect.Size);
-				e.Graphics.DrawLine (pen, new Point(paintRect.Left, paintRect.Bottom),
-					new Point(paintRect.Right, paintRect.Top));
+				e.Graphics.DrawLine (pen, new Point (paintRect.Left, paintRect.Bottom),
+					new Point (paintRect.Right, paintRect.Top));
 			}
 		}
 

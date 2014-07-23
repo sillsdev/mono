@@ -33,7 +33,12 @@ using System.Threading;
 
 namespace Mono.Security.Protocol.Tls
 {
-	public abstract class SslStreamBase: Stream, IDisposable
+#if INSIDE_SYSTEM
+	internal
+#else
+	public
+#endif
+	abstract class SslStreamBase: Stream, IDisposable
 	{
 		private delegate void AsyncHandshakeDelegate(InternalAsyncResult asyncResult, bool fromWrite);
 		
@@ -91,7 +96,7 @@ namespace Mono.Security.Protocol.Tls
 			{
 				try
 				{
-					this.OnNegotiateHandshakeCallback(asyncResult);
+					this.EndNegotiateHandshake(asyncResult);
 				}
 				catch (TlsException ex)
 				{
@@ -174,8 +179,8 @@ namespace Mono.Security.Protocol.Tls
 
 		#region Abstracts/Virtuals
 
-		internal abstract IAsyncResult OnBeginNegotiateHandshake(AsyncCallback callback, object state);
-		internal abstract void OnNegotiateHandshakeCallback(IAsyncResult asyncResult);
+		internal abstract IAsyncResult BeginNegotiateHandshake (AsyncCallback callback, object state);
+		internal abstract void EndNegotiateHandshake (IAsyncResult result);
 
 		internal abstract X509Certificate OnLocalCertificateSelection(X509CertificateCollection clientCertificates,
 															X509Certificate serverCertificate,
@@ -487,7 +492,7 @@ namespace Mono.Security.Protocol.Tls
 				{
 					if (this.context.HandshakeState == HandshakeState.None)
 					{
-						this.OnBeginNegotiateHandshake(new AsyncCallback(AsyncHandshakeCallback), asyncResult);
+						this.BeginNegotiateHandshake(new AsyncCallback(AsyncHandshakeCallback), asyncResult);
 
 						return true;
 					}

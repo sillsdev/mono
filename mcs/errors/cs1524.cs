@@ -1,4 +1,4 @@
-// cs1524.cs: Expected catch or finally
+// CS1524: Unexpected symbol `return', expecting `catch' or `finally'
 // Line: 12
 
 namespace Test {

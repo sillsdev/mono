@@ -5,6 +5,7 @@
 //	Sebastien Pouliot  <sebastien@ximian.com>
 //
 // Copyright (C) 2005 Novell, Inc (http://www.novell.com)
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -40,6 +41,7 @@ namespace MonoTests.System.Runtime.InteropServices {
 	public class RuntimeEnvironmentTest {
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		public void SystemConfigurationFile ()
 		{
 			string fname = RuntimeEnvironment.SystemConfigurationFile;
@@ -55,19 +57,14 @@ namespace MonoTests.System.Runtime.InteropServices {
 		}
 
 		[Test]
-#if NET_2_1
+#if MOBILE
 		[Ignore ("There's no GAC for the NET_2_1 based profiles (Moonlight, MonoTouch and Mono for Android")]
 #endif
 		public void FromGlobalAccessCache ()
 		{
 			Assembly corlib = typeof (int).Assembly;
-#if NET_2_0
 			// FIXME: This doesn't work when doing make distcheck (probably because the corlib used isn't the GAC)
 //			Assert.IsTrue (RuntimeEnvironment.FromGlobalAccessCache (corlib), "corlib");
-#else
-			// note: mscorlib.dll wasn't in the GAC for 1.x
-			Assert.IsFalse (RuntimeEnvironment.FromGlobalAccessCache (corlib), "corlib");
-#endif
 			Assembly corlib_test = Assembly.GetExecutingAssembly ();
 			Assert.IsFalse (RuntimeEnvironment.FromGlobalAccessCache (corlib_test), "corlib_test");
 		}

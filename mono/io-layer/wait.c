@@ -15,10 +15,15 @@
 #include <mono/io-layer/wapi.h>
 #include <mono/io-layer/handles-private.h>
 #include <mono/io-layer/wapi-private.h>
-#include <mono/io-layer/mono-mutex.h>
 #include <mono/io-layer/misc-private.h>
 
-#undef DEBUG
+#include <mono/utils/mono-mutex.h>
+
+#if 0
+#define DEBUG(...) g_message(__VA_ARGS__)
+#else
+#define DEBUG(...)
+#endif
 
 static gboolean own_if_signalled(gpointer handle)
 {
@@ -90,7 +95,7 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 	struct timespec abstime;
 	int thr_ret;
 	gboolean apc_pending = FALSE;
-	gpointer current_thread = _wapi_thread_handle_from_id (pthread_self ());
+	gpointer current_thread = wapi_get_current_thread_handle ();
 	
 	if (current_thread == NULL) {
 		SetLastError (ERROR_INVALID_HANDLE);
@@ -98,7 +103,7 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 	}
 
 	if (handle == _WAPI_THREAD_CURRENT) {
-		handle = _wapi_thread_handle_from_id (pthread_self ());
+		handle = wapi_get_current_thread_handle ();
 		if (handle == NULL) {
 			SetLastError (ERROR_INVALID_HANDLE);
 			return(WAIT_FAILED);
@@ -112,10 +117,8 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 	
 	if (_wapi_handle_test_capabilities (handle,
 					    WAPI_HANDLE_CAP_WAIT) == FALSE) {
-#ifdef DEBUG
-		g_message ("%s: handle %p can't be waited for", __func__,
+		DEBUG ("%s: handle %p can't be waited for", __func__,
 			   handle);
-#endif
 
 		return(WAIT_FAILED);
 	}
@@ -123,11 +126,9 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 	_wapi_handle_ops_prewait (handle);
 	
 	if (_wapi_handle_test_capabilities (handle, WAPI_HANDLE_CAP_SPECIAL_WAIT) == TRUE) {
-#ifdef DEBUG
-		g_message ("%s: handle %p has special wait", __func__, handle);
-#endif
+		DEBUG ("%s: handle %p has special wait", __func__, handle);
 
-		ret = _wapi_handle_ops_special_wait (handle, timeout);
+		ret = _wapi_handle_ops_special_wait (handle, timeout, alertable);
 	
 		if (alertable && _wapi_thread_apc_pending (current_thread)) {
 			apc_pending = TRUE;
@@ -138,22 +139,16 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 	}
 	
 	
-#ifdef DEBUG
-	g_message ("%s: locking handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: locking handle %p", __func__, handle);
 
-	pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle,
-			      handle);
 	thr_ret = _wapi_handle_lock_handle (handle);
 	g_assert (thr_ret == 0);
 
 	if (_wapi_handle_test_capabilities (handle,
 					    WAPI_HANDLE_CAP_OWN) == TRUE) {
 		if (own_if_owned (handle) == TRUE) {
-#ifdef DEBUG
-			g_message ("%s: handle %p already owned", __func__,
+			DEBUG ("%s: handle %p already owned", __func__,
 				   handle);
-#endif
 			ret = WAIT_OBJECT_0;
 			goto done;
 		}
@@ -166,10 +161,8 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 	}
 	
 	if (own_if_signalled (handle) == TRUE) {
-#ifdef DEBUG
-		g_message ("%s: handle %p already signalled", __func__,
+		DEBUG ("%s: handle %p already signalled", __func__,
 			   handle);
-#endif
 
 		ret=WAIT_OBJECT_0;
 		goto done;
@@ -190,10 +183,8 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 		_wapi_handle_ops_prewait (handle);
 
 		if (own_if_signalled (handle)) {
-#ifdef DEBUG
-			g_message ("%s: handle %p signalled", __func__,
+			DEBUG ("%s: handle %p signalled", __func__,
 				   handle);
-#endif
 
 			ret = WAIT_OBJECT_0;
 			goto done;
@@ -214,10 +205,8 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 			 * if someone else got in before us.)
 			 */
 			if (own_if_signalled (handle)) {
-#ifdef DEBUG
-				g_message ("%s: handle %p signalled", __func__,
+				DEBUG ("%s: handle %p signalled", __func__,
 					   handle);
-#endif
 
 				ret=WAIT_OBJECT_0;
 				goto done;
@@ -228,28 +217,21 @@ guint32 WaitForSingleObjectEx(gpointer handle, guint32 timeout,
 	} while(waited == 0 && !apc_pending);
 
 	/* Timeout or other error */
-#ifdef DEBUG
-	g_message ("%s: wait on handle %p error: %s", __func__, handle,
+	DEBUG ("%s: wait on handle %p error: %s", __func__, handle,
 		   strerror (waited));
-#endif
 
 	ret = WAIT_TIMEOUT;
 	
 done:
 
-#ifdef DEBUG
-	g_message ("%s: unlocking handle %p", __func__, handle);
-#endif
+	DEBUG ("%s: unlocking handle %p", __func__, handle);
 	
 	thr_ret = _wapi_handle_unlock_handle (handle);
 	g_assert (thr_ret == 0);
-	pthread_cleanup_pop (0);
 	
 check_pending:
-	if (apc_pending) {
-		_wapi_thread_dispatch_apc_queue (current_thread);
+	if (apc_pending)
 		ret = WAIT_IO_COMPLETION;
-	}
 		
 	return(ret);
 }
@@ -302,7 +284,7 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 	struct timespec abstime;
 	int thr_ret;
 	gboolean apc_pending = FALSE;
-	gpointer current_thread = _wapi_thread_handle_from_id (pthread_self ());
+	gpointer current_thread = wapi_get_current_thread_handle ();
 	
 	if (current_thread == NULL) {
 		SetLastError (ERROR_INVALID_HANDLE);
@@ -310,7 +292,7 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 	}
 
 	if (signal_handle == _WAPI_THREAD_CURRENT) {
-		signal_handle = _wapi_thread_handle_from_id (pthread_self ());
+		signal_handle = wapi_get_current_thread_handle ();
 		if (signal_handle == NULL) {
 			SetLastError (ERROR_INVALID_HANDLE);
 			return(WAIT_FAILED);
@@ -318,7 +300,7 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 	}
 
 	if (wait == _WAPI_THREAD_CURRENT) {
-		wait = _wapi_thread_handle_from_id (pthread_self ());
+		wait = wapi_get_current_thread_handle ();
 		if (wait == NULL) {
 			SetLastError (ERROR_INVALID_HANDLE);
 			return(WAIT_FAILED);
@@ -354,12 +336,8 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 		return (WAIT_FAILED);
 	}
 
-#ifdef DEBUG
-	g_message ("%s: locking handle %p", __func__, wait);
-#endif
+	DEBUG ("%s: locking handle %p", __func__, wait);
 
-	pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_handle,
-			      wait);
 	thr_ret = _wapi_handle_lock_handle (wait);
 	g_assert (thr_ret == 0);
 
@@ -367,10 +345,8 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 
 	if (_wapi_handle_test_capabilities (wait, WAPI_HANDLE_CAP_OWN)==TRUE) {
 		if (own_if_owned (wait)) {
-#ifdef DEBUG
-			g_message ("%s: handle %p already owned", __func__,
+			DEBUG ("%s: handle %p already owned", __func__,
 				   wait);
-#endif
 			ret = WAIT_OBJECT_0;
 			goto done;
 		}
@@ -383,9 +359,7 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 	}
 	
 	if (own_if_signalled (wait)) {
-#ifdef DEBUG
-		g_message ("%s: handle %p already signalled", __func__, wait);
-#endif
+		DEBUG ("%s: handle %p already signalled", __func__, wait);
 
 		ret = WAIT_OBJECT_0;
 		goto done;
@@ -402,9 +376,7 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 		_wapi_handle_ops_prewait (wait);
 	
 		if (own_if_signalled (wait)) {
-#ifdef DEBUG
-			g_message ("%s: handle %p signalled", __func__, wait);
-#endif
+			DEBUG ("%s: handle %p signalled", __func__, wait);
 
 			ret = WAIT_OBJECT_0;
 			goto done;
@@ -426,10 +398,8 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 			 * if someone else got in before us.)
 			 */
 			if (own_if_signalled (wait)) {
-#ifdef DEBUG
-				g_message ("%s: handle %p signalled", __func__,
+				DEBUG ("%s: handle %p signalled", __func__,
 					   wait);
-#endif
 
 				ret = WAIT_OBJECT_0;
 				goto done;
@@ -440,59 +410,33 @@ guint32 SignalObjectAndWait(gpointer signal_handle, gpointer wait,
 	} while(waited == 0 && !apc_pending);
 
 	/* Timeout or other error */
-#ifdef DEBUG
-	g_message ("%s: wait on handle %p error: %s", __func__, wait,
+	DEBUG ("%s: wait on handle %p error: %s", __func__, wait,
 		   strerror (ret));
-#endif
 
 	ret = WAIT_TIMEOUT;
 	
 done:
 
-#ifdef DEBUG
-	g_message ("%s: unlocking handle %p", __func__, wait);
-#endif
+	DEBUG ("%s: unlocking handle %p", __func__, wait);
 
 	thr_ret = _wapi_handle_unlock_handle (wait);
 	g_assert (thr_ret == 0);
-	pthread_cleanup_pop (0);
 
-	if (apc_pending) {
-		_wapi_thread_dispatch_apc_queue (current_thread);
+	if (apc_pending)
 		ret = WAIT_IO_COMPLETION;
-	}
 	
 	return(ret);
-}
-
-struct handle_cleanup_data
-{
-	guint32 numobjects;
-	gpointer *handles;
-};
-
-static void handle_cleanup (void *data)
-{
-	struct handle_cleanup_data *handles = (struct handle_cleanup_data *)data;
-
-	_wapi_handle_unlock_handles (handles->numobjects, handles->handles);
 }
 
 static gboolean test_and_own (guint32 numobjects, gpointer *handles,
 			      gboolean waitall, guint32 *count,
 			      guint32 *lowest)
 {
-	struct handle_cleanup_data cleanup_data;
 	gboolean done;
 	int i;
 	
-#ifdef DEBUG
-	g_message ("%s: locking handles", __func__);
-#endif
-	cleanup_data.numobjects = numobjects;
-	cleanup_data.handles = handles;
+	DEBUG ("%s: locking handles", __func__);
 	
-	pthread_cleanup_push (handle_cleanup, (void *)&cleanup_data);
 	done = _wapi_handle_count_signalled_handles (numobjects, handles,
 						     waitall, count, lowest);
 	if (done == TRUE) {
@@ -505,17 +449,12 @@ static gboolean test_and_own (guint32 numobjects, gpointer *handles,
 		}
 	}
 	
-#ifdef DEBUG
-	g_message ("%s: unlocking handles", __func__);
-#endif
+	DEBUG ("%s: unlocking handles", __func__);
 
-	/* calls the unlock function */
-	pthread_cleanup_pop (1);
+	_wapi_handle_unlock_handles (numobjects, handles);
 
 	return(done);
 }
-
-
 
 /**
  * WaitForMultipleObjectsEx:
@@ -551,16 +490,16 @@ guint32 WaitForMultipleObjectsEx(guint32 numobjects, gpointer *handles,
 				 gboolean waitall, guint32 timeout,
 				 gboolean alertable)
 {
-	GHashTable *dups;
 	gboolean duplicate = FALSE, bogustype = FALSE, done;
 	guint32 count, lowest;
 	struct timespec abstime;
 	guint i;
 	guint32 ret;
 	int thr_ret;
-	gpointer current_thread = _wapi_thread_handle_from_id (pthread_self ());
+	gpointer current_thread = wapi_get_current_thread_handle ();
 	guint32 retval;
 	gboolean poll;
+	gpointer sorted_handles [MAXIMUM_WAIT_OBJECTS];
 	
 	if (current_thread == NULL) {
 		SetLastError (ERROR_INVALID_HANDLE);
@@ -568,9 +507,7 @@ guint32 WaitForMultipleObjectsEx(guint32 numobjects, gpointer *handles,
 	}
 	
 	if (numobjects > MAXIMUM_WAIT_OBJECTS) {
-#ifdef DEBUG
-		g_message ("%s: Too many handles: %d", __func__, numobjects);
-#endif
+		DEBUG ("%s: Too many handles: %d", __func__, numobjects);
 
 		return(WAIT_FAILED);
 	}
@@ -580,17 +517,12 @@ guint32 WaitForMultipleObjectsEx(guint32 numobjects, gpointer *handles,
 	}
 
 	/* Check for duplicates */
-	dups = g_hash_table_new (g_direct_hash, g_direct_equal);
 	for (i = 0; i < numobjects; i++) {
-		gpointer exists;
-
 		if (handles[i] == _WAPI_THREAD_CURRENT) {
-			handles[i] = _wapi_thread_handle_from_id (pthread_self ());
+			handles[i] = wapi_get_current_thread_handle ();
 			
 			if (handles[i] == NULL) {
-#ifdef DEBUG
-				g_message ("%s: Handle %d bogus", __func__, i);
-#endif
+				DEBUG ("%s: Handle %d bogus", __func__, i);
 
 				bogustype = TRUE;
 				break;
@@ -598,53 +530,41 @@ guint32 WaitForMultipleObjectsEx(guint32 numobjects, gpointer *handles,
 		}
 
 		if ((GPOINTER_TO_UINT (handles[i]) & _WAPI_PROCESS_UNHANDLED) == _WAPI_PROCESS_UNHANDLED) {
-#ifdef DEBUG
-			g_message ("%s: Handle %d pseudo process", __func__,
+			DEBUG ("%s: Handle %d pseudo process", __func__,
 				   i);
-#endif
 
 			bogustype = TRUE;
-			break;
-		}
-		
-		exists = g_hash_table_lookup (dups, handles[i]);
-		if (exists != NULL) {
-#ifdef DEBUG
-			g_message ("%s: Handle %p duplicated", __func__,
-				   handles[i]);
-#endif
-
-			duplicate = TRUE;
 			break;
 		}
 
 		if (_wapi_handle_test_capabilities (handles[i], WAPI_HANDLE_CAP_WAIT) == FALSE) {
-#ifdef DEBUG
-			g_message ("%s: Handle %p can't be waited for",
+			DEBUG ("%s: Handle %p can't be waited for",
 				   __func__, handles[i]);
-#endif
 
 			bogustype = TRUE;
 			break;
 		}
 
-		g_hash_table_insert (dups, handles[i], handles[i]);
+		sorted_handles [i] = handles [i];
 		_wapi_handle_ops_prewait (handles[i]);
 	}
-	g_hash_table_destroy (dups);
+
+	qsort (sorted_handles, numobjects, sizeof (gpointer), g_direct_equal);
+	for (i = 1; i < numobjects; i++) {
+		if (sorted_handles [i - 1] == sorted_handles [i]) {
+			duplicate = TRUE;
+			break;
+		}
+	}
 
 	if (duplicate == TRUE) {
-#ifdef DEBUG
-		g_message ("%s: Returning due to duplicates", __func__);
-#endif
+		DEBUG ("%s: Returning due to duplicates", __func__);
 
 		return(WAIT_FAILED);
 	}
 
 	if (bogustype == TRUE) {
-#ifdef DEBUG
-		g_message ("%s: Returning due to bogus type", __func__);
-#endif
+		DEBUG ("%s: Returning due to bogus type", __func__);
 
 		return(WAIT_FAILED);
 	}
@@ -670,10 +590,8 @@ guint32 WaitForMultipleObjectsEx(guint32 numobjects, gpointer *handles,
 		_wapi_calc_timeout (&abstime, timeout);
 	}
 
-	if (alertable && _wapi_thread_apc_pending (current_thread)) {
-		_wapi_thread_dispatch_apc_queue (current_thread);
+	if (alertable && _wapi_thread_apc_pending (current_thread))
 		return WAIT_IO_COMPLETION;
-	}
 	
 	for (i = 0; i < numobjects; i++) {
 		/* Add a reference, as we need to ensure the handle wont
@@ -691,15 +609,12 @@ guint32 WaitForMultipleObjectsEx(guint32 numobjects, gpointer *handles,
 			_wapi_handle_ops_prewait (handles[i]);
 		
 			if (_wapi_handle_test_capabilities (handles[i], WAPI_HANDLE_CAP_SPECIAL_WAIT) == TRUE && _wapi_handle_issignalled (handles[i]) == FALSE) {
-				_wapi_handle_ops_special_wait (handles[i], 0);
+				_wapi_handle_ops_special_wait (handles[i], 0, alertable);
 			}
 		}
 		
-#ifdef DEBUG
-		g_message ("%s: locking signal mutex", __func__);
-#endif
+		DEBUG ("%s: locking signal mutex", __func__);
 
-		pthread_cleanup_push ((void(*)(void *))_wapi_handle_unlock_signal_mutex, NULL);
 		thr_ret = _wapi_handle_lock_signal_mutex ();
 		g_assert (thr_ret == 0);
 
@@ -728,16 +643,12 @@ guint32 WaitForMultipleObjectsEx(guint32 numobjects, gpointer *handles,
 			ret = 0;
 		}
 
-#ifdef DEBUG
-		g_message ("%s: unlocking signal mutex", __func__);
-#endif
+		DEBUG ("%s: unlocking signal mutex", __func__);
 
 		thr_ret = _wapi_handle_unlock_signal_mutex (NULL);
 		g_assert (thr_ret == 0);
-		pthread_cleanup_pop (0);
 		
 		if (alertable && _wapi_thread_apc_pending (current_thread)) {
-			_wapi_thread_dispatch_apc_queue (current_thread);
 			retval = WAIT_IO_COMPLETION;
 			break;
 		}
@@ -755,10 +666,8 @@ guint32 WaitForMultipleObjectsEx(guint32 numobjects, gpointer *handles,
 			/* Didn't get all handles, and there was a
 			 * timeout or other error
 			 */
-#ifdef DEBUG
-			g_message ("%s: wait returned error: %s", __func__,
+			DEBUG ("%s: wait returned error: %s", __func__,
 				   strerror (ret));
-#endif
 
 			if(ret==ETIMEDOUT) {
 				retval = WAIT_TIMEOUT;

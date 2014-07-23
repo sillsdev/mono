@@ -432,6 +432,7 @@ namespace MonoTests.System.Xml.TestClasses
 	public class ReadOnlyProperties
 	{
 		string[] strArr = new string[2] { "string1", "string2" };
+		List<string> strList = new List<string> { "listString1" };
 
 		public string[] StrArr
 		{
@@ -442,7 +443,20 @@ namespace MonoTests.System.Xml.TestClasses
 		{
 			get { return "fff"; }
 		}
+
+		public IList<string> StrList { get { return strList; } }
 	}
+
+	[Serializable]
+	public class ReadOnlyListProperty {
+		List<string> strList = new List<string> { "listString1", "listString2" };
+
+		public List<string> StrList
+		{
+			get { return strList; }
+		}
+	}
+
 
 	[XmlRoot ("root")]
 	public class ListDefaults
@@ -1031,6 +1045,77 @@ namespace MonoTests.System.Xml.TestClasses
 		
 		[XmlAttribute]
 		public string Child3;
+	}
+
+	[XmlRoot ("root")]
+	public class NullableDatesAndTimes {
+		[XmlElementAttribute ("MyTime", DataType = "time", IsNullable = false)]
+		public DateTime MyTime;
+			
+		[XmlElementAttribute ("MyTimeNullable", DataType = "time", IsNullable = true)]
+		public DateTime? MyTimeNullable;
+		
+		[XmlElementAttribute ("MyDate", DataType = "date", IsNullable = false)]
+		public DateTime MyDate;
+		
+		[XmlElementAttribute ("MyDateNullable", DataType = "date", IsNullable = true)]
+		public DateTime? MyDateNullable;
+	}
+
+	public class NotExactDateParseClass
+	{
+		[XmlElementAttribute (DataType = "date")]
+		public DateTime SomeDate;
+	}
+
+	public class Bug8468BaseClass
+	{
+		public string Base;
+	}
+
+	public class Bug8468MidClass: Bug8468BaseClass
+	{
+		public string Mid;
+	}
+
+	[XmlRoot("Test", Namespace="http://test-namespace")]
+	public class Bug8468Subclass: Bug8468MidClass
+	{
+	}
+
+	[XmlRoot("Test")]
+	public class Bug8468SubclassNoNamespace: Bug8468MidClass
+	{
+	}
+
+	[XmlRoot("Test", Namespace="")]
+	public class Bug8468BaseClassV2
+	{
+		public string Base;
+	}
+
+	public class Bug8468MidClassV2: Bug8468BaseClassV2
+	{
+		public string Mid;
+	}
+
+	[XmlRoot("Test", Namespace="http://test-namespace")]
+	public class Bug8468SubclassV2: Bug8468MidClassV2
+	{
+	}
+
+	[XmlRoot("Test")]
+	public class Bug8468SubclassNoNamespaceV2: Bug8468MidClassV2
+	{
+	}
+	
+	[XmlRoot("Test")]
+	public class Bug9193Class
+	{
+		[XmlElement ("Data", Order=0)]
+		public string[] Data;
+		[XmlElement ("Extra", Order=1)]
+		public string[] Extra;
 	}
 }
 

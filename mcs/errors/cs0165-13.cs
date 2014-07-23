@@ -1,11 +1,19 @@
-// cs0165-13.cs: Use of unassigned local variable `foo'
-// Line: 9
+// CS0165: Use of unassigned local variable `foo'
+// Line: 17
 
-struct Rectangle { int x; public int X { set { } } }
-public class Foo {
-  public static void Main (string[] args)
-  {
-    Rectangle foo;
-    foo.X = 5;
-  }
+struct Rectangle
+{
+	int x;
+	public int X {
+		set { }
+	}
+}
+
+public class Foo
+{
+	public static void Main ()
+	{
+		Rectangle foo;
+		foo.X = 5;
+	}
 }

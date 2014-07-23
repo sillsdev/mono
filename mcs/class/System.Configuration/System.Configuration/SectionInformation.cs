@@ -27,7 +27,6 @@
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
 //
 
-#if NET_2_0
 using System.Collections;
 using System.Xml;
 
@@ -45,7 +44,7 @@ namespace System.Configuration
 		bool require_permission;
 
 		string config_source = String.Empty;
-		bool force_update, is_declared, is_locked;
+		bool force_update;
 		string name, type_name;
 		string raw_xml;
 		
@@ -114,12 +113,12 @@ namespace System.Configuration
 
 		[MonoTODO]
 		public bool IsDeclared {
-			get { return is_declared; }
+			get { return false; }
 		}
 
 		[MonoTODO]
 		public bool IsLocked {
-			get { return is_locked; }
+			get { return false; }
 		}
 
 		public bool IsProtected {
@@ -214,4 +213,4 @@ namespace System.Configuration
 		}
 	}
 }
-#endif
+

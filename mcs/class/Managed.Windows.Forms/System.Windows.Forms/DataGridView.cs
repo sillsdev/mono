@@ -740,7 +740,7 @@ namespace System.Windows.Forms {
 					ClearBinding ();
 	
 	
-					// Do not set dataSource prior to te BindingContext check because there is some lazy initialization 
+					// Do not set dataSource prior to the BindingContext check because there is some lazy initialization 
 					// code which might result in double call to ReBind here and in OnBindingContextChanged
 					if (BindingContext != null) {
 						dataSource = value;
@@ -2240,10 +2240,20 @@ namespace System.Windows.Forms {
 			int new_width = 0;
 			
 			if (rowHeadersWidthSizeMode == DataGridViewRowHeadersWidthSizeMode.AutoSizeToDisplayedHeaders) {
-				foreach (DataGridViewRow row in Rows)
-					if (row.Displayed)
+				bool anyRowsDisplayed = false;
+				foreach(DataGridViewRow row in Rows)
+					if(row.Displayed) {
+						anyRowsDisplayed = true;
 						new_width = Math.Max (new_width, row.HeaderCell.PreferredSize.Width);
-						
+					}
+	
+			        // if there are no rows which are displayed, we still have to set new_width
+				// to a value >= 4 as RowHeadersWidth will throw an exception otherwise	
+				if(!anyRowsDisplayed) {
+					foreach (DataGridViewRow row in Rows)
+							new_width = Math.Max (new_width, row.HeaderCell.PreferredSize.Width);
+			        }		
+				
 				if (RowHeadersWidth != new_width)
 					RowHeadersWidth = new_width;
 					
@@ -2327,8 +2337,8 @@ namespace System.Windows.Forms {
 				
 				// Call some functions that allows the editing control to get setup
 				DataGridViewCellStyle style = cell.RowIndex == -1 ? DefaultCellStyle : cell.InheritedStyle;
-				
 				cell.InitializeEditingControl (cell.RowIndex, cell.FormattedValue, style);
+				OnEditingControlShowing (new DataGridViewEditingControlShowingEventArgs (EditingControlInternal, style));
 				cell.PositionEditingControl (true, true, this.GetCellDisplayRectangle (cell.ColumnIndex, cell.RowIndex, false), bounds, style, false, false, (columns [cell.ColumnIndex].DisplayIndex == 0), (cell.RowIndex == 0));
 
 				// Show the editing control
@@ -2498,7 +2508,8 @@ namespace System.Windows.Forms {
 			currentCell.SetIsInEditMode (false);
 			currentCell.DetachEditingControl ();
 			OnCellEndEdit (new DataGridViewCellEventArgs (currentCell.ColumnIndex, currentCell.RowIndex));
-			Focus ();
+			if (context != DataGridViewDataErrorContexts.LeaveControl)
+				Focus ();
 			if (currentCell.RowIndex == NewRowIndex) {
 				new_row_editing = false;
 				editing_row = null; // editing row becomes a real row
@@ -2557,16 +2568,16 @@ namespace System.Windows.Forms {
 			if (columnIndex >= 0)
 			{
 				List<DataGridViewColumn> cols = columns.ColumnDisplayIndexSortedArrayList;
-
+	
 				for (int i = first_col_index; i < cols.Count; i++) {
 					if (!cols[i].Visible)
 						continue;
-
+						
 					if (cols[i].Index == columnIndex) {
 						w = cols[i].Width;
 						break;
 					}
-
+	
 					x += cols[i].Width;
 				}
 			}
@@ -3380,6 +3391,8 @@ namespace System.Windows.Forms {
 
 		protected override void Dispose (bool disposing) {
 			if (disposing) {
+				ClearSelection();
+				currentCell = null;
 				foreach (DataGridViewColumn column in Columns)
 					column.Dispose();
 				Columns.Clear();
@@ -3995,6 +4008,10 @@ namespace System.Windows.Forms {
 
 		internal void OnColumnPreRemovedInternal (DataGridViewColumnEventArgs e)
 		{
+			// The removed column should be removed from the selection too.
+			if (selected_columns != null)
+				SetSelectedColumnCore (e.Column.Index, false);
+
 			if (Columns.Count - 1 == 0) {
 				MoveCurrentCell (-1, -1, true, false, false, true);
 				rows.ClearInternal ();
@@ -4225,6 +4242,7 @@ namespace System.Windows.Forms {
 
 		protected override void OnLeave (EventArgs e)
 		{
+			EndEdit (DataGridViewDataErrorContexts.LeaveControl);
 			base.OnLeave(e);
 		}
 
@@ -5078,17 +5096,17 @@ namespace System.Windows.Forms {
 			if (hover_cell != null && hover_cell.RowIndex >= e.RowIndex)
 				hover_cell = null;
 
-			if (VirtualMode) {
-				for (int i = 0; i < e.RowCount; i++)
-					UpdateRowHeightInfo (e.RowIndex + i, false);
-			}
-
 			// Select the first row if we are not databound. 
 			// If we are databound selection is managed by the data manager.
 			if (IsHandleCreated && DataManager == null && CurrentCell == null && Rows.Count > 0 && Columns.Count > 0)
 				MoveCurrentCell (ColumnDisplayIndexToIndex (0), 0, true, false, false, true);
 
 			AutoResizeColumnsInternal ();
+			if (VirtualMode) {
+				for (int i = 0; i < e.RowCount; i++)
+					UpdateRowHeightInfo (e.RowIndex + i, false);
+			}
+
 			Invalidate ();
 			OnRowsAdded (e);
 		}
@@ -5107,10 +5125,13 @@ namespace System.Windows.Forms {
 
 		internal void OnRowsPreRemovedInternal (DataGridViewRowsRemovedEventArgs e)
 		{
+			// All removed rows should be removed from the selection too.
 			if (selected_rows != null)
-				selected_rows.InternalClear ();
-			if (selected_columns != null)
-				selected_columns.InternalClear ();
+			{
+				int lastRowIndex = e.RowIndex + e.RowCount;
+				for (int rowIndex = e.RowIndex; rowIndex < lastRowIndex; ++rowIndex)
+					SetSelectedRowCore (rowIndex, false);
+			}
 
 			if (Rows.Count - e.RowCount <= 0) {
 				MoveCurrentCell (-1, -1, true, false, false, true);
@@ -5440,7 +5461,7 @@ namespace System.Windows.Forms {
 			DataGridViewCell cell = CurrentCell;
 			
 			if (cell != null) {
-				if (cell.KeyEntersEditMode (new KeyEventArgs ((Keys)m.WParam.ToInt32 ())))
+				if (cell.KeyEntersEditMode (new KeyEventArgs (((Keys)m.WParam.ToInt32 ()) | XplatUI.State.ModifierKeys)))
 					BeginEdit (true);
 				if (EditingControl != null && ((Msg)m.Msg == Msg.WM_KEYDOWN || (Msg)m.Msg == Msg.WM_CHAR))
 					XplatUI.SendMessage (EditingControl.Handle, (Msg)m.Msg, m.WParam, m.LParam);
@@ -5452,7 +5473,7 @@ namespace System.Windows.Forms {
 		protected override bool ProcessKeyPreview (ref Message m)
 		{
 			if ((Msg)m.Msg == Msg.WM_KEYDOWN && (IsCurrentCellInEditMode || m.HWnd == horizontalScrollBar.Handle || m.HWnd == verticalScrollBar.Handle)) {
-				KeyEventArgs e = new KeyEventArgs ((Keys)m.WParam.ToInt32 ());
+				KeyEventArgs e = new KeyEventArgs (((Keys)m.WParam.ToInt32 ()) | XplatUI.State.ModifierKeys);
 			
 				IDataGridViewEditingControl ctrl = (IDataGridViewEditingControl)EditingControlInternal;
 				
@@ -5746,12 +5767,18 @@ namespace System.Windows.Forms {
 			
 			if (selected_columns == null)
 				selected_columns = new DataGridViewSelectedColumnCollection ();
-			
+
+			bool selectionChanged = false;
 			if (!selected && selected_columns.Contains (col)) {
 				selected_columns.InternalRemove (col);
+				selectionChanged = true;
 			} else if (selected && !selected_columns.Contains (col)) {
 				selected_columns.InternalAdd (col);
+				selectionChanged = true;
 			}
+
+			if (selectionChanged)
+				OnSelectionChanged (EventArgs.Empty);
 
 			Invalidate();
 		}
@@ -5768,12 +5795,18 @@ namespace System.Windows.Forms {
 			
 			if (selected_rows == null)
 				selected_rows = new DataGridViewSelectedRowCollection (this);
-				
+
+			bool selectionChanged = false;
 			if (!selected && selected_rows.Contains (row)) {
 				selected_rows.InternalRemove (row);
+				selectionChanged = true;
 			} else if (selected && !selected_rows.Contains (row)) {
 				selected_rows.InternalAdd (row);
+				selectionChanged = true;
 			}
+
+			if (selectionChanged)
+				OnSelectionChanged (EventArgs.Empty);
 
 			Invalidate();
 		}
@@ -6303,7 +6336,7 @@ namespace System.Windows.Forms {
 				
 					horizontalScrollBar.SafeValueSet (horizontalScrollBar.Value - delta_x);
 					OnHScrollBarScroll (this, new ScrollEventArgs (ScrollEventType.ThumbPosition, horizontalScrollBar.Value));
-				} else if (disp_x > first_col_index + displayedColumnsCount - 1) {
+				} else if (disp_x > first_col_index + displayedColumnsCount - 1 && disp_x != 0) {
 					RefreshScrollBars ();
 					scrollbarsRefreshed = true;
 					
@@ -6337,7 +6370,7 @@ namespace System.Windows.Forms {
 
 					verticalScrollBar.SafeValueSet (verticalScrollBar.Value - delta_y);
 					OnVScrollBarScroll (this, new ScrollEventArgs (ScrollEventType.ThumbPosition, verticalScrollBar.Value));
-				} else if (disp_y > first_row_index + displayedRowsCount - 1) {
+				} else if (disp_y > first_row_index + displayedRowsCount - 1 && disp_y != 0) {
 					if (!scrollbarsRefreshed)
 						RefreshScrollBars ();
 

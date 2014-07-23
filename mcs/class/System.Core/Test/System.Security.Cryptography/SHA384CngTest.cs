@@ -8,6 +8,8 @@
 // Copyright (C) 2004, 2007-2008 Novell, Inc (http://www.novell.com)
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 using System;
 using System.Security.Cryptography;
@@ -26,7 +28,7 @@ namespace MonoTests.System.Security.Cryptography {
 	public class SHA384CngTest : SHA384Test {
 
 		[SetUp]
-		protected override void SetUp ()
+		public override void SetUp ()
 		{
 			hash = new SHA384Cng ();
 		}
@@ -74,3 +76,5 @@ namespace MonoTests.System.Security.Cryptography {
 		}
 	}
 }
+
+#endif

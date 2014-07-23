@@ -251,8 +251,13 @@ namespace System.Numerics {
 				sign = 1;
 
 			if (sign == 1) {
-				while (value [len - 1] == 0)
-					--len;
+				while (value [len - 1] == 0) {
+					if (--len == 0) {
+						sign = 0;
+						data = ZERO;
+						return;
+					}
+				}
 
 				int full_words, size;
 				full_words = size = len / 4;
@@ -319,7 +324,7 @@ namespace System.Numerics {
 		}
 
 		public bool IsEven {
-			get { return (data [0] & 0x1) == 0; }
+			get { return sign == 0 || (data [0] & 0x1) == 0; }
 		}		
 
 		public bool IsOne {
@@ -337,6 +342,81 @@ namespace System.Numerics {
 			x = x + (x >> 8);
 			x = x + (x >> 16);
 			return (int)(x & 0x0000003F);
+		}
+
+		//Based on code by Zilong Tan on Ulib released under MIT license
+		//Returns the number of bits set in @x
+		static int PopulationCount(ulong x)
+		{
+			x -= (x >> 1) & 0x5555555555555555UL;
+			x = (x & 0x3333333333333333UL) + ((x >> 2) & 0x3333333333333333UL);
+			x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0fUL;
+			return (int)((x * 0x0101010101010101UL) >> 56);
+		}
+
+		static int LeadingZeroCount(uint value)
+		{
+			value |= value >> 1;
+			value |= value >> 2;
+			value |= value >> 4;
+			value |= value >> 8;
+			value |= value >> 16;
+			return 32 - PopulationCount (value); // 32 = bits in uint
+		}
+
+		static int LeadingZeroCount(ulong value)
+		{
+			value |= value >> 1;
+			value |= value >> 2;
+			value |= value >> 4;
+			value |= value >> 8;
+			value |= value >> 16;
+			value |= value >> 32;
+			return 64 - PopulationCount (value); // 64 = bits in ulong
+		}
+
+		static double BuildDouble(int sign, ulong mantissa, int exponent)
+		{
+			const int exponentBias = 1023;
+			const int mantissaLength = 52;
+			const int exponentLength = 11;
+			const int maxExponent = 2046;
+			const long mantissaMask = 0xfffffffffffffL;
+			const long exponentMask = 0x7ffL;
+			const ulong negativeMark = 0x8000000000000000uL;
+			
+			if (sign == 0 || mantissa == 0) {
+				return 0.0;
+			} else {
+				exponent += exponentBias + mantissaLength;
+				int offset = LeadingZeroCount(mantissa) - exponentLength;
+				if (exponent - offset > maxExponent) {
+					return sign > 0 ? double.PositiveInfinity : double.NegativeInfinity;
+				} else {
+					if (offset < 0) {
+						mantissa >>= -offset;
+						exponent += -offset;
+					} else if (offset >= exponent) {
+						mantissa <<= exponent - 1;
+						exponent = 0;
+					} else {
+						mantissa <<= offset;
+						exponent -= offset;
+					}
+					mantissa = mantissa & mantissaMask;
+					if ((exponent & exponentMask) == exponent) {
+						unchecked {
+							ulong bits = mantissa | ((ulong)exponent << mantissaLength);
+							if (sign < 0) {
+								bits |= negativeMark;
+							}
+							return BitConverter.Int64BitsToDouble((long)bits);
+						}
+					} else {
+						return sign > 0 ? double.PositiveInfinity : double.NegativeInfinity;
+					}
+				}
+			}
 		}
 
 		public bool IsPowerOfTwo {
@@ -379,6 +459,8 @@ namespace System.Numerics {
 
 		public static explicit operator int (BigInteger value)
 		{
+			if (value.sign == 0)
+				return 0;
 			if (value.data.Length > 1)
 				throw new OverflowException ();
 			uint data = value.data [0];
@@ -399,6 +481,8 @@ namespace System.Numerics {
 		[CLSCompliantAttribute (false)]
 		public static explicit operator uint (BigInteger value)
 		{
+			if (value.sign == 0)
+				return 0;
 			if (value.data.Length > 1 || value.sign == -1)
 				throw new OverflowException ();
 			return value.data [0];
@@ -464,15 +548,27 @@ namespace System.Numerics {
 				return (((long)high) << 32) | low;
 			}
 
-			if (high > 0x80000000u)
-				throw new OverflowException ();
+			/*
+			We cannot represent negative numbers smaller than long.MinValue.
+			Those values are encoded into what look negative numbers, so negating
+			them produces a positive value, that's why it's safe to check for that
+			condition.
 
-			return - ((((long)high) << 32) | (long)low);
+			long.MinValue works fine since it's bigint encoding looks like a negative
+			number, but since long.MinValue == -long.MinValue, we're good.
+			*/
+
+			long result = - ((((long)high) << 32) | (long)low);
+			if (result > 0)
+				throw new OverflowException ();
+			return result;
 		}
 
 		[CLSCompliantAttribute (false)]
 		public static explicit operator ulong (BigInteger value)
 		{
+			if (value.sign == 0)
+				return 0;
 			if (value.data.Length > 2 || value.sign == -1)
 				throw new OverflowException ();
 
@@ -486,24 +582,31 @@ namespace System.Numerics {
 
 		public static explicit operator double (BigInteger value)
 		{
-			//FIXME
-			try {
-	            return double.Parse (value.ToString (),
-    	            System.Globalization.CultureInfo.InvariantCulture.NumberFormat);
-			} catch (OverflowException) {
-				return value.sign == -1 ? double.NegativeInfinity : double.PositiveInfinity;
+			switch (value.data.Length) {
+			case 0:
+				return 0.0;
+			case 1:
+				return BuildDouble (value.sign, value.data [0], 0);
+			case 2:
+				return BuildDouble (value.sign, (ulong)value.data [1] << 32 | (ulong)value.data [0], 0);
+			default:
+				var index = value.data.Length - 1;
+				var word = value.data [index];
+				var mantissa = ((ulong)word << 32) | value.data [index - 1];
+				int missing = LeadingZeroCount (word) - 11; // 11 = bits in exponent
+				if (missing > 0) {
+					// add the missing bits from the next word
+					mantissa = (mantissa << missing) | (value.data [index - 2] >> (32 - missing));
+				} else {
+					mantissa >>= -missing;
+				}
+				return BuildDouble (value.sign, mantissa, ((value.data.Length - 2) * 32) - missing);
 			}
-        }
+		}
 
 		public static explicit operator float (BigInteger value)
 		{
-			//FIXME
-			try {
-				return float.Parse (value.ToString (),
-				System.Globalization.CultureInfo.InvariantCulture.NumberFormat);
-			} catch (OverflowException) {
-				return value.sign == -1 ? float.NegativeInfinity : float.PositiveInfinity;
-			}
+			return (float)(double)value;
 		}
 
 		public static explicit operator decimal (BigInteger value)
@@ -736,6 +839,9 @@ namespace System.Numerics {
 
 		public static BigInteger operator++ (BigInteger value)
 		{
+			if (value.sign == 0)
+				return One;
+
 			short sign = value.sign;
 			uint[] data = value.data;
 			if (data.Length == 1) {
@@ -755,6 +861,9 @@ namespace System.Numerics {
 
 		public static BigInteger operator-- (BigInteger value)
 		{
+			if (value.sign == 0)
+				return MinusOne;
+
 			short sign = value.sign;
 			uint[] data = value.data;
 			if (data.Length == 1) {
@@ -1028,11 +1137,18 @@ namespace System.Numerics {
 			int bit_shift = shift & 0x1F;
 			int carry_shift = 32 - bit_shift;
 
-			for (int i = 0; i < data.Length; ++i) {
-				uint word = data [i];
-				res [i + idx_shift] |= word << bit_shift;
-				if (i + idx_shift + 1 < res.Length)
-					res [i + idx_shift + 1] = word >> carry_shift;
+			if (carry_shift == 32) {
+				for (int i = 0; i < data.Length; ++i) {
+					uint word = data [i];
+					res [i + idx_shift] |= word << bit_shift;
+				}
+			} else {
+				for (int i = 0; i < data.Length; ++i) {
+					uint word = data [i];
+					res [i + idx_shift] |= word << bit_shift;
+					if (i + idx_shift + 1 < res.Length)
+						res [i + idx_shift + 1] = word >> carry_shift;
+				}
 			}
 
 			return new BigInteger ((short)sign, res);
@@ -1066,13 +1182,23 @@ namespace System.Numerics {
 			uint[] res = new uint [size];
 			int carry_shift = 32 - bit_shift;
 
-			for (int i = data.Length - 1; i >= idx_shift; --i) {
-				uint word = data [i];
+			if (carry_shift == 32) {
+				for (int i = data.Length - 1; i >= idx_shift; --i) {
+					uint word = data [i];
 
-				if (i - idx_shift < res.Length)
-					res [i - idx_shift] |= word >> bit_shift;
-				if (i - idx_shift - 1 >= 0)
-					res [i - idx_shift - 1] = word << carry_shift;
+					if (i - idx_shift < res.Length)
+						res [i - idx_shift] |= word >> bit_shift;
+				}
+			} else {
+				for (int i = data.Length - 1; i >= idx_shift; --i) {
+					uint word = data [i];
+
+					if (i - idx_shift < res.Length)
+						res [i - idx_shift] |= word >> bit_shift;
+					if (i - idx_shift - 1 >= 0)
+						res [i - idx_shift - 1] = word << carry_shift;
+				}
+
 			}
 
 			//Round down instead of toward zero
@@ -1268,9 +1394,13 @@ namespace System.Numerics {
 		{
 			if (sign != other.sign)
 				return false;
-			if (data.Length != other.data.Length)
+
+			int alen = data != null ? data.Length : 0;
+			int blen = other.data != null ? other.data.Length : 0;
+
+			if (alen != blen)
 				return false;
-			for (int i = 0; i < data.Length; ++i) {
+			for (int i = 0; i < alen; ++i) {
 				if (data [i] != other.data [i])
 					return false;
 			}
@@ -1423,12 +1553,430 @@ namespace System.Numerics {
 				throw ex;
 			return result;
 		}
-
-
+		
 		public static bool TryParse (string value, out BigInteger result)
 		{
 			Exception ex;
 			return Parse (value, true, out result, out ex);
+		}
+
+		public static BigInteger Parse (string value, NumberStyles style)
+		{
+			return Parse (value, style, null);
+		}
+
+		public static BigInteger Parse (string value, IFormatProvider provider)
+		{
+			return Parse (value, NumberStyles.Integer, provider);
+		}
+
+		public static BigInteger Parse (
+			string value, NumberStyles style, IFormatProvider provider)
+		{
+			Exception exc;
+			BigInteger res;
+
+			if (!Parse (value, style, provider, false, out res, out exc))
+				throw exc;
+
+			return res;
+		}
+
+		public static bool TryParse (
+			string value, NumberStyles style, IFormatProvider provider,
+			out BigInteger result)
+		{
+			Exception exc;
+			if (!Parse (value, style, provider, true, out result, out exc)) {
+				result = Zero;
+				return false;
+			}
+
+			return true;
+		}
+
+		internal static bool Parse (string s, NumberStyles style, IFormatProvider fp, bool tryParse, out BigInteger result, out Exception exc)
+		{
+			result = Zero;
+			exc = null;
+
+			if (s == null) {
+				if (!tryParse)
+					exc = new ArgumentNullException ("s");
+				return false;
+			}
+
+			if (s.Length == 0) {
+				if (!tryParse)
+					exc = GetFormatException ();
+				return false;
+			}
+
+			NumberFormatInfo nfi = null;
+			if (fp != null) {
+				Type typeNFI = typeof(System.Globalization.NumberFormatInfo);
+				nfi = (NumberFormatInfo)fp.GetFormat (typeNFI);
+			}
+			if (nfi == null)
+				nfi = Thread.CurrentThread.CurrentCulture.NumberFormat;
+
+			if (!CheckStyle (style, tryParse, ref exc))
+				return false;
+
+			bool AllowCurrencySymbol = (style & NumberStyles.AllowCurrencySymbol) != 0;
+			bool AllowHexSpecifier = (style & NumberStyles.AllowHexSpecifier) != 0;
+			bool AllowThousands = (style & NumberStyles.AllowThousands) != 0;
+			bool AllowDecimalPoint = (style & NumberStyles.AllowDecimalPoint) != 0;
+			bool AllowParentheses = (style & NumberStyles.AllowParentheses) != 0;
+			bool AllowTrailingSign = (style & NumberStyles.AllowTrailingSign) != 0;
+			bool AllowLeadingSign = (style & NumberStyles.AllowLeadingSign) != 0;
+			bool AllowTrailingWhite = (style & NumberStyles.AllowTrailingWhite) != 0;
+			bool AllowLeadingWhite = (style & NumberStyles.AllowLeadingWhite) != 0;
+			bool AllowExponent = (style & NumberStyles.AllowExponent) != 0;
+
+			int pos = 0;
+
+			if (AllowLeadingWhite && !JumpOverWhite (ref pos, s, true, tryParse, ref exc))
+				return false;
+
+			bool foundOpenParentheses = false;
+			bool negative = false;
+			bool foundSign = false;
+			bool foundCurrency = false;
+
+			// Pre-number stuff
+			if (AllowParentheses && s [pos] == '(') {
+				foundOpenParentheses = true;
+				foundSign = true;
+				negative = true; // MS always make the number negative when there parentheses
+				// even when NumberFormatInfo.NumberNegativePattern != 0!!!
+				pos++;
+				if (AllowLeadingWhite && !JumpOverWhite (ref pos, s, true, tryParse, ref exc))
+					return false;
+
+				if (s.Substring (pos, nfi.NegativeSign.Length) == nfi.NegativeSign) {
+					if (!tryParse)
+						exc = GetFormatException ();
+					return false;
+				}
+				
+				if (s.Substring (pos, nfi.PositiveSign.Length) == nfi.PositiveSign) {
+					if (!tryParse)
+						exc = GetFormatException ();
+					return false;
+				}
+			}
+
+			if (AllowLeadingSign && !foundSign) {
+				// Sign + Currency
+				FindSign (ref pos, s, nfi, ref foundSign, ref negative);
+				if (foundSign) {
+					if (AllowLeadingWhite && !JumpOverWhite (ref pos, s, true, tryParse, ref exc))
+						return false;
+					if (AllowCurrencySymbol) {
+						FindCurrency (ref pos, s, nfi,
+							      ref foundCurrency);
+						if (foundCurrency && AllowLeadingWhite &&
+							!JumpOverWhite (ref pos, s, true, tryParse, ref exc))
+							return false;
+					}
+				}
+			}
+			
+			if (AllowCurrencySymbol && !foundCurrency) {
+				// Currency + sign
+				FindCurrency (ref pos, s, nfi, ref foundCurrency);
+				if (foundCurrency) {
+					if (AllowLeadingWhite && !JumpOverWhite (ref pos, s, true, tryParse, ref exc))
+						return false;
+					if (foundCurrency) {
+						if (!foundSign && AllowLeadingSign) {
+							FindSign (ref pos, s, nfi, ref foundSign,
+								  ref negative);
+							if (foundSign && AllowLeadingWhite &&
+								!JumpOverWhite (ref pos, s, true, tryParse, ref exc))
+								return false;
+						}
+					}
+				}
+			}
+
+			BigInteger number = Zero;
+			int nDigits = 0;
+			int decimalPointPos = -1;
+			byte digitValue;
+			char hexDigit;
+			bool firstHexDigit = true;
+
+			// Number stuff
+			while (pos < s.Length) {
+
+				if (!ValidDigit (s [pos], AllowHexSpecifier)) {
+					if (AllowThousands &&
+						(FindOther (ref pos, s, nfi.NumberGroupSeparator)
+						|| FindOther (ref pos, s, nfi.CurrencyGroupSeparator)))
+						continue;
+
+					if (AllowDecimalPoint && decimalPointPos < 0 &&
+						(FindOther (ref pos, s, nfi.NumberDecimalSeparator)
+						|| FindOther (ref pos, s, nfi.CurrencyDecimalSeparator))) {
+						decimalPointPos = nDigits;
+						continue;
+					}
+
+					break;
+				}
+
+				nDigits++;
+
+				if (AllowHexSpecifier) {
+					hexDigit = s [pos++];
+					if (Char.IsDigit (hexDigit))
+						digitValue = (byte)(hexDigit - '0');
+					else if (Char.IsLower (hexDigit))
+						digitValue = (byte)(hexDigit - 'a' + 10);
+					else
+						digitValue = (byte)(hexDigit - 'A' + 10);
+
+					if (firstHexDigit && (byte)digitValue >= 8)
+						negative = true;
+
+					number = number * 16 + digitValue;
+					firstHexDigit = false;
+					continue;
+				}
+
+				number = number * 10 + (byte)(s [pos++] - '0');
+			}
+
+			// Post number stuff
+			if (nDigits == 0) {
+				if (!tryParse)
+					exc = GetFormatException ();
+				return false;
+			}
+
+			//Signed hex value (Two's Complement)
+			if (AllowHexSpecifier && negative) {
+				BigInteger mask = BigInteger.Pow(16, nDigits) - 1;
+				number = (number ^ mask) + 1;
+			}
+
+			int exponent = 0;
+			if (AllowExponent)
+				if (FindExponent (ref pos, s, ref exponent, tryParse, ref exc) && exc != null)
+					return false;
+
+			if (AllowTrailingSign && !foundSign) {
+				// Sign + Currency
+				FindSign (ref pos, s, nfi, ref foundSign, ref negative);
+				if (foundSign && pos < s.Length) {
+					if (AllowTrailingWhite && !JumpOverWhite (ref pos, s, true, tryParse, ref exc))
+						return false;
+				}
+			}
+			
+			if (AllowCurrencySymbol && !foundCurrency) {
+				if (AllowTrailingWhite && pos < s.Length && !JumpOverWhite (ref pos, s, false, tryParse, ref exc))
+					return false;
+				
+				// Currency + sign
+				FindCurrency (ref pos, s, nfi, ref foundCurrency);
+				if (foundCurrency  && pos < s.Length) {
+					if (AllowTrailingWhite  && !JumpOverWhite (ref pos, s, true, tryParse, ref exc))
+						return false;
+					if (!foundSign && AllowTrailingSign)
+						FindSign (ref pos, s, nfi, ref foundSign,
+							  ref negative);
+				}
+			}
+			
+			if (AllowTrailingWhite && pos < s.Length && !JumpOverWhite (ref pos, s, false, tryParse, ref exc))
+				return false;
+
+			if (foundOpenParentheses) {
+				if (pos >= s.Length || s [pos++] != ')') {
+					if (!tryParse)
+						exc = GetFormatException ();
+					return false;
+				}
+				if (AllowTrailingWhite && pos < s.Length && !JumpOverWhite (ref pos, s, false, tryParse, ref exc))
+					return false;
+			}
+
+			if (pos < s.Length && s [pos] != '\u0000') {
+				if (!tryParse)
+					exc = GetFormatException ();
+				return false;
+			}
+
+			if (decimalPointPos >= 0)
+				exponent = exponent - nDigits + decimalPointPos;
+			
+			if (exponent < 0) {
+				//
+				// Any non-zero values after decimal point are not allowed
+				//
+				BigInteger remainder;
+				number = BigInteger.DivRem(number, BigInteger.Pow(10, -exponent), out remainder);
+
+				if (!remainder.IsZero) {
+					if (!tryParse)
+						exc = new OverflowException ("Value too large or too small. exp="+exponent+" rem = " + remainder + " pow = " + BigInteger.Pow(10, -exponent));
+					return false;
+				}
+			} else if (exponent > 0) {
+				number = BigInteger.Pow(10, exponent) * number;
+			}
+
+			if (number.sign == 0)
+				result = number;
+			else if (negative)
+				result = new BigInteger (-1, number.data);
+			else
+				result = new BigInteger (1, number.data);
+
+			return true;
+		}
+
+		internal static bool CheckStyle (NumberStyles style, bool tryParse, ref Exception exc)
+		{
+			if ((style & NumberStyles.AllowHexSpecifier) != 0) {
+				NumberStyles ne = style ^ NumberStyles.AllowHexSpecifier;
+				if ((ne & NumberStyles.AllowLeadingWhite) != 0)
+					ne ^= NumberStyles.AllowLeadingWhite;
+				if ((ne & NumberStyles.AllowTrailingWhite) != 0)
+					ne ^= NumberStyles.AllowTrailingWhite;
+				if (ne != 0) {
+					if (!tryParse)
+						exc = new ArgumentException (
+							"With AllowHexSpecifier only " + 
+							"AllowLeadingWhite and AllowTrailingWhite " + 
+							"are permitted.");
+					return false;
+				}
+			} else if ((uint) style > (uint) NumberStyles.Any){
+				if (!tryParse)
+					exc = new ArgumentException ("Not a valid number style");
+				return false;
+			}
+
+			return true;
+		}
+		
+		internal static bool JumpOverWhite (ref int pos, string s, bool reportError, bool tryParse, ref Exception exc)
+		{
+			while (pos < s.Length && Char.IsWhiteSpace (s [pos]))
+				pos++;
+
+			if (reportError && pos >= s.Length) {
+				if (!tryParse)
+					exc = GetFormatException ();
+				return false;
+			}
+
+			return true;
+		}
+
+		internal static void FindSign (ref int pos, string s, NumberFormatInfo nfi, 
+				      ref bool foundSign, ref bool negative)
+		{
+			if ((pos + nfi.NegativeSign.Length) <= s.Length &&
+			    string.CompareOrdinal(s, pos, nfi.NegativeSign, 0, nfi.NegativeSign.Length) == 0) {
+				negative = true;
+				foundSign = true;
+				pos += nfi.NegativeSign.Length;
+			} else if ((pos + nfi.PositiveSign.Length) <= s.Length &&
+			    string.CompareOrdinal(s, pos, nfi.PositiveSign, 0, nfi.PositiveSign.Length) == 0) {
+				negative = false;
+				pos += nfi.PositiveSign.Length;
+				foundSign = true;
+			} 
+		}
+
+		internal static void FindCurrency (ref int pos,
+						 string s, 
+						 NumberFormatInfo nfi,
+						 ref bool foundCurrency)
+		{
+			if ((pos + nfi.CurrencySymbol.Length) <= s.Length &&
+			     s.Substring (pos, nfi.CurrencySymbol.Length) == nfi.CurrencySymbol) {
+				foundCurrency = true;
+				pos += nfi.CurrencySymbol.Length;
+			} 
+		}
+
+		internal static bool FindExponent (ref int pos, string s, ref int exponent, bool tryParse, ref Exception exc)
+		{
+			exponent = 0;
+
+			if (pos >= s.Length || (s [pos] != 'e' && s[pos] != 'E')) {
+				exc = null;
+				return false;
+			}
+
+			var i = pos + 1;
+			if (i == s.Length) {
+				exc = tryParse ? null : GetFormatException ();
+				return true;
+			}
+
+			bool negative = false;
+			if (s [i] == '-') {
+				negative = true;
+				if(++i == s.Length){
+					exc = tryParse ? null : GetFormatException ();
+					return true;
+				}
+			}
+
+			if (s [i] == '+' && ++i == s.Length) {
+				exc = tryParse ? null : GetFormatException ();
+				return true;
+			}
+
+			long exp = 0; // temp long value
+			for (; i < s.Length; i++) {
+				if (!Char.IsDigit (s [i]))  {
+					exc = tryParse ? null : GetFormatException ();
+					return true;
+				}
+
+				// Reduce the risk of throwing an overflow exc
+				exp = checked (exp * 10 - (int) (s [i] - '0'));
+				if (exp < Int32.MinValue || exp > Int32.MaxValue) {
+					exc = tryParse ? null : new OverflowException ("Value too large or too small.");
+					return true;
+				}
+			}
+
+			// exp value saved as negative
+			if(!negative)
+				exp = -exp;
+
+			exc = null;
+			exponent = (int)exp;
+			pos = i;
+			return true;
+		}
+
+		internal static bool FindOther (ref int pos, string s, string other)
+		{
+			if ((pos + other.Length) <= s.Length &&
+			     s.Substring (pos, other.Length) == other) {
+				pos += other.Length;
+				return true;
+			} 
+
+			return false;
+		}
+
+		internal static bool ValidDigit (char e, bool allowHex)
+		{
+			if (allowHex)
+				return Char.IsDigit (e) || (e >= 'A' && e <= 'F') || (e >= 'a' && e <= 'f');
+
+			return Char.IsDigit (e);
 		}
 
 		static Exception GetFormatException ()
@@ -1653,14 +2201,14 @@ namespace System.Numerics {
 
 		public static BigInteger GreatestCommonDivisor (BigInteger left, BigInteger right)
 		{
-			if (left.data.Length == 1 && left.data [0] == 1)
+			if (left.sign != 0 && left.data.Length == 1 && left.data [0] == 1)
 				return new BigInteger (1, ONE);
-			if (right.data.Length == 1 && right.data [0] == 1)
+			if (right.sign != 0 && right.data.Length == 1 && right.data [0] == 1)
 				return new BigInteger (1, ONE);
 			if (left.IsZero)
-				return right;
+				return Abs(right);
 			if (right.IsZero)
-				return left;
+				return Abs(left);
 
 			BigInteger x = new BigInteger (1, left.data);
 			BigInteger y = new BigInteger (1, right.data);
@@ -1767,8 +2315,9 @@ namespace System.Numerics {
 		public override int GetHashCode ()
 		{
 			uint hash = (uint)(sign * 0x01010101u);
+			int len = data != null ? data.Length : 0;
 
-			for (int i = 0; i < data.Length; ++i)
+			for (int i = 0; i < len; ++i)
 				hash ^=	data [i];
 			return (int)hash;
 		}
@@ -2134,8 +2683,8 @@ namespace System.Numerics {
 
 		static int CoreCompare (uint[] a, uint[] b)
 		{
-			int	al = a.Length;
-			int bl = b.Length;
+			int al = a != null ? a.Length : 0;
+			int bl = b != null ? b.Length : 0;
 
 			if (al > bl)
 				return 1;

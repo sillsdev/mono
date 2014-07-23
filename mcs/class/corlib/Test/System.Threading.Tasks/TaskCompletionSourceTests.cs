@@ -31,6 +31,9 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
+#if !MOBILE
+using NUnit.Framework.SyntaxHelpers;
+#endif
 
 namespace MonoTests.System.Threading.Tasks
 {
@@ -111,7 +114,7 @@ namespace MonoTests.System.Threading.Tasks
 			Assert.IsNotNull (completionSource.Task, "#1");
 			Assert.IsTrue (completionSource.TrySetException (e), "#2");
 			Assert.AreEqual (TaskStatus.Faulted, completionSource.Task.Status, "#3");
-			Assert.IsInstanceOfType (typeof (AggregateException), completionSource.Task.Exception, "#4.1");
+			Assert.That (completionSource.Task.Exception, Is.TypeOf(typeof (AggregateException)), "#4.1");
 			
 			AggregateException aggr = (AggregateException)completionSource.Task.Exception;
 			Assert.AreEqual (1, aggr.InnerExceptions.Count, "#4.2");
@@ -195,6 +198,34 @@ namespace MonoTests.System.Threading.Tasks
 			Assert.AreEqual (TaskStatus.Faulted, f.Status);
 			Assert.AreEqual (thrown, f.Exception.InnerException);
 			Assert.AreEqual (thrown, ex.InnerException);
+		}
+
+		[Test]
+		[Ignore ("#4550, Mono GC is lame")]
+		public void SetExceptionAndUnobservedEvent ()
+		{
+			bool notFromMainThread = false;
+			var mre = new ManualResetEvent (false);
+			int mainThreadId = Thread.CurrentThread.ManagedThreadId;
+			TaskScheduler.UnobservedTaskException += (o, args) => {
+				notFromMainThread = Thread.CurrentThread.ManagedThreadId != mainThreadId;
+				args.SetObserved ();
+				mre.Set ();
+			};
+			var inner = new ApplicationException ();
+			CreateFaultedTaskCompletionSource (inner);
+			GC.Collect ();
+			GC.WaitForPendingFinalizers ();
+
+			Assert.IsTrue (mre.WaitOne (5000), "#1");
+			Assert.IsTrue (notFromMainThread, "#2");
+		}
+
+		void CreateFaultedTaskCompletionSource (Exception inner)
+		{
+			var tcs = new TaskCompletionSource<int> ();
+			tcs.SetException (inner);
+			tcs = null;
 		}
 
 		[Test]

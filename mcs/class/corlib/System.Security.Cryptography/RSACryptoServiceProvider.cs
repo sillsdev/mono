@@ -29,8 +29,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if !MOONLIGHT
-
 using System.IO;
 using System.Runtime.InteropServices;
 
@@ -41,6 +39,8 @@ namespace System.Security.Cryptography {
 	[ComVisible (true)]
 	public sealed class RSACryptoServiceProvider : RSA, ICspAsymmetricAlgorithm {
 		private const int PROV_RSA_FULL = 1;	// from WinCrypt.h
+		private const int AT_KEYEXCHANGE = 1;
+		private const int AT_SIGNATURE = 2;
 
 		private KeyPairPersistence store;
 		private bool persistKey;
@@ -52,6 +52,7 @@ namespace System.Security.Cryptography {
 		private RSAManaged rsa;
 	
 		public RSACryptoServiceProvider ()
+			: this (1024)
 		{
 			// Here it's not clear if we need to generate a keypair
 			// (note: MS implementation generates a keypair in this case).
@@ -61,29 +62,31 @@ namespace System.Security.Cryptography {
 			// So we'll generate the keypair only when (and if) it's being
 			// used (or exported). This should save us a lot of time (at 
 			// least in the unit tests).
-			Common (1024, null);
 		}
 	
 		public RSACryptoServiceProvider (CspParameters parameters) 
+			: this (1024, parameters)
 		{
-			Common (1024, parameters);
 			// no keypair generation done at this stage
 		}
 	
 		public RSACryptoServiceProvider (int dwKeySize) 
 		{
 			// Here it's clear that we need to generate a new keypair
-			Common (dwKeySize, null);
+			Common (dwKeySize, false);
 			// no keypair generation done at this stage
 		}
 	
 		public RSACryptoServiceProvider (int dwKeySize, CspParameters parameters) 
 		{
-			Common (dwKeySize, parameters);
+			bool has_parameters = parameters != null;
+			Common (dwKeySize, has_parameters);
+			if (has_parameters)
+				Common (parameters);
 			// no keypair generation done at this stage
 		}
 	
-		private void Common (int dwKeySize, CspParameters p) 
+		void Common (int dwKeySize, bool parameters) 
 		{
 			// Microsoft RSA CSP can do between 384 and 16384 bits keypair
 			LegalKeySizesValue = new KeySizes [1];
@@ -93,39 +96,38 @@ namespace System.Security.Cryptography {
 			rsa = new RSAManaged (KeySize);
 			rsa.KeyGenerated += new RSAManaged.KeyGeneratedEventHandler (OnKeyGenerated);
 
-			persistKey = (p != null);
-			if (p == null) {
-				p = new CspParameters (PROV_RSA_FULL);
-#if NET_1_1
-				if (useMachineKeyStore)
-					p.Flags |= CspProviderFlags.UseMachineKeyStore;
-#endif
-				store = new KeyPairPersistence (p);
-				// no need to load - it cannot exists
-			}
-			else {
-				store = new KeyPairPersistence (p);
-				bool exists = store.Load ();
-				bool required = (p.Flags & CspProviderFlags.UseExistingKey) != 0;
+			persistKey = parameters;
+			if (parameters)
+				return;
 
-				if (required && !exists)
-					throw new CryptographicException ("Keyset does not exist");
+			// no need to load - it cannot exists
+			var p = new CspParameters (PROV_RSA_FULL);
+			if (useMachineKeyStore)
+				p.Flags |= CspProviderFlags.UseMachineKeyStore;
+			store = new KeyPairPersistence (p);
+		}
 
-				if (store.KeyValue != null) {
-					persisted = true;
-					this.FromXmlString (store.KeyValue);
-				}
+		void Common (CspParameters p)
+		{
+			store = new KeyPairPersistence (p);
+			bool exists = store.Load ();
+			bool required = (p.Flags & CspProviderFlags.UseExistingKey) != 0;
+
+			if (required && !exists)
+				throw new CryptographicException ("Keyset does not exist");
+
+			if (store.KeyValue != null) {
+				persisted = true;
+				FromXmlString (store.KeyValue);
 			}
 		}
 
-#if NET_1_1
-		private static bool useMachineKeyStore = false;
+		private static bool useMachineKeyStore;
 
 		public static bool UseMachineKeyStore {
 			get { return useMachineKeyStore; }
 			set { useMachineKeyStore = value; }
 		}
-#endif
 	
 		~RSACryptoServiceProvider () 
 		{
@@ -166,10 +168,8 @@ namespace System.Security.Cryptography {
 	
 		public byte[] Decrypt (byte[] rgb, bool fOAEP) 
 		{
-#if NET_1_1
 			if (m_disposed)
 				throw new ObjectDisposedException ("rsa");
-#endif
 			// choose between OAEP or PKCS#1 v.1.5 padding
 			AsymmetricKeyExchangeDeformatter def = null;
 			if (fOAEP)
@@ -235,7 +235,7 @@ namespace System.Security.Cryptography {
 
 			HashAlgorithm hash = null;
 			if (halg is String)
-				hash = HashAlgorithm.Create ((String)halg);
+				hash = GetHashFromString ((string) halg);
 			else if (halg is HashAlgorithm)
 				hash = (HashAlgorithm) halg;
 			else if (halg is Type)
@@ -243,17 +243,32 @@ namespace System.Security.Cryptography {
 			else
 				throw new ArgumentException ("halg");
 
+			if (hash == null)
+				throw new ArgumentException (
+						"Could not find provider for halg='" + halg + "'.",
+						"halg");
+
 			return hash;
+		}
+
+		private HashAlgorithm GetHashFromString (string name)
+		{
+			HashAlgorithm hash = HashAlgorithm.Create (name);
+			if (hash != null)
+				return hash;
+			try {
+				return HashAlgorithm.Create (GetHashNameFromOID (name));
+			} catch (CryptographicException e) {
+				throw new ArgumentException (e.Message, "halg", e);
+			}
 		}
 	
 		// NOTE: this method can work with ANY configured (OID in machine.config) 
 		// HashAlgorithm descendant
 		public byte[] SignData (byte[] buffer, object halg) 
 		{
-#if NET_1_1
 			if (buffer == null)
 				throw new ArgumentNullException ("buffer");
-#endif
 			return SignData (buffer, 0, buffer.Length, halg);
 		}
 	
@@ -377,7 +392,7 @@ namespace System.Security.Cryptography {
 			// ALGID (bytes 4-7) - default is KEYX
 			// 00 24 00 00 (for CALG_RSA_SIGN)
 			// 00 A4 00 00 (for CALG_RSA_KEYX)
-			blob [5] = 0xA4;
+			blob [5] = (byte) (((store != null) && (store.Parameters.KeyNumber == AT_SIGNATURE)) ? 0x24 : 0xA4);
 			return blob;
 		}
 
@@ -405,9 +420,12 @@ namespace System.Security.Cryptography {
 					ImportParameters (rsap);
 				}
 			}
+
+			var p = new CspParameters (PROV_RSA_FULL);
+			p.KeyNumber = keyBlob [5] == 0x24 ? AT_SIGNATURE : AT_KEYEXCHANGE;
+			if (useMachineKeyStore)
+				p.Flags |= CspProviderFlags.UseMachineKeyStore;
+			store = new KeyPairPersistence (p);
 		}
 	}
 }
-
-#endif
-

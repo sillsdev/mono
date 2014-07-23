@@ -349,6 +349,7 @@ namespace MonoTests.System.Resources
 		// to test that we support all kind of Stream instances,
 		// and not only MemoryStream, as it used to be before 4.0.
 		[Test]
+		[Category ("MobileNotWorking")]
 		public void AddResource_Stream_Default ()
 		{
 			MemoryStream stream = new MemoryStream ();
@@ -360,7 +361,7 @@ namespace MonoTests.System.Resources
 			rw.AddResource ("Name", (object)stream);
 			rw.Close ();
 
-			ResourceReader rr = new ResourceReader ("TestResources.resources");
+			ResourceReader rr = new ResourceReader ("Test/resources/AddResource_Stream.resources");
 			IDictionaryEnumerator enumerator = rr.GetEnumerator ();
 
 			// Get the first element
@@ -582,8 +583,8 @@ namespace MonoTests.System.Resources
 		}
 #endif
 
-#if NET_2_0
 		[Test]
+		[Category ("MobileNotWorking")]
 		public void Bug81759 ()
 		{
 			MemoryStream ms = new MemoryStream ();
@@ -600,7 +601,6 @@ namespace MonoTests.System.Resources
 				Assert.AreEqual ("Size", de.Value.GetType ().Name, "#2");
 			}
 		}
-#endif
 
 		[Test]
 		public void Close ()
@@ -619,8 +619,7 @@ namespace MonoTests.System.Resources
 		[Test] // bug #339074
 		public void Close_NoResources ()
 		{
-			string tempFile = Path.Combine (AppDomain.CurrentDomain.BaseDirectory,
-				"test.resources");
+			string tempFile = Path.Combine (Path.GetTempPath (), "test.resources");
 
 			ResourceWriter writer = new ResourceWriter (tempFile);
 			writer.Close ();
@@ -632,6 +631,8 @@ namespace MonoTests.System.Resources
 					Assert.IsFalse (reader.GetEnumerator ().MoveNext (), "#2");
 				}
 			}
+
+			File.Delete (tempFile);
 		}
 
 		[Test]

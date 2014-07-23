@@ -324,6 +324,7 @@ namespace MonoTests.System.Linq {
 		}
 
 		[Test]
+		[Category ("NotWorkingInterpreter")]
 		public void UserExtensionMethod ()
 		{
 			BindingFlags extensionFlags = BindingFlags.Static | BindingFlags.Public;
@@ -422,7 +423,7 @@ namespace MonoTests.System.Linq {
 			IEnumerable bar = new Bar<int, string> ();
 			IQueryable queryable = bar.AsQueryable ();
 
-			Assert.IsInstanceOfType (typeof (IQueryable<string>), queryable);
+			Assert.IsTrue (queryable is IQueryable<string>);
 		}
 	}
 

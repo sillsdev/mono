@@ -32,7 +32,7 @@ using Compiler = Mono.CSharp;
 
 namespace Microsoft.CSharp.RuntimeBinder
 {
-	class RuntimeBinderContext : Compiler.IMemberContext
+	sealed class RuntimeBinderContext : Compiler.IMemberContext
 	{
 		readonly Compiler.ModuleContainer module;
 		readonly Type callingType;
@@ -70,19 +70,13 @@ namespace Microsoft.CSharp.RuntimeBinder
 			}
 		}
 
-		public Compiler.TypeParameter[] CurrentTypeParameters {
+		public Compiler.TypeParameters CurrentTypeParameters {
 			get { throw new NotImplementedException (); }
 		}
 
 		public Compiler.MemberCore CurrentMemberDefinition {
 			get {
 				return null;
-			}
-		}
-
-		public bool HasUnresolvedConstraints {
-			get {
-				return false;
 			}
 		}
 
@@ -117,13 +111,13 @@ namespace Microsoft.CSharp.RuntimeBinder
 			throw new NotImplementedException ();
 		}
 
-		public IList<Compiler.MethodSpec> LookupExtensionMethod (Compiler.TypeSpec extensionType, string name, int arity, ref Compiler.NamespaceEntry scope)
+		public Compiler.ExtensionMethodCandidates LookupExtensionMethod (Compiler.TypeSpec extensionType, string name, int arity)
 		{
 			// No extension method lookup in this context
 			return null;
 		}
 
-		public Compiler.FullNamedExpression LookupNamespaceOrType (string name, int arity, Mono.CSharp.Location loc, bool ignore_cs0104)
+		public Compiler.FullNamedExpression LookupNamespaceOrType (string name, int arity, Mono.CSharp.LookupMode mode, Mono.CSharp.Location loc)
 		{
 			throw new NotImplementedException ();
 		}
@@ -132,10 +126,6 @@ namespace Microsoft.CSharp.RuntimeBinder
 		{
 			// No namespace aliases in this context
 			return null;
-		}
-
-		public Compiler.CompilerContext Compiler {
-			get { return module.Compiler; }
 		}
 
 		#endregion

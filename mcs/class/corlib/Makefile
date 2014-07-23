@@ -8,8 +8,20 @@ LIBRARY_NAME = mscorlib.dll
 LIB_MCS_FLAGS = $(RESOURCE_FILES:%=-resource:%)
 LIBRARY_USE_INTERMEDIATE_FILE = yes
 
-ifeq (4.0, $(FRAMEWORK_VERSION))
+ifeq (basic, $(PROFILE))
+
+else
+
+ifeq (2, $(FRAMEWORK_VERSION_MAJOR))
+LIB_MCS_FLAGS += --runtime:v2
+else
+ifeq (4, $(FRAMEWORK_VERSION_MAJOR))
 LIB_MCS_FLAGS += --runtime:v4
+else
+$(error Unknown framework version)
+endif
+endif
+
 endif
 
 LIBRARY_COMPILE = $(BOOT_COMPILE)
@@ -28,10 +40,10 @@ LOCAL_MCS_FLAGS = -unsafe -nostdlib -nowarn:612,618 -d:INSIDE_CORLIB -d:LIBC
 DEFAULT_REFERENCES =
 
 # System.IO/DirectoryInfoTest.cs needs Mono.Posix
-TEST_MCS_FLAGS = -debug+ -debug:full -nowarn:168,219,618,672 -unsafe -r:$(topdir)/class/lib/$(PROFILE)/Mono.Posix.dll -define:MONO_DATACONVERTER_STATIC_METHODS
+TEST_MCS_FLAGS = -debug -nowarn:168,219,618,672 -unsafe -r:Mono.Posix.dll -r:System.Core.dll \
+				 -define:MONO_DATACONVERTER_STATIC_METHODS $(TEST_RESX_RESOURCES:%=-resource:%)
 
 EXTRA_DISTFILES = \
-	Test/ms_run_test.sh			\
 	Test/resources/MyResources.resources	\
 	Test/resources/MyResources.de.resources	\
 	Test/resources/Empty.resources		\
@@ -41,7 +53,18 @@ EXTRA_DISTFILES = \
 	Test/resources/bug81759.resources	\
 	Test/resources/415628.bin		\
 	Test/resources/Fergie.GED		\
-	$(RESOURCE_FILES)
+	Test/resources/culture-*.cs		\
+	$(RESOURCE_FILES) \
+	$(TEST_RESOURCES:.resources=.resx)
+
+TEST_RESX_RESOURCES = \
+	Test/resources/Resources.resources
+
+TEST_RESX_RESOURCES_SATELITE = \
+	Test/resources/Resources.es-ES.resources \
+	Test/resources/Resources.nn-NO.resources \
+
+CLEAN_FILES += $(TEST_RESX_RESOURCES)
 
 include $(topdir)/build/library.make
 
@@ -78,35 +101,60 @@ $(cmp_makefrag): $(cmp_response)
 $(cmp_response) $(cmp_makefrag): Makefile $(depsdir)/.stamp
 endif
 
-vts = VersionTolerantSerialization
-vtsdir = Test/System.Runtime.Serialization.Formatters.Binary/$(vts)
-test-vts:
-	$(MCS) -target:library \
-		$(vtsdir)/$(vts)TestLib/1.0/Address.cs
-	$(MCS) $(test_nunit_ref) \
-		-r:$(vtsdir)/$(vts)TestLib/1.0/Address.dll \
-		$(vtsdir)/BinarySerializationOverVersions.cs
-	cp $(vtsdir)/$(vts)TestLib/1.0/Address.dll $(vtsdir)
-	$(MCS) -target:library \
-		$(vtsdir)/$(vts)TestLib/2.0/Address.cs
-	$(MCS) -target:library \
-		$(vtsdir)/$(vts)TestLib/3.0/Address.cs
-	$(MCS) -target:library \
-		$(vtsdir)/$(vts)TestLib/4.0/Address.cs
-	$(MCS) -target:library \
-		$(vtsdir)/$(vts)TestLib/5.0/Address.cs
-	$(MCS) -target:library \
-		$(vtsdir)/$(vts)TestLib/6.0/Address.cs
+$(TEST_RESX_RESOURCES) $(TEST_RESX_RESOURCES_SATELITE): %.resources: %.resx
+	$(RESGEN) $< || cp $@.prebuilt $@
+
+TEST_RESOURCES = $(TEST_RESX_RESOURCES) $(TEST_RESX_RESOURCES_SATELITE)
+
+satellite_assembly1 = es-ES/$(patsubst %.dll,%.resources.dll,$(test_lib))
+satellite_assembly2 = nn-NO/$(patsubst %.dll,%.resources.dll,$(test_lib))
+
+$(test_lib): $(TEST_RESOURCES) $(satellite_assembly1) $(satellite_assembly2) 
+
+$(satellite_assembly1): Test/resources/culture-es-ES.cs Test/resources/Resources.es-ES.resources
+	@mkdir -p es-ES
+	$(CSCOMPILE) -target:library -r:$(corlib) Test/resources/culture-es-ES.cs -resource:Test/resources/Resources.es-ES.resources -out:$@
+
+$(satellite_assembly2): Test/resources/culture-nn-NO.cs Test/resources/Resources.nn-NO.resources
+	@mkdir -p nn-NO
+	$(CSCOMPILE) -target:library -r:$(corlib) Test/resources/culture-nn-NO.cs -resource:Test/resources/Resources.nn-NO.resources -out:$@
+
+vtsdir = Test/System.Runtime.Serialization.Formatters.Binary/VersionTolerantSerialization
+vtslibs = \
+	$(vtsdir)/$(PROFILE)_TestLib/1.0/Address.dll \
+	$(vtsdir)/$(PROFILE)_TestLib/2.0/Address.dll \
+	$(vtsdir)/$(PROFILE)_TestLib/3.0/Address.dll \
+	$(vtsdir)/$(PROFILE)_TestLib/4.0/Address.dll \
+	$(vtsdir)/$(PROFILE)_TestLib/5.0/Address.dll \
+	$(vtsdir)/$(PROFILE)_TestLib/6.0/Address.dll
+
+test-vts: $(vtslibs) $(vtsdir)/$(PROFILE)_TestLib/BinarySerializationOverVersions.exe
+
+$(vtsdir)/$(PROFILE)_TestLib/%/Address.dll: $(vtsdir)/VersionTolerantSerializationTestLib/%/Address.cs
+	@mkdir -p $(dir $@)
+	$(CSCOMPILE) -target:library -r:$(corlib) -warn:0 -out:$@ $^
+
+$(vtsdir)/$(PROFILE)_TestLib/BinarySerializationOverVersions.exe: $(vtsdir)/BinarySerializationOverVersions.cs $(vtsdir)/$(PROFILE)_TestLib/1.0/Address.dll
+	$(CSCOMPILE) $(test_nunit_ref) -warn:0 -r:$(corlib) \
+		-r:$(vtsdir)/$(PROFILE)_TestLib/1.0/Address.dll \
+		$(vtsdir)/BinarySerializationOverVersions.cs -out:$@
+	@cp $(vtsdir)/$(PROFILE)_TestLib/1.0/Address.dll $(vtsdir)/$(PROFILE)_TestLib
+
+# Need to define TEST_MONO_PATH to an absolute dir since the test is ran from a subdir
+TEST_MONO_PATH=$(PWD)/../lib/$(PROFILE)
+
 run-test-vts: test-vts
-	$(TEST_RUNTIME) $(RUNTIME_FLAGS) $(TEST_HARNESS) -noshadow \
-		$(vtsdir)/BinarySerializationOverVersions.exe 
+	@echo Running vts tests...
+	PATH="$(TEST_RUNTIME_WRAPPERS_PATH):$(PATH)" $(TEST_RUNTIME) $(RUNTIME_FLAGS) $(TEST_HARNESS) -noshadow \
+		$(vtsdir)/$(PROFILE)_TestLib/BinarySerializationOverVersions.exe
 test: test-vts
 run-test: run-test-vts
 
 EXTRA_DISTFILES += \
-	$(vtsdir)/$(vts)TestLib/1.0/Address.cs \
-	$(vtsdir)/$(vts)TestLib/2.0/Address.cs \
-	$(vtsdir)/$(vts)TestLib/3.0/Address.cs \
-	$(vtsdir)/$(vts)TestLib/4.0/Address.cs \
-	$(vtsdir)/$(vts)TestLib/5.0/Address.cs \
+	$(vtsdir)/VersionTolerantSerializationTestLib/1.0/Address.cs \
+	$(vtsdir)/VersionTolerantSerializationTestLib/2.0/Address.cs \
+	$(vtsdir)/VersionTolerantSerializationTestLib/3.0/Address.cs \
+	$(vtsdir)/VersionTolerantSerializationTestLib/4.0/Address.cs \
+	$(vtsdir)/VersionTolerantSerializationTestLib/5.0/Address.cs \
+	$(vtsdir)/VersionTolerantSerializationTestLib/6.0/Address.cs \
 	$(vtsdir)/BinarySerializationOverVersions.cs

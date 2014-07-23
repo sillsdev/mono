@@ -47,12 +47,11 @@ namespace System.Threading
 			currentContext = context;
 		}
 		
-		public static SynchronizationContext Current
-		{
+		public static SynchronizationContext Current {
 			get {
-#if NET_2_1
+#if MONODROID
 				if (currentContext == null)
-					currentContext = new SynchronizationContext ();
+					currentContext = AndroidPlatform.GetDefaultSyncContext ();
 #endif
 				return currentContext;
 			}
@@ -99,11 +98,9 @@ namespace System.Threading
 		}
 #endif
 
-		[MonoTODO]
 		protected void SetWaitNotificationRequired ()
 		{
 			notification_required = true;
-			throw new NotImplementedException ();
 		}
 
 		[CLSCompliant (false)]

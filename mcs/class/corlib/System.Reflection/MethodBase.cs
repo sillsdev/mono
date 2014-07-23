@@ -6,6 +6,7 @@
 //
 // (C) 2001 Ximian, Inc.  http://www.ximian.com
 // Copyright (C) 2004-2005 Novell, Inc (http://www.novell.com)
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -29,7 +30,9 @@
 
 using System.Diagnostics;
 using System.Globalization;
+#if !FULL_AOT_RUNTIME
 using System.Reflection.Emit;
+#endif
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -39,8 +42,11 @@ namespace System.Reflection {
 	[ComDefaultInterfaceAttribute (typeof (_MethodBase))]
 	[Serializable]
 	[ClassInterface(ClassInterfaceType.None)]
+#if MOBILE
+	public abstract class MethodBase: MemberInfo {
+#else
 	public abstract class MethodBase: MemberInfo, _MethodBase {
-
+#endif
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		public extern static MethodBase GetCurrentMethod ();
 
@@ -84,10 +90,22 @@ namespace System.Reflection {
 		//
 		// This is a quick version for our own use. We should override
 		// it where possible so that it does not allocate an array.
+		// They cannot be abstract otherwise we break public contract
 		//
-		internal virtual int GetParameterCount ()
+		internal virtual ParameterInfo[] GetParametersInternal ()
 		{
-			throw new NotImplementedException ("must be implemented");
+			// Override me
+			return GetParameters ();
+		}
+
+		internal virtual int GetParametersCount ()
+		{
+			// Override me
+			return GetParametersInternal ().Length;
+		}
+
+		internal virtual Type GetParameterType (int pos) {
+			throw new NotImplementedException ();
 		}
 
 		[DebuggerHidden]
@@ -176,6 +194,7 @@ namespace System.Reflection {
 		}
 
 		internal virtual int get_next_table_index (object obj, int table, bool inc) {
+#if !FULL_AOT_RUNTIME
 			if (this is MethodBuilder) {
 				MethodBuilder mb = (MethodBuilder)this;
 				return mb.get_next_table_index (obj, table, inc);
@@ -184,6 +203,7 @@ namespace System.Reflection {
 				ConstructorBuilder mb = (ConstructorBuilder)this;
 				return mb.get_next_table_index (obj, table, inc);
 			}
+#endif
 			throw new Exception ("Method is not a builder method");
 		}
 
@@ -222,7 +242,6 @@ namespace System.Reflection {
 			throw new NotSupportedException ();
 		}
 
-
 #if NET_4_0
 		public override bool Equals (object obj)
 		{
@@ -251,12 +270,43 @@ namespace System.Reflection {
 				return true;
 			return !left.Equals (right);
 		}
+		
+		public virtual bool IsSecurityCritical {
+			get {
+				throw new NotImplementedException ();
+			}
+		}
+		
+		public virtual bool IsSecuritySafeCritical {
+			get {
+				throw new NotImplementedException ();
+			}
+		}
+
+		public virtual bool IsSecurityTransparent {
+			get {
+				throw new NotImplementedException ();
+			}
+		}
 #endif
 
+#if NET_4_5
+		public virtual MethodImplAttributes MethodImplementationFlags {
+			get { return GetMethodImplementationFlags (); }
+		}
+#endif
+
+#if !MOBILE
 		void _MethodBase.GetIDsOfNames ([In] ref Guid riid, IntPtr rgszNames, uint cNames, uint lcid, IntPtr rgDispId)
 		{
 			throw new NotImplementedException ();
 		}
+
+		Type _MethodBase.GetType ()
+		{
+			// Required or object::GetType becomes virtual final
+			return base.GetType ();
+		}		
 
 		void _MethodBase.GetTypeInfo (uint iTInfo, uint lcid, IntPtr ppTInfo)
 		{
@@ -272,5 +322,6 @@ namespace System.Reflection {
 		{
 			throw new NotImplementedException ();
 		}
+#endif
 	}
 }

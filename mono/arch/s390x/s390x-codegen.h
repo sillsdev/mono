@@ -146,6 +146,8 @@ typedef enum {
 #define s390_is_uimm12(val)		((glong)val >= 0 && (glong)val <= 4095)
 
 #define STK_BASE			s390_r15
+#define S390_SP				s390_r15
+#define S390_FP				s390_r11
 #define S390_MINIMAL_STACK_SIZE		160
 #define S390_REG_SAVE_OFFSET 		48
 #define S390_PARM_SAVE_OFFSET 		16
@@ -335,7 +337,7 @@ typedef struct {
 
 typedef struct {
 	char 	op1;
-	char	r1 : 4;
+	char	m1 : 4;
 	char	op2 : 4;
 	short	i2;
 } RI_Format;
@@ -433,13 +435,13 @@ typedef struct {
 
 #define s390_emit16(c, x) do 			\
 {						\
-	*((guint16 *) c) = x; 			\
+	*((guint16 *) c) = (guint16) x;		\
 	c += sizeof(guint16);			\
 } while(0)
 
 #define s390_emit32(c, x) do 			\
 {						\
-	*((guint32 *) c) = x; 			\
+	*((guint32 *) c) = (guint32) x;		\
 	c += sizeof(guint32);			\
 } while(0)
 
@@ -591,11 +593,14 @@ typedef struct {
 #define s390_basr(c, r1, r2)		S390_RR(c, 0x0d, r1, r2)
 #define s390_bctr(c, r1, r2)		S390_RR(c, 0x06, r1, r2)
 #define s390_bctrg(c, r1, r2)		S390_RRE(c, 0xb946, r1, r2)
+#define s390_bnzr(c, r)			S390_RR(c, 0x07, 0x07, r)
 #define s390_bras(c, r, o)		S390_RI(c, 0xa75, r, o)
 #define s390_brasl(c, r, o)		S390_RIL_1(c, 0xc05, r, o)
 #define s390_brc(c, m, d)		S390_RI(c, 0xa74, m, d)
+#define s390_brcl(c, m, d)		S390_RIL_2(c, 0xc04, m, d)
 #define s390_br(c, r)			S390_RR(c, 0x07, 0xf, r)
 #define s390_break(c)			S390_RR(c, 0, 0, 0)
+#define s390_bzr(c, r)			S390_RR(c, 0x07, 0x08, r)
 #define s390_c(c, r, x, b, d)		S390_RX(c, 0x59, r, x, b, d)
 #define s390_cdb(c, r, x, b, d)		S390_RXE(c, 0xed19, r, x, b, d)
 #define s390_cdbr(c, r1, r2)		S390_RRE(c, 0xb319, r1, r2)
@@ -634,7 +639,7 @@ typedef struct {
 #define s390_icy(c, r, x, b, d)		S390_RXY(c, 0xe373, r, x, b, d)
 #define s390_j(c,d)			s390_brc(c, S390_CC_UN, d)
 #define s390_jc(c, m, d)		s390_brc(c, m, d)
-#define s390_jcl(c, m, d)		S390_RIL_2(c, 0xc04, m, d)
+#define s390_jcl(c, m, d)		s390_brcl(c, m, d)
 #define s390_jcy(c, d)			s390_brc(c, S390_CC_CY, d)
 #define s390_je(c, d)			s390_brc(c, S390_CC_EQ, d)
 #define s390_jeo(c, d)			s390_brc(c, S390_CC_ZR|S390_CC_OV, d)
@@ -652,6 +657,24 @@ typedef struct {
 #define s390_jno(c, d)			s390_brc(c, S390_CC_NO, d)
 #define s390_jp(c, d)			s390_brc(c, S390_CC_GT, d)
 #define s390_jz(c, d)			s390_brc(c, S390_CC_ZR, d)
+#define s390_jg(c,d)			s390_brcl(c, S390_CC_UN, d)
+#define s390_jgcy(c, d)			s390_brcl(c, S390_CC_CY, d)
+#define s390_jge(c, d)			s390_brcl(c, S390_CC_EQ, d)
+#define s390_jgeo(c, d)			s390_brcl(c, S390_CC_ZR|S390_CC_OV, d)
+#define s390_jgh(c, d)			s390_brcl(c, S390_CC_GT, d)
+#define s390_jgho(c, d)			s390_brcl(c, S390_CC_GT|S390_CC_OV, d)
+#define s390_jgl(c, d)			s390_brcl(c, S390_CC_LT, d)
+#define s390_jglo(c, d)			s390_brcl(c, S390_CC_LT|S390_CC_OV, d)
+#define s390_jgm(c, d)			s390_brcl(c, S390_CC_LT, d)
+#define s390_jgnc(c, d)			s390_brcl(c, S390_CC_NC, d)
+#define s390_jgne(c, d)			s390_brcl(c, S390_CC_NZ, d)
+#define s390_jgnh(c, d)			s390_brcl(c, S390_CC_LE, d)
+#define s390_jgnl(c, d)			s390_brcl(c, S390_CC_GE, d)
+#define s390_jgnz(c, d)			s390_brcl(c, S390_CC_NZ, d)
+#define s390_jgo(c, d)			s390_brcl(c, S390_CC_OV, d)
+#define s390_jgno(c, d)			s390_brcl(c, S390_CC_NO, d)
+#define s390_jgp(c, d)			s390_brcl(c, S390_CC_GT, d)
+#define s390_jgz(c, d)			s390_brcl(c, S390_CC_ZR, d)
 #define s390_l(c, r, x, b, d)		S390_RX(c, 0x58, r, x, b, d)
 #define s390_ly(c, r, x, b, d)		S390_RXY(c, 0xe358, r, x, b, d)
 #define s390_la(c, r, x, b, d)		S390_RX(c, 0x41, r, x, b, d)
@@ -726,6 +749,7 @@ typedef struct {
 #define s390_ngr(c, r1, r2)		S390_RRE(c, 0xb980, r1, r2)
 #define s390_nilh(c, r, v)		S390_RI(c, 0xa56, r, v)
 #define s390_nill(c, r, v)		S390_RI(c, 0xa57, r, v)
+#define s390_nop(c)  			S390_RR(c, 0x07, 0x0, 0)
 #define s390_nr(c, r1, r2)		S390_RR(c, 0x14, r1, r2)
 #define s390_o(c, r, x, b, d)		S390_RX(c, 0x56, r, x, b, d)
 #define s390_og(c, r, x, b, d)		S390_RXY(c, 0xe381, r, x, b, d)

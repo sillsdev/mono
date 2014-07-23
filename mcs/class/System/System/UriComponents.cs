@@ -29,10 +29,7 @@
 namespace System {
 
 	[Flags]
-#if NET_2_0
-	public
-#endif
-	enum UriComponents {
+	public enum UriComponents {
 
 		Scheme = 1,
 		UserInfo = 2,
@@ -42,6 +39,9 @@ namespace System {
 		Query = 32,
 		Fragment = 64,
 		StrongPort = 128,
+#if NET_4_5
+		NormalizedHost = 256,
+#endif			
 		KeepDelimiter = 0x40000000,
 
 		HostAndPort = Host | StrongPort,

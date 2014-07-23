@@ -93,20 +93,16 @@ namespace System.Windows.Forms
 
 			string helpViewer = Environment.GetEnvironmentVariable ("MONO_HELP_VIEWER") ?? "chmsee";
 			string arguments = String.Format ("\"{0}\"", helpFile);
-			if (!String.IsNullOrEmpty (helpTopic))
-			{
+			if (!String.IsNullOrEmpty (helpTopic)) {
 				if (!helpTopic.StartsWith ("/"))
 					helpTopic = "/" + helpTopic;
 				helpTopic = helpTopic.TrimEnd (' ');
 				arguments = String.Format ("\"{0}::{1}\"", helpFile, helpTopic);
 			}
 
-			try
-			{
+			try {
 				RunNonblockingProcess (helpViewer, arguments);
-			}
-			catch (Exception e)
-			{
+			} catch (Exception e) {
 				// Don't crash if the help viewer couldn't be launched. There
 				// won't be an exception thrown if the help viewer can't find
 				// the help file; it's up to the help viewer to display such an error.
@@ -121,8 +117,7 @@ namespace System.Windows.Forms
 		/// </remarks>
 		private static void RunNonblockingProcess (string command, string arguments)
 		{
-			using (Process process = new Process ())
-			{
+			using (Process process = new Process ()) {
 				process.StartInfo.FileName = command;
 				process.StartInfo.Arguments = arguments;
 				process.StartInfo.UseShellExecute = false;

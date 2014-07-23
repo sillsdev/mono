@@ -849,9 +849,12 @@ namespace MonoTests.System
 		}
 
 		[Test]
-		public void ConvertToStringType ()
+		public void IConvertible_Valid ()
 		{
-			Assert.AreEqual ("This", ((IConvertible) TestingEnum.This).ToType (typeof (string), null));
+			IConvertible ic = TestingEnum.This;
+			Assert.AreEqual ("This", ic.ToType (typeof (string), null), "#1");
+			Assert.AreEqual (TestingEnum.This, ic.ToType (typeof (TestingEnum), null), "#2");
+			Assert.AreEqual (TestingEnum.This, ic.ToType (typeof (Enum), null), "#3");
 		}
 
 		[Test]
@@ -972,23 +975,23 @@ namespace MonoTests.System
 		}
 
 		[Test]
-		public void CompareTo_ShouldBeEqualToUnderlyingType ()
+		public void CompareTo_NotEqualToUnderlyingType ()
 		{
-			Assert.AreEqual (sbyte.MinValue.CompareTo (sbyte.MinValue), EnInt8.A.CompareTo (EnInt8.A), "i8#0");
-			Assert.AreEqual (sbyte.MinValue.CompareTo ((sbyte)44), EnInt8.A.CompareTo (EnInt8.B), "i8#1");
-			Assert.AreEqual (((sbyte)44).CompareTo (sbyte.MinValue), EnInt8.B.CompareTo (EnInt8.A), "i8#2");
+			Assert.AreEqual (0, EnInt8.A.CompareTo (EnInt8.A), "i8#0");
+			Assert.AreEqual (-1, EnInt8.A.CompareTo (EnInt8.B), "i8#1");
+			Assert.AreEqual (1, EnInt8.B.CompareTo (EnInt8.A), "i8#2");
 	
-			Assert.AreEqual (byte.MinValue.CompareTo (byte.MinValue), EnUInt8.A.CompareTo (EnUInt8.A), "ui8#0");
-			Assert.AreEqual (byte.MinValue.CompareTo ((byte)55),  EnUInt8.A.CompareTo (EnUInt8.B), "ui8#1");
-			Assert.AreEqual (((byte)55).CompareTo (byte.MinValue), EnUInt8.B.CompareTo (EnUInt8.A),"ui8#2");
+			Assert.AreEqual (0, EnUInt8.A.CompareTo (EnUInt8.A), "ui8#0");
+			Assert.AreEqual (-1,  EnUInt8.A.CompareTo (EnUInt8.B), "ui8#1");
+			Assert.AreEqual (1, EnUInt8.B.CompareTo (EnUInt8.A),"ui8#2");
 
-			Assert.AreEqual (short.MinValue.CompareTo (short.MinValue), EnInt16.A.CompareTo (EnInt16.A), "i16#0");
-			Assert.AreEqual (short.MinValue.CompareTo ((short)66), EnInt16.A.CompareTo (EnInt16.B), "i16#1");
-			Assert.AreEqual (((short)66).CompareTo (short.MinValue), EnInt16.B.CompareTo (EnInt16.A), "i16#2");
+			Assert.AreEqual (0, EnInt16.A.CompareTo (EnInt16.A), "i16#0");
+			Assert.AreEqual (-1, EnInt16.A.CompareTo (EnInt16.B), "i16#1");
+			Assert.AreEqual (1, EnInt16.B.CompareTo (EnInt16.A), "i16#2");
 
-			Assert.AreEqual (ushort.MinValue.CompareTo (ushort.MinValue), EnUInt16.A.CompareTo (EnUInt16.A), "ui16#0");
-			Assert.AreEqual (ushort.MinValue.CompareTo ((ushort)77), EnUInt16.A.CompareTo (EnUInt16.B), "ui16#1");
-			Assert.AreEqual (((ushort)77).CompareTo (ushort.MinValue), EnUInt16.B.CompareTo (EnUInt16.A), "ui16#2");
+			Assert.AreEqual (0, EnUInt16.A.CompareTo (EnUInt16.A), "ui16#0");
+			Assert.AreEqual (-1, EnUInt16.A.CompareTo (EnUInt16.B), "ui16#1");
+			Assert.AreEqual (1, EnUInt16.B.CompareTo (EnUInt16.A), "ui16#2");
 
 			Assert.AreEqual (int.MinValue.CompareTo (int.MinValue), EnInt32.A.CompareTo (EnInt32.A), "i32#0");
 			Assert.AreEqual (int.MinValue.CompareTo ((int)88), EnInt32.A.CompareTo (EnInt32.B), "i32#1");
@@ -1101,13 +1104,13 @@ namespace MonoTests.System
 			Assert.AreEqual ("ulong_Cc", Enum.GetName (typeof (EnumULong), (EnumULong)(0x0000000000000000)));
 			Assert.AreEqual ("ulong_Cc", r.GetValue (0).ToString ());
 			Assert.AreEqual ("ulong_Cc", Enum.GetName (typeof (EnumULong), (EnumULong)(0x0000000000000000)));
-			Assert.AreEqual ("ulong_Cc", r.GetValue (1).ToString ());
+			Assert.AreEqual ("ulong_Aa", r.GetValue (1).ToString ());
 			Assert.AreEqual ("ulong_Aa", Enum.GetName (typeof (EnumULong), (EnumULong)(0x0000000000000005)));
-			Assert.AreEqual ("ulong_Aa", r.GetValue (2).ToString ());
+			Assert.AreEqual ("ulong_Ff", r.GetValue (2).ToString ());
 			Assert.AreEqual ("ulong_Ff", Enum.GetName (typeof (EnumULong), (EnumULong)(0x0000000000000064)));
-			Assert.AreEqual ("ulong_Ff", r.GetValue (3).ToString ());
+			Assert.AreEqual ("ulong_Ee", r.GetValue (3).ToString ());
 			Assert.AreEqual ("ulong_Ee", Enum.GetName (typeof (EnumULong), (EnumULong)(0x7FFFFFFFFFFFFFFF)));
-			Assert.AreEqual ("ulong_Ee", r.GetValue (4).ToString ());
+			Assert.AreEqual ("ulong_Bb", r.GetValue (4).ToString ());
 			
 			r = Enum.GetValues (typeof (EnumLong));
 			Assert.AreEqual (6, r.Length);
@@ -1124,7 +1127,22 @@ namespace MonoTests.System
 			Assert.AreEqual ("long_Dd", Enum.GetName (typeof (EnumLong), unchecked ((EnumLong)(0xFFFFFFFFFFFFFFFF))));
 			Assert.AreEqual ("long_Dd", r.GetValue (5).ToString ());
 		}
-		
+
+		[Flags]
+		enum Foo {
+			negative = -1
+		}
+
+#if NET_4_0
+		// Our first implementation used to crash
+		[Test]
+		public void HasFlagTest ()
+		{
+			Foo f = Foo.negative;
+			bool has = f.HasFlag (Foo.negative);
+		}
+#endif
+
 		[Flags]
 		enum SomeEnum
 		{
@@ -1375,7 +1393,7 @@ namespace MonoTests.System
 		enum EnumULong : ulong
 		{
 		  ulong_Aa = 5,
-		  ulong_Bb = unchecked((int)0xffffFFFF00000000),
+		  ulong_Bb = unchecked((ulong)0xffffFFFF00000000),
 		  ulong_Cc = 0,
 		  ulong_Ee = 0x7FFFFFFFffffffff,
 		  ulong_Ff = 100

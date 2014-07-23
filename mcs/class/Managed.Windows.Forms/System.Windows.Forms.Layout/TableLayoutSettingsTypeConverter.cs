@@ -20,7 +20,6 @@
 // Copyright (c) 2006 Novell, Inc.
 //
 
-#if NET_2_0
 
 using System;
 using System.ComponentModel;
@@ -119,7 +118,7 @@ namespace System.Windows.Forms.Layout
 
 			XmlDocument xmldoc = new XmlDocument();
 			xmldoc.LoadXml (value as string);
-			TableLayoutSettings settings = new TableLayoutSettings(null);
+			TableLayoutSettings settings = new TableLayoutSettings(new TableLayoutPanel());
 			int count = ParseControl (xmldoc, settings);
 			ParseColumnStyle (xmldoc, settings);
 			ParseRowStyle (xmldoc, settings);
@@ -232,5 +231,3 @@ namespace System.Windows.Forms.Layout
 		}
 	}
 }
-
-#endif

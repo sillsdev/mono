@@ -141,7 +141,9 @@ namespace Microsoft.Build.Tasks {
 		[MonoTODO]
 		protected override string GenerateFullPathToTool ()
 		{
-			return Path.Combine (ToolPath, ToolExe);
+			if (!string.IsNullOrEmpty (ToolPath))
+				return Path.Combine (ToolPath, ToolExe);
+			return ToolLocationHelper.GetPathToDotNetFrameworkFile (ToolExe, TargetDotNetFrameworkVersion.VersionLatest);
 		}
 		
 		[MonoTODO]
@@ -304,7 +306,13 @@ namespace Microsoft.Build.Tasks {
 
 		[MonoTODO]
 		protected override string ToolName {
-			get { return MSBuildUtils.RunningOnWindows ? "vbnc.bat" : "vbnc"; }
+			get {
+#if NET_4_0
+				return MSBuildUtils.RunningOnWindows ? "vbnc.bat" : "vbnc";
+#else
+				return MSBuildUtils.RunningOnWindows ? "vbnc2.bat" : "vbnc2";
+#endif
+			}
 		}
 
 		[MonoTODO]

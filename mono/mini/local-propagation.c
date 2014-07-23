@@ -12,6 +12,8 @@
  * Copyright 2011 Xamarin, Inc (http://www.xamarin.com)
  */
 
+#include <config.h>
+#ifndef DISABLE_JIT
 
 #include <string.h>
 #include <stdio.h>
@@ -131,9 +133,9 @@ restart:
 			num_sregs = mono_inst_get_src_registers (ins, sregs);
 			for (srcindex = 0; srcindex < num_sregs; ++srcindex) {
 				MonoInst *def;
-				int nsregs;
+				int nregs;
 
-				nsregs = mono_inst_get_src_registers (ins, sregs);
+				nregs = mono_inst_get_src_registers (ins, sregs);
 
 				regtype = spec [MONO_INST_SRC1 + srcindex];
 				sreg = sregs [srcindex];
@@ -611,3 +613,5 @@ mono_local_deadce (MonoCompile *cfg)
 
 	//mono_print_code (cfg, "AFTER LOCAL-DEADCE");
 }
+
+#endif /* DISABLE_JIT */

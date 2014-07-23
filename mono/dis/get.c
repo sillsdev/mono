@@ -5,6 +5,7 @@
  *   Miguel de Icaza (miguel@ximian.com)
  *
  * (C) 2001 Ximian, Inc.
+ * Copyright 2012 Xamarin Inc
  */
 #include <config.h>
 #include <stdio.h>
@@ -2306,10 +2307,10 @@ get_constant (MonoImage *m, MonoTypeEnum t, guint32 blob_index)
 		readr4 (ptr, &r);
 
 		/* Crazy solaris systems doesn't have isnormal */
-#ifdef HAVE_FINITE
-		normal = finite (r);
+#ifdef HAVE_ISFINITE
+		normal = isfinite (r);
 #else
-		normal = isnormal (r);
+		normal = !dis_isinf (r) && !dis_isnan (r);
 #endif
 		if (!normal) {
 			return g_strdup_printf ("float32(0x%08x)", read32 (ptr));
@@ -2326,8 +2327,8 @@ get_constant (MonoImage *m, MonoTypeEnum t, guint32 blob_index)
 		readr8 (ptr, &r);
 
 		/* Crazy solaris systems doesn't have isnormal */
-#ifdef HAVE_FINITE
-		normal = finite (r);
+#ifdef HAVE_ISFINITE
+		normal = isfinite (r);
 #else
 		normal = isnormal (r);
 #endif
@@ -3192,6 +3193,7 @@ static dis_map_t managed_impl_flags [] = {
 	{ METHOD_IMPL_ATTRIBUTE_SYNCHRONIZED,    "synchronized " },
 	{ METHOD_IMPL_ATTRIBUTE_NOINLINING,      "noinlining " },
 	{ METHOD_IMPL_ATTRIBUTE_NOOPTIMIZATION,  "nooptimization " },
+	{ METHOD_IMPL_ATTRIBUTE_AGGRESSIVE_INLINING,  "agressive-inlining" },
 	{ 0, NULL }
 };
 

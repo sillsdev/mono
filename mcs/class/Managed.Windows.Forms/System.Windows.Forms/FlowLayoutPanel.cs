@@ -26,7 +26,6 @@
 //	Jonathan Pobst (monkey@jpobst.com)
 //
 
-#if NET_2_0
 using System.Windows.Forms.Layout;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -113,21 +112,19 @@ namespace System.Windows.Forms
 				base.CalculateCanvasSize (canOverride);
 		}
 
-		protected override void OnLayout (LayoutEventArgs levent)
-		{
-			base.OnLayout (levent);
+			   protected override void OnLayout (LayoutEventArgs levent)
+			   {
+					   base.OnLayout (levent);
 
-#if NET_2_0
-			// base.OnLayout() calls CalculateCanvasSize(true) in which we just set the canvas to
-			// clientsize so we could re-layout everything according to the flow.
-			// This time we want to actually calculate the canvas.
-			CalculateCanvasSize (false);
-			if (AutoSize && (canvas_size.Width > ClientSize.Width || canvas_size.Height > ClientSize.Height)) {
-				ClientSize = canvas_size;
-			}
-			AdjustFormScrollbars (AutoScroll);
-#endif
-		}
+					   // base.OnLayout() calls CalculateCanvasSize(true) in which we just set the canvas to
+					   // clientsize so we could re-layout everything according to the flow.
+					   // This time we want to actually calculate the canvas.
+					   CalculateCanvasSize (false);
+					   if (AutoSize && (canvas_size.Width > ClientSize.Width || canvas_size.Height > ClientSize.Height)) {
+							   ClientSize = canvas_size;
+					   }
+					   AdjustFormScrollbars (AutoScroll);
+			   }
 		
 		internal override Size GetPreferredSizeCore (Size proposedSize)
 		{
@@ -196,4 +193,3 @@ namespace System.Windows.Forms
 		#endregion
 	}
 }
-#endif

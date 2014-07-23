@@ -38,7 +38,9 @@ namespace System.IO
 	[MonoTODO ("Offset is ignored")]
 	public class UnmanagedMemoryAccessor : IDisposable {
 		SafeBuffer buffer;
+#pragma warning disable 414
 		long offset;
+#pragma warning restore
 		long capacity;
 		bool canwrite, canread;
 
@@ -273,8 +275,8 @@ namespace System.IO
 				throw new ArgumentOutOfRangeException ();
 			
 			long left = capacity - position;
-			var slots = (int)(left / Marshal.SizeOf (typeof (T)));
-			
+			var slots = Math.Min (count, (int)(left / Marshal.SizeOf (typeof (T))));
+
 			buffer.ReadArray ((ulong) position, array, offset, slots);
 			return slots;
 		}

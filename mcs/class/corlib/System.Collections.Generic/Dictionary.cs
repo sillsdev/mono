@@ -12,6 +12,7 @@
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
 // Copyright (C) 2005 David Waite
 // Copyright (C) 2007 HotFeet GmbH (http://www.hotfeet.ch)
+// Copyright (C) 2011 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -57,13 +58,10 @@ namespace System.Collections.Generic {
 	[Serializable]
 	[DebuggerDisplay ("Count={Count}")]
 	[DebuggerTypeProxy (typeof (CollectionDebuggerView<,>))]
-	public class Dictionary<TKey, TValue> : IDictionary<TKey, TValue>,
-		IDictionary,
-		ICollection,
-		ICollection<KeyValuePair<TKey, TValue>>,
-		IEnumerable<KeyValuePair<TKey, TValue>>,
-		ISerializable,
-		IDeserializationCallback
+	public class Dictionary<TKey, TValue> : IDictionary<TKey, TValue>, IDictionary, ISerializable, IDeserializationCallback
+#if NET_4_5
+		, IReadOnlyDictionary<TKey, TValue>
+#endif
 	{
 		// The implementation of this class uses a hash table and linked lists
 		// (see: http://msdn2.microsoft.com/en-us/library/ms379571(VS.80).aspx).
@@ -100,6 +98,10 @@ namespace System.Collections.Generic {
 		TKey [] keySlots;
 		TValue [] valueSlots;
 
+		//Leave those 2 fields here to improve heap layout.
+		IEqualityComparer<TKey> hcp;
+		SerializationInfo serialization_info;
+
 		// The number of slots in "linkSlots" and "keySlots"/"valueSlots" that
 		// are in use (i.e. filled with data) or have been used and marked as
 		// "empty" later on.
@@ -117,9 +119,6 @@ namespace System.Collections.Generic {
 		// The number of (key,value) pairs the dictionary can hold without
 		// resizing the hash table and the slots arrays.
 		int threshold;
-
-		IEqualityComparer<TKey> hcp;
-		SerializationInfo serialization_info;
 
 		// The number of changes made to this dictionary. Used by enumerators
 		// to detect changes and invalidate themselves.
@@ -375,7 +374,7 @@ namespace System.Collections.Generic {
 			//	 Hashtable is automatically increased
 			//	 to the smallest prime number that is larger
 			//	 than twice the current number of Hashtable buckets
-			int newSize = Hashtable.ToPrime ((table.Length << 1) | 1);
+			int newSize = HashPrimeNumbers.ToPrime ((table.Length << 1) | 1);
 
 			// allocate new hash table and link slots array
 			int [] newTable = new int [newSize];
@@ -656,6 +655,16 @@ namespace System.Collections.Generic {
 		ICollection<TValue> IDictionary<TKey, TValue>.Values {
 			get { return Values; }
 		}
+		
+#if NET_4_5
+		IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys {
+			get { return Keys; }
+		}
+ 
+		IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values {
+			get { return Values; }
+		}
+#endif
 
 		public KeyCollection Keys {
 			get { return new KeyCollection (this); }
@@ -681,7 +690,7 @@ namespace System.Collections.Generic {
 			get { return false; }
 		}
 
-		TKey ToTKey (object key)
+		static TKey ToTKey (object key)
 		{
 			if (key == null)
 				throw new ArgumentNullException ("key");
@@ -690,7 +699,7 @@ namespace System.Collections.Generic {
 			return (TKey) key;
 		}
 
-		TValue ToTValue (object value)
+		static TValue ToTValue (object value)
 		{
 			if (value == null && !typeof (TValue).IsValueType)
 				return default (TValue);
@@ -701,8 +710,9 @@ namespace System.Collections.Generic {
 
 		object IDictionary.this [object key] {
 			get {
-				if (key is TKey && ContainsKey((TKey) key))
-					return this [ToTKey (key)];
+				TValue obj;
+				if (key is TKey && TryGetValue ((TKey) key, out obj))
+					return obj;
 				return null;
 			}
 			set { this [ToTKey (key)] = ToTValue (value); }

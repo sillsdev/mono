@@ -3,8 +3,10 @@
 //
 // Authors:
 //	Stephane Delcroix  (sdelcroix@novell.com)
+//	Marek Safar (marek.safar@gmail.com)
 //
 // Copyright (C) 2007 Novell, Inc (http://www.novell.com)
+// Copyright 2012 Xamarin, Inc (http://www.xamarin.com)
 //
 
 using System.Globalization;
@@ -161,7 +163,7 @@ namespace MonoTests.System {
 			Assert.AreEqual (dto.ToString ("r", new CultureInfo ("en-us")), dto.ToString ("R", new CultureInfo ("en-us")));
 			Assert.AreEqual ("2007-10-31T21:00:00", dto.ToString ("s", new CultureInfo ("en-us")));
 			Assert.AreEqual ("2007-11-01 05:00:00Z", dto.ToString ("u", new CultureInfo ("en-us")));
-			Assert.AreEqual ("October, 2007", dto.ToString ("Y", new CultureInfo ("en-us")));
+			Assert.AreEqual ("October 2007", dto.ToString ("Y", new CultureInfo ("en-us")));
 			Assert.AreEqual (dto.ToString ("y", new CultureInfo ("en-us")), dto.ToString ("Y", new CultureInfo ("en-us")));
 		}
 
@@ -174,7 +176,7 @@ namespace MonoTests.System {
 				Assert.AreEqual ("Thursday, Nov 01 2007 09:00:00 -07:00", dto.ToString (format, null as DateTimeFormatInfo), "ts1");
 			Assert.AreEqual ("Thursday, Nov 01 2007 09:00:00 -07:00", dto.ToString (format, CultureInfo.InvariantCulture), "ts2");
 			Assert.AreEqual ("jeudi, nov. 01 2007 09:00:00 -07:00", dto.ToString (format, new CultureInfo ("fr-FR")), "ts3");
-			Assert.AreEqual ("jueves, nov 01 2007 09:00:00 -07:00", dto.ToString (format, new CultureInfo ("es-ES")), "ts4");
+			Assert.AreEqual ("jueves, Nov. 01 2007 09:00:00 -07:00", dto.ToString (format, new CultureInfo ("es-ES")), "ts4");
 		}
 
 		[Test]
@@ -188,7 +190,7 @@ namespace MonoTests.System {
 				"M/dd/yyyy",
 				"M/d/y",
 				"M/d/yy",
-				"M/d/yyy",
+//				"M/d/yyy", // this fails on .NET 2.0 (3.5) and 4.0
 				"M/d/yyyy",
 				"M/d/yyyyy",
 				"M/d/yyyyyy",
@@ -231,7 +233,10 @@ namespace MonoTests.System {
 				"M/d/yyyy H:m zzz",    "MM/d/yyyy H:m zzz",
 				"M/dd/yy H:m zzz",     "MM/dd/yy H:m zzz",
 				"M/d/yy H:m zzz",      "M/d/yy H:m zzz",
-				"ddd dd MMM yyyy h:mm tt zzz", 
+				"ddd dd MMM yyyy h:mm tt zzz",
+				"o", "O",
+				"r", "R",
+				"u",
 			};
 
 			foreach (DateTimeOffset dto in dtos)
@@ -250,7 +255,14 @@ namespace MonoTests.System {
 		[Test]
 		public void ParseExactWithKFormat ()
 		{
-			DateTimeOffset o = DateTimeOffset.ParseExact ("Wed Mar 17 22:25:08 +0000 2010", "ddd MMM d H:m:ss K yyyy", null);
+			DateTimeOffset o = DateTimeOffset.ParseExact ("Wed Mar 17 22:25:08 +0000 2010", "ddd MMM d H:m:ss K yyyy", CultureInfo.InvariantCulture);
+		}
+
+		[Test]
+		public void ParseExactCustomFormat ()
+		{
+			var dt = DateTimeOffset.ParseExact ("Sunday, 06-Nov-94 08:49:37 GMT", "dddd, dd'-'MMM'-'yy HH:mm:ss 'GMT'", CultureInfo.InvariantCulture);
+			Assert.AreEqual (new DateTimeOffset (1994, 11, 6, 8, 49, 37, TimeZone.CurrentTimeZone.GetUtcOffset (DateTime.Now)), dt);
 		}
 		
 		[Test]
@@ -265,7 +277,7 @@ namespace MonoTests.System {
 			};
 
 			string[] formats = {
-				"M/d/yyy H:m zzz",
+//				"M/d/yyy H:m zzz", // fails under .NET 2.0 and 4.0.
 				"M/d/yyyy H:m zzz",
 				"M/d/yyyyy H:m zzz",
 				"M/d/yyyyyy H:m zzz",
@@ -354,6 +366,16 @@ namespace MonoTests.System {
 		}
 
 		[Test]
+		[ExpectedException (typeof (FormatException))]
+		public void ParseExactFormatException5 ()
+		{
+			CultureInfo fp = CultureInfo.InvariantCulture;
+			string format = "U";
+			string date = "Mon 14 Jan 2008 2:56 PM +01: 00";
+			DateTimeOffset.ParseExact (date, format, fp);
+		}
+
+		[Test]
 		public void ParseExactWithSeconds ()
 		{
 			CultureInfo fp = CultureInfo.InvariantCulture;
@@ -430,14 +452,14 @@ namespace MonoTests.System {
 		}
 
 		[Test]
-		[ExpectedException (typeof (ArgumentOutOfRangeException))]
+		[ExpectedException (typeof (FormatException))]
 		public void ParseUnderflow ()
 		{
 			DateTimeOffset.Parse ("01/01/0001 0:0 +09:00", new CultureInfo ("en-US"));
 		}
 
 		[Test]
-		[ExpectedException (typeof (ArgumentOutOfRangeException))]
+		[ExpectedException (typeof (FormatException))]
 		public void ParseOverflow ()
 		{
 			DateTimeOffset.Parse ("12/31/9999 23:59 -09:00", new CultureInfo ("en-US"));

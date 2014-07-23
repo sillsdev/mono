@@ -94,17 +94,15 @@ namespace System.Xaml
 		}
 
 		IEnumerable<Assembly> AssembliesInScope {
-#if MOONLIGHT
-			get { return reference_assemblies; }
-#else
 			get { return reference_assemblies ?? AppDomain.CurrentDomain.GetAssemblies (); }
-#endif
 		}
 
 		public bool SupportMarkupExtensionsWithDuplicateArity { get; private set; }
 
 		internal string GetXamlNamespace (string clrNamespace)
 		{
+			if (clrNamespace == null) // could happen on nested generic type (see bug #680385-comment#4). Not sure if null is correct though.
+				return null;
 			if (xaml_nss == null) // fill it first
 				GetAllXamlNamespaces ();
 			string ret;
@@ -118,7 +116,7 @@ namespace System.Xaml
 				foreach (var ass in AssembliesInScope)
 					FillXamlNamespaces (ass);
 			}
-			return xaml_nss.Values;
+			return xaml_nss.Values.Distinct ();
 		}
 
 		public virtual ICollection<XamlType> GetAllXamlTypes (string xamlNamespace)
@@ -242,11 +240,7 @@ namespace System.Xaml
 
 		protected internal virtual Assembly OnAssemblyResolve (string assemblyName)
 		{
-#if MOONLIGHT
-			return Assembly.Load (assemblyName);
-#else
 			return Assembly.LoadWithPartialName (assemblyName);
-#endif
 		}
 
 		public virtual bool TryGetCompatibleXamlNamespace (string xamlNamespace, out string compatibleNamespace)
@@ -300,8 +294,11 @@ namespace System.Xaml
 		void FillAllXamlTypes (Assembly ass)
 		{
 			foreach (XmlnsDefinitionAttribute xda in ass.GetCustomAttributes (typeof (XmlnsDefinitionAttribute), false)) {
-				var l = new List<XamlType> ();
-				all_xaml_types.Add (xda.XmlNamespace, l);
+				var l = all_xaml_types.FirstOrDefault (p => p.Key == xda.XmlNamespace).Value;
+				if (l == null) {
+					l = new List<XamlType> ();
+					all_xaml_types.Add (xda.XmlNamespace, l);
+				}
 				foreach (var t in ass.GetTypes ())
 					if (t.Namespace == xda.ClrNamespace)
 						l.Add (GetXamlType (t));
@@ -331,7 +328,6 @@ namespace System.Xaml
 
 			Type [] genArgs = null;
 			if (typeArguments != null && typeArguments.Count > 0) {
-				var xtns = typeArguments;
 				genArgs = (from t in typeArguments select t.UnderlyingType).ToArray ();
 				if (genArgs.Any (t => t == null))
 					return null;

@@ -6,6 +6,7 @@
 //	Sebastien Pouliot  <sebastien@ximian.com>
 //
 // Copyright (C) 2005 Novell Inc. (http://www.novell.com)
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -187,7 +188,9 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
+#if !MOBILE
 		[ExpectedException (typeof (IsolatedStorageException))]
+#endif
 		public void GetUserStoreForApplication_WithoutApplicationIdentity ()
 		{
 			// note: a manifest is required
@@ -195,7 +198,9 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
+#if !MOBILE
 		[ExpectedException (typeof (IsolatedStorageException))]
+#endif
 		public void GetUserStoreForApplication ()
 		{
 			IsolatedStorageFile isf = IsolatedStorageFile.GetUserStoreForApplication ();
@@ -254,7 +259,9 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
+#if !MOBILE
 		[ExpectedException (typeof (IsolatedStorageException))]
+#endif
 		public void GetStore_Domain_NonPresentEvidences ()
 		{
 			IsolatedStorageScope scope = IsolatedStorageScope.User | IsolatedStorageScope.Domain | IsolatedStorageScope.Assembly;
@@ -279,6 +286,7 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			Assert.IsTrue ((isf.CurrentSize >= 0), "CurrentSize");
 		}
 
+#if !MOBILE
 		[Test]
 		[ExpectedException (typeof (ArgumentNullException))]
 		public void GetStore_Domain_DomainNullObject ()
@@ -328,7 +336,8 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			Assert.IsTrue ((isf.DomainIdentity.ToString ().IndexOf ("Internet") > 0), "Zone - Domain");
 			Assert.IsTrue ((isf.CurrentSize >= 0), "CurrentSize");
 		}
-#if NET_2_0
+#endif
+
 		[Test]
 		[ExpectedException (typeof (ArgumentNullException))]
 		public void GetStore_Application_NullObject ()
@@ -338,15 +347,17 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
+#if !MOBILE
 		[ExpectedException (typeof (IsolatedStorageException))]
+#endif
 		public void GetStore_Application_NullType ()
 		{
 			IsolatedStorageScope scope = IsolatedStorageScope.User | IsolatedStorageScope.Application;
 			IsolatedStorageFile isf = IsolatedStorageFile.GetStore (scope, (Type)null);
 			// again it's the lack of a manifest
 		}
-#endif
 
+#if !MOBILE
 		[Test]
 		public void GetStore_DomainScope_Evidences ()
 		{
@@ -411,6 +422,7 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			ae.AddHost (new Zone (SecurityZone.Internet));
 			IsolatedStorageFile isf = IsolatedStorageFile.GetStore (scope, null, null, ae, typeof (Zone));
 		}
+#endif
 
 		[Test]
 		public void RegressionBNC354539 ()
@@ -453,7 +465,7 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 				try {
 					isf.CreateDirectory (path);
 				}
-#if NET_4_0 || NET_2_1
+#if NET_4_0
 				catch (IsolatedStorageException ex) {
 					Assert.IsFalse (ex.Message.IndexOf (path) >= 0, "Message");
 					Assert.IsNull (ex.InnerException, "InnerException");
@@ -494,7 +506,7 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
-#if NET_4_0 || NET_2_1
+#if NET_4_0
 		[ExpectedException (typeof (ArgumentException))]
 #else
 		[ExpectedException (typeof (SecurityException))]
@@ -1086,6 +1098,57 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			isf.Close ();
 			isf.Dispose ();
 		}
+
+		[Test]
+		public void MultiLevel ()
+		{
+			// see bug #4101
+			IsolatedStorageFile isf = IsolatedStorageFile.GetUserStoreForAssembly ();
+			try {
+				isf.CreateDirectory ("dir1");
+				string [] dirs = isf.GetDirectoryNames ("*");
+				Assert.AreEqual (dirs.Length, 1, "1a");
+				Assert.AreEqual (dirs [0], "dir1", "1b");
+	
+				isf.CreateDirectory ("dir1/test");
+				dirs = isf.GetDirectoryNames ("dir1/*");
+				Assert.AreEqual (dirs.Length, 1, "2a");
+				Assert.AreEqual (dirs [0], "test", "2b");
+	
+				isf.CreateDirectory ("dir1/test/test2a");
+				isf.CreateDirectory ("dir1/test/test2b");
+				dirs = isf.GetDirectoryNames ("dir1/test/*");
+				Assert.AreEqual (dirs.Length, 2, "3a");
+				Assert.AreEqual (dirs [0], "test2a", "3b");
+				Assert.AreEqual (dirs [1], "test2b", "3c");
+			}
+			finally {
+				isf.DeleteDirectory ("dir1/test/test2a");
+				isf.DeleteDirectory ("dir1/test/test2b");
+				isf.DeleteDirectory ("dir1/test");
+				isf.DeleteDirectory ("dir1");
+			}
+		}
 #endif
+		[Test]
+		public void RootedDirectory ()
+		{
+			IsolatedStorageFile isf = IsolatedStorageFile.GetUserStoreForAssembly ();
+			try {
+				isf.CreateDirectory ("test/nested/directory/structure/without/root");
+				isf.CreateDirectory ("/test/nested/directory/structure/with/root");
+			}
+			finally {
+				isf.DeleteDirectory ("test/nested/directory/structure/without/root");
+				isf.DeleteDirectory ("test/nested/directory/structure/without");
+
+				isf.DeleteDirectory ("/test/nested/directory/structure/with/root");
+				isf.DeleteDirectory ("/test/nested/directory/structure/with");
+				isf.DeleteDirectory ("/test/nested/directory/structure");
+				isf.DeleteDirectory ("/test/nested/directory");
+				isf.DeleteDirectory ("/test/nested");
+				isf.DeleteDirectory ("/test");
+			}
+		}
 	}
 }

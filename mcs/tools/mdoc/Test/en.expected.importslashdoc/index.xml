@@ -3,6 +3,9 @@
     <Assembly Name="DocTest" Version="0.0.0.0">
       <Attributes>
         <Attribute>
+          <AttributeName>System.Diagnostics.Debuggable(System.Diagnostics.DebuggableAttribute+DebuggingModes.IgnoreSymbolStoreSequencePoints)</AttributeName>
+        </Attribute>
+        <Attribute>
           <AttributeName>System.Runtime.CompilerServices.RuntimeCompatibility(WrapNonExceptionThrows=true)</AttributeName>
         </Attribute>
       </Attributes>
@@ -16,6 +19,7 @@
     </Namespace>
     <Namespace Name="Mono.DocTest">
       <Type Name="Color" Kind="Enumeration" />
+      <Type Name="D" Kind="Delegate" />
       <Type Name="DocAttribute" Kind="Class" />
       <Type Name="DocValueType" Kind="Structure" />
       <Type Name="IProcess" Kind="Interface" />

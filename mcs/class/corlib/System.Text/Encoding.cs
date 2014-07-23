@@ -244,10 +244,10 @@ public abstract class Encoding : ICloneable
 			throw new ArgumentNullException ("s");
 
 		if (s.Length == 0)
-			return new byte [0];
+			return EmptyArray<byte>.Value;
 		int byteCount = GetByteCount (s);
 		if (byteCount == 0)
-			return new byte [0];
+			return EmptyArray<byte>.Value;
 		unsafe {
 			fixed (char* cptr = s) {
 				byte [] bytes = new byte [byteCount];
@@ -444,13 +444,10 @@ public abstract class Encoding : ICloneable
 			case UnicodeEncoding.BIG_UNICODE_CODE_PAGE:
 				return BigEndianUnicode;
 
-#if !MOONLIGHT
 			case Latin1Encoding.ISOLATIN_CODE_PAGE:
 				return ISOLatin1;
-#endif
 			default: break;
 		}
-#if !MOONLIGHT
 		// Try to obtain a code page handler from the I18N handler.
 		Encoding enc = (Encoding)(InvokeI18N ("GetEncoding", codepage));
 		if (enc != null) {
@@ -478,7 +475,6 @@ public abstract class Encoding : ICloneable
 			enc.is_readonly = true;
 			return enc;
 		}
-#endif // !NET_2_1
 		// We have no idea how to handle this code page.
 		throw new NotSupportedException
 			(String.Format ("CodePage {0} not supported", codepage.ToString ()));
@@ -493,8 +489,6 @@ public abstract class Encoding : ICloneable
 		e.is_readonly = false;
 		return e;
 	}
-
-#if !MOONLIGHT
 
 	public static Encoding GetEncoding (int codepage,
 		EncoderFallback encoderFallback, DecoderFallback decoderFallback)
@@ -525,8 +519,6 @@ public abstract class Encoding : ICloneable
 		e.decoder_fallback = decoderFallback;
 		return e;
 	}
-
-#endif // !NET_2_1
 
 	static EncodingInfo [] encoding_infos;
 
@@ -565,7 +557,6 @@ public abstract class Encoding : ICloneable
 		return encoding_infos;
 	}
 
-#if !MOONLIGHT
 	[ComVisible (false)]
 	public bool IsAlwaysNormalized ()
 	{
@@ -578,68 +569,71 @@ public abstract class Encoding : ICloneable
 		// umm, ASCIIEncoding should have overriden this method, no?
 		return form == NormalizationForm.FormC && this is ASCIIEncoding;
 	}
-#endif // NET_2_1
-
-	// Table of builtin web encoding names and the corresponding code pages.
-	private static readonly object[] encodings =
-		{
-			ASCIIEncoding.ASCII_CODE_PAGE,
-			"ascii", "us_ascii", "us", "ansi_x3.4_1968",
-			"ansi_x3.4_1986", "cp367", "csascii", "ibm367",
-			"iso_ir_6", "iso646_us", "iso_646.irv:1991",
-
-			UTF7Encoding.UTF7_CODE_PAGE,
-			"utf_7", "csunicode11utf7", "unicode_1_1_utf_7",
-			"unicode_2_0_utf_7", "x_unicode_1_1_utf_7",
-			"x_unicode_2_0_utf_7",
-
-			UTF8Encoding.UTF8_CODE_PAGE,
-			"utf_8", "unicode_1_1_utf_8", "unicode_2_0_utf_8",
-			"x_unicode_1_1_utf_8", "x_unicode_2_0_utf_8",
-
-			UnicodeEncoding.UNICODE_CODE_PAGE,
-			"utf_16", "UTF_16LE", "ucs_2", "unicode",
-			"iso_10646_ucs2",
-
-			UnicodeEncoding.BIG_UNICODE_CODE_PAGE,
-			"unicodefffe", "utf_16be",
-
-			UTF32Encoding.UTF32_CODE_PAGE,
-			"utf_32", "UTF_32LE", "ucs_4",
-
-			UTF32Encoding.BIG_UTF32_CODE_PAGE,
-			"UTF_32BE",
-
-#if !MOONLIGHT
-			Latin1Encoding.ISOLATIN_CODE_PAGE,
-			"iso_8859_1", "latin1"
-#endif // !NET_2_1
-		};
 
 	// Get an encoding object for a specific web encoding name.
-	public static Encoding GetEncoding (String name)
+	public static Encoding GetEncoding (string name)
 	{
 		// Validate the parameters.
 		if (name == null) {
 			throw new ArgumentNullException ("name");
 		}
-
+		
 		string converted = name.ToLowerInvariant ().Replace ('-', '_');
 		
-		// Search the table for a name match.
-		int code = 0;
-		for (int i = 0; i < encodings.Length; ++i) {
-			object o = encodings [i];
-			
-			if (o is int){
-				code = (int) o;
-				continue;
-			}
-			
-			if (converted == ((string)encodings [i]))
-				return GetEncoding (code);
+		// Builtin web encoding names and the corresponding code pages.
+		switch (converted) {
+		case "ascii":
+		case "us_ascii":
+		case "us":
+		case "ansi_x3.4_1968":
+		case "ansi_x3.4_1986":
+		case "cp367":
+		case "csascii":
+		case "ibm367":
+		case "iso_ir_6":
+		case "iso646_us":
+		case "iso_646.irv:1991":
+			return GetEncoding (ASCIIEncoding.ASCII_CODE_PAGE);
+
+		case "utf_7":
+		case "csunicode11utf7":
+		case "unicode_1_1_utf_7":
+		case "unicode_2_0_utf_7":
+		case "x_unicode_1_1_utf_7":
+		case "x_unicode_2_0_utf_7":
+			return GetEncoding (UTF7Encoding.UTF7_CODE_PAGE);
+		
+		case "utf_8":
+		case "unicode_1_1_utf_8":
+		case "unicode_2_0_utf_8":
+		case "x_unicode_1_1_utf_8":
+		case "x_unicode_2_0_utf_8":
+			return GetEncoding (UTF8Encoding.UTF8_CODE_PAGE);
+		
+		case "utf_16":
+		case "utf_16le":
+		case "ucs_2":
+		case "unicode":
+		case "iso_10646_ucs2":
+			return GetEncoding (UnicodeEncoding.UNICODE_CODE_PAGE);
+
+		case "unicodefffe":
+		case "utf_16be":
+			return GetEncoding (UnicodeEncoding.BIG_UNICODE_CODE_PAGE);
+		
+		case "utf_32":
+		case "utf_32le":
+		case "ucs_4":
+			return GetEncoding (UTF32Encoding.UTF32_CODE_PAGE);
+
+		case "utf_32be":
+			return GetEncoding (UTF32Encoding.BIG_UTF32_CODE_PAGE);
+
+		case "iso_8859_1":
+		case "latin1":
+			return GetEncoding (Latin1Encoding.ISOLATIN_CODE_PAGE);
 		}
-#if !MOONLIGHT
+		
 		// Try to obtain a web encoding handler from the I18N handler.
 		Encoding enc = (Encoding)(InvokeI18N ("GetEncoding", name));
 		if (enc != null) {
@@ -663,7 +657,6 @@ public abstract class Encoding : ICloneable
 		if (type != null) {
 			return (Encoding)(Activator.CreateInstance (type));
 		}
-#endif
 		// We have no idea how to handle this encoding name.
 		throw new ArgumentException (String.Format ("Encoding name '{0}' not "
 			+ "supported", name), "name");
@@ -688,7 +681,7 @@ public abstract class Encoding : ICloneable
 	// Get the identifying preamble for this encoding.
 	public virtual byte[] GetPreamble ()
 	{
-		return new byte [0];
+		return EmptyArray<byte>.Value;
 	}
 
 	// Decode a buffer of bytes into a string.
@@ -706,13 +699,13 @@ public abstract class Encoding : ICloneable
 
 #if !ECMA_COMPAT
 
-	internal string body_name;
-	internal string encoding_name;
-	internal string header_name;
 	internal bool is_mail_news_display;
 	internal bool is_mail_news_save;
 	internal bool is_browser_save = false;
 	internal bool is_browser_display = false;
+	internal string body_name;
+	internal string encoding_name;
+	internal string header_name;
 	internal string web_name;
 
 	// Get the mail body name for this encoding.
@@ -858,6 +851,9 @@ public abstract class Encoding : ICloneable
 			if (defaultEncoding == null) {
 				lock (lockobj) {
 					if (defaultEncoding == null) {
+#if MOBILE
+						defaultEncoding = UTF8;
+#else 
 						// See if the underlying system knows what
 						// code page handler we should be using.
 						int code_page = 1;
@@ -875,29 +871,20 @@ public abstract class Encoding : ICloneable
 								case 3: code_page = UTF8Encoding.UTF8_CODE_PAGE; break;
 								case 4: code_page = UnicodeEncoding.UNICODE_CODE_PAGE; break;
 								case 5: code_page = UnicodeEncoding.BIG_UNICODE_CODE_PAGE; break;
-#if !MOONLIGHT
 								case 6: code_page = Latin1Encoding.ISOLATIN_CODE_PAGE; break;
-#endif
 								}
 								defaultEncoding = GetEncoding (code_page);
 							}
 						} catch (NotSupportedException) {
-#if MOONLIGHT
-							defaultEncoding = UTF8;
-#else
 							// code_page is not supported on underlying platform
 							defaultEncoding = UTF8Unmarked;
-#endif
 						} catch (ArgumentException) {
 							// code_page_name is not a valid code page, or is 
 							// not supported by underlying OS
-#if MOONLIGHT
-							defaultEncoding = UTF8;
-#else
 							defaultEncoding = UTF8Unmarked;
-#endif
 						}
 						defaultEncoding.is_readonly = true;
+#endif
 					}
 				}
 			}
@@ -906,7 +893,6 @@ public abstract class Encoding : ICloneable
 		}
 	}
 
-#if !MOONLIGHT
 
 	// Get the ISO Latin1 encoding object.
 	private static Encoding ISOLatin1
@@ -924,8 +910,6 @@ public abstract class Encoding : ICloneable
 			return isoLatin1Encoding;
 		}
 	}
-
-#endif
 
 	// Get the standard UTF-7 encoding object.
 #if ECMA_COMPAT

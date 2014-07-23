@@ -290,7 +290,7 @@ namespace System.Xml.Serialization
 				{
 					if (val.Equals (member.DefaultValue)) return false;
 					Type t = Enum.GetUnderlyingType(val.GetType());
-					val = Convert.ChangeType (val, t);
+					val = Convert.ChangeType (val, t, null);
 				}
 				if (val != null && val.Equals (member.DefaultValue)) return false;
 			}
@@ -470,7 +470,10 @@ namespace System.Xml.Serialization
 
 		void WriteAnyElementContent (XmlTypeMapMemberAnyElement member, object memberValue)
 		{
-			if (member.TypeData.Type == typeof (XmlElement)) {
+			//
+			// XmlAnyElement can be of XmlElement or XmlNode type
+			// 
+			if (member.TypeData.Type == typeof (XmlElement) || member.TypeData.Type == typeof(XmlNode)) {
 				memberValue = new object[] { memberValue };
 			}
 

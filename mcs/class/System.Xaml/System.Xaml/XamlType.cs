@@ -89,7 +89,7 @@ namespace System.Xaml
 			Name = unknownTypeName;
 			PreferredXamlNamespace = unknownTypeNamespace;
 			TypeArguments = typeArguments != null && typeArguments.Count == 0 ? null : typeArguments;
-			explicit_ns = unknownTypeNamespace;
+//			explicit_ns = unknownTypeNamespace;
 		}
 
 		protected XamlType (string typeName, IList<XamlType> typeArguments, XamlSchemaContext schemaContext)
@@ -107,7 +107,7 @@ namespace System.Xaml
 
 		Type type, underlying_type;
 
-		string explicit_ns;
+//		string explicit_ns;
 
 		// populated properties
 		XamlType base_type;
@@ -466,9 +466,12 @@ namespace System.Xaml
 
 			var bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
-			foreach (var pi in UnderlyingType.GetProperties (bf))
+			foreach (var pi in UnderlyingType.GetProperties (bf)) {
+				if (pi.Name.Contains ('.')) // exclude explicit interface implementations.
+					continue;
 				if (pi.CanRead && (pi.CanWrite || IsCollectionType (pi.PropertyType) || typeof (IXmlSerializable).IsAssignableFrom (pi.PropertyType)) && pi.GetIndexParameters ().Length == 0)
 					yield return new XamlMember (pi, SchemaContext);
+			}
 			foreach (var ei in UnderlyingType.GetEvents (bf))
 				yield return new XamlMember (ei, SchemaContext);
 		}
@@ -508,21 +511,19 @@ namespace System.Xaml
 			return GetAllAttachableMembers ().FirstOrDefault (m => m.Name == name);
 		}
 
-		[MonoTODO]
 		protected virtual XamlType LookupBaseType ()
 		{
 			if (base_type == null) {
 				if (UnderlyingType == null)
-					// FIXME: probably something advanced is needed here.
-					base_type = new XamlType (typeof (object), SchemaContext, Invoker);
+					base_type = SchemaContext.GetXamlType (typeof (object));
 				else
-					base_type = type.BaseType == null || type.BaseType == typeof (object) ? null : new XamlType (type.BaseType, SchemaContext, Invoker);
+					base_type = type.BaseType == null || type.BaseType == typeof (object) ? null : SchemaContext.GetXamlType (type.BaseType);
 			}
 			return base_type;
 		}
 
 		// This implementation is not verified. (No place to use.)
-		protected virtual XamlCollectionKind LookupCollectionKind ()
+		protected internal virtual XamlCollectionKind LookupCollectionKind ()
 		{
 			if (UnderlyingType == null)
 				return BaseType != null ? BaseType.LookupCollectionKind () : XamlCollectionKind.None;
@@ -635,7 +636,7 @@ namespace System.Xaml
 
 		protected virtual bool LookupIsNullable ()
 		{
-			return !type.IsValueType || type.ImplementsInterface (typeof (Nullable<>));
+			return !type.IsValueType || type.IsGenericType && type.GetGenericTypeDefinition () == typeof (Nullable<>);
 		}
 
 		protected virtual bool LookupIsPublic ()
@@ -770,11 +771,7 @@ namespace System.Xaml
 
 			// It's still not decent to check CollectionConverter.
 			var tct = t.GetTypeConverter ().GetType ();
-#if MOONLIGHT
-			if (tct != typeof (TypeConverter) && tct.Name != "CollectionConverter" && tct.Name != "ReferenceConverter")
-#else
 			if (tct != typeof (TypeConverter) && tct != typeof (CollectionConverter) && tct != typeof (ReferenceConverter))
-#endif
 				return SchemaContext.GetValueConverter<TypeConverter> (tct, this);
 			return null;
 		}

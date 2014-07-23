@@ -2,9 +2,10 @@
 // report.cs: report errors and warnings.
 //
 // Author: Miguel de Icaza (miguel@ximian.com)
-//         Marek Safar (marek.safar@seznam.cz)         
+//         Marek Safar (marek.safar@gmail.com)         
 //
 // Copyright 2001 Ximian, Inc. (http://www.ximian.com)
+// Copyright 2011 Xamarin, Inc (http://www.xamarin.com)
 //
 
 using System;
@@ -20,29 +21,15 @@ namespace Mono.CSharp {
 	//
 	public class Report
 	{
-		/// <summary>  
-		///   Whether warnings should be considered errors
-		/// </summary>
-		public bool WarningsAreErrors;
-		List<int> warnings_as_error;
-		List<int> warnings_only;
-
-		public static int DebugFlags = 0;
-
 		public const int RuntimeErrorId = 10000;
 
-		//
-		// Keeps track of the warnings that we are ignoring
-		//
-		HashSet<int> warning_ignore_table;
-
 		Dictionary<int, WarningRegions> warning_regions_table;
-
-		int warning_level;
 
 		ReportPrinter printer;
 
 		int reporting_disabled;
+
+		readonly CompilerSettings settings;
 		
 		/// <summary>
 		/// List of symbols related to reported error/warning. You have to fill it before error/warning is reported.
@@ -56,30 +43,33 @@ namespace Mono.CSharp {
 			28, 67, 78,
 			105, 108, 109, 114, 162, 164, 168, 169, 183, 184, 197,
 			219, 251, 252, 253, 278, 282,
-			402, 414, 419, 420, 429, 436, 440, 458, 464, 465, 467, 469, 472,
-			612, 618, 626, 628, 642, 649, 652, 658, 659, 660, 661, 665, 672, 675, 693,
+			402, 414, 419, 420, 429, 436, 437, 440, 458, 464, 465, 467, 469, 472, 473,
+			612, 618, 626, 628, 642, 649, 652, 657, 658, 659, 660, 661, 665, 672, 675, 693,
 			728,
-			809,
-			1030, 1058, 1066,
+			809, 824,
+			1030, 1058, 1060, 1066,
 			1522, 1570, 1571, 1572, 1573, 1574, 1580, 1581, 1584, 1587, 1589, 1590, 1591, 1592,
-			1607, 1616, 1633, 1634, 1635, 1685, 1690, 1691, 1692, 1695, 1696, 1699, 1683,
-			1700, 1701, 1702, 1709, 1717, 1718, 1720,
-			1901, 1981,
+			1607, 1616, 1633, 1634, 1635, 1685, 1690, 1691, 1692, 1695, 1696, 1697, 1699,
+			1700, 1701, 1702, 1709, 1711, 1717, 1718, 1720, 1735,
+			1901, 1956, 1981, 1998,
 			2002, 2023, 2029,
 			3000, 3001, 3002, 3003, 3005, 3006, 3007, 3008, 3009,
 			3010, 3011, 3012, 3013, 3014, 3015, 3016, 3017, 3018, 3019,
-			3021, 3022, 3023, 3024, 3026, 3027
+			3021, 3022, 3023, 3024, 3026, 3027,
+			4014
 		};
 
 		static HashSet<int> AllWarningsHashSet;
 
-		public Report (ReportPrinter printer)
+		public Report (CompilerContext context, ReportPrinter printer)
 		{
+			if (context == null)
+				throw new ArgumentNullException ("settings");
 			if (printer == null)
 				throw new ArgumentNullException ("printer");
 
+			this.settings = context.Settings;
 			this.printer = printer;
-			warning_level = 4;
 		}
 
 		public void DisableReporting ()
@@ -92,10 +82,10 @@ namespace Mono.CSharp {
 			--reporting_disabled;
 		}
 
-		public void FeatureIsNotAvailable (Location loc, string feature)
+		public void FeatureIsNotAvailable (CompilerContext compiler, Location loc, string feature)
 		{
 			string version;
-			switch (RootContext.Version) {
+			switch (compiler.Settings.Version) {
 			case LanguageVersion.ISO_1:
 				version = "1.0";
 				break;
@@ -105,8 +95,14 @@ namespace Mono.CSharp {
 			case LanguageVersion.V_3:
 				version = "3.0";
 				break;
+			case LanguageVersion.V_4:
+				version = "4.0";
+				break;
+			case LanguageVersion.V_5:
+				version = "5.0";
+				break;
 			default:
-				throw new InternalErrorException ("Invalid feature version", RootContext.Version);
+				throw new InternalErrorException ("Invalid feature version", compiler.Settings.Version);
 			}
 
 			Error (1644, loc,
@@ -119,44 +115,6 @@ namespace Mono.CSharp {
 			Error (1644, loc,
 				"Feature `{0}' is not supported in Mono mcs1 compiler. Consider using the `gmcs' compiler instead",
 				feature);
-		}
-		
-		bool IsWarningEnabled (int code, int level, Location loc)
-		{
-			if (WarningLevel < level)
-				return false;
-
-			if (IsWarningDisabledGlobally (code))
-				return false;
-
-			if (warning_regions_table == null || loc.IsNull)
-				return true;
-
-			WarningRegions regions;
-			if (!warning_regions_table.TryGetValue (loc.File, out regions))
-				return true;
-
-			return regions.IsWarningEnabled (code, loc.Row);
-		}
-
-		public bool IsWarningDisabledGlobally (int code)
-		{
-			return warning_ignore_table != null && warning_ignore_table.Contains (code);
-		}
-
-		bool IsWarningAsError (int code)
-		{
-			bool is_error = WarningsAreErrors;
-
-			// Check specific list
-			if (warnings_as_error != null)
-				is_error |= warnings_as_error.Contains (code);
-
-			// Ignore excluded warnings
-			if (warnings_only != null && warnings_only.Contains (code))
-				is_error = false;
-
-			return is_error;
 		}
 		        
 		public void RuntimeMissingSupport (Location loc, string feature) 
@@ -212,50 +170,6 @@ namespace Mono.CSharp {
 			extra_information.Add (msg);
 		}
 
-		public void AddWarningAsError (string warningId)
-		{
-			int id;
-			try {
-				id = int.Parse (warningId);
-			} catch {
-				CheckWarningCode (warningId, Location.Null);
-				return;
-			}
-
-			if (!CheckWarningCode (id, Location.Null))
-				return;
-
-			if (warnings_as_error == null)
-				warnings_as_error = new List<int> ();
-			
-			warnings_as_error.Add (id);
-		}
-
-		public void RemoveWarningAsError (string warningId)
-		{
-			int id;
-			try {
-				id = int.Parse (warningId);
-			} catch {
-				CheckWarningCode (warningId, Location.Null);
-				return;
-			}
-
-			if (!CheckWarningCode (id, Location.Null))
-				return;
-
-			if (warnings_only == null)
-				warnings_only = new List<int> ();
-
-			warnings_only.Add (id);
-		}
-
-		public bool CheckWarningCode (string code, Location loc)
-		{
-			Warning (1691, 1, loc, "`{0}' is not a valid warning number", code);
-			return false;
-		}
-
 		public bool CheckWarningCode (int code, Location loc)
 		{
 			if (AllWarningsHashSet == null)
@@ -264,7 +178,8 @@ namespace Mono.CSharp {
 			if (AllWarningsHashSet.Contains (code))
 				return true;
 
-			return CheckWarningCode (code.ToString (), loc);
+			Warning (1691, 1, loc, "`{0}' is not a valid warning number", code);
+			return false;
 		}
 
 		public void ExtraInformation (Location loc, string msg)
@@ -295,17 +210,25 @@ namespace Mono.CSharp {
 			if (reporting_disabled > 0)
 				return;
 
-			if (!IsWarningEnabled (code, level, loc))
+			if (!settings.IsWarningEnabled (code, level))
 				return;
 
+			if (warning_regions_table != null && !loc.IsNull) {
+				WarningRegions regions;
+				if (warning_regions_table.TryGetValue (loc.File, out regions) && !regions.IsWarningEnabled (code, loc.Row))
+					return;
+			}
+
 			AbstractMessage msg;
-			if (IsWarningAsError (code))
+			if (settings.IsWarningAsError (code)) {
+				message = "Warning as Error: " + message;
 				msg = new ErrorMessage (code, loc, message, extra_information);
-			else
+			} else {
 				msg = new WarningMessage (code, loc, message, extra_information);
+			}
 
 			extra_information.Clear ();
-			printer.Print (msg);
+			printer.Print (msg, settings.ShowFullPaths);
 		}
 
 		public void Warning (int code, int level, Location loc, string format, string arg)
@@ -358,7 +281,13 @@ namespace Mono.CSharp {
 			ErrorMessage msg = new ErrorMessage (code, loc, error, extra_information);
 			extra_information.Clear ();
 
-			printer.Print (msg);
+			printer.Print (msg, settings.ShowFullPaths);
+
+			if (settings.Stacktrace)
+				Console.WriteLine (FriendlyStackTrace (new StackTrace (true)));
+
+			if (printer.ErrorsCount == settings.FatalCounter)
+				throw new FatalException (msg.Text);
 		}
 
 		public void Error (int code, Location loc, string format, string arg)
@@ -413,28 +342,11 @@ namespace Mono.CSharp {
 			get { return printer; }
 		}
 
-		public void SetIgnoreWarning (int code)
-		{
-			if (warning_ignore_table == null)
-				warning_ignore_table = new HashSet<int> ();
-
-			warning_ignore_table.Add (code);
-		}
-
 		public ReportPrinter SetPrinter (ReportPrinter printer)
 		{
 			ReportPrinter old = this.printer;
 			this.printer = printer;
 			return old;
-		}
-
-		public int WarningLevel {
-			get {
-				return warning_level;
-			}
-			set {
-				warning_level = value;
-			}
 		}
 
 		[Conditional ("MCS_DEBUG")]
@@ -446,8 +358,8 @@ namespace Mono.CSharp {
 		[Conditional ("MCS_DEBUG")]
 		static public void Debug (int category, string message, params object[] args)
 		{
-			if ((category & DebugFlags) == 0)
-				return;
+//			if ((category & DebugFlags) == 0)
+//				return;
 
 			StringBuilder sb = new StringBuilder (message);
 
@@ -491,7 +403,42 @@ namespace Mono.CSharp {
 			sb.Append (")");
 			return sb.ToString ();
 		}
-*/ 
+*/
+		static string FriendlyStackTrace (StackTrace t)
+		{
+			StringBuilder sb = new StringBuilder ();
+
+			bool foundUserCode = false;
+
+			for (int i = 0; i < t.FrameCount; i++) {
+				StackFrame f = t.GetFrame (i);
+				var mb = f.GetMethod ();
+
+				if (!foundUserCode && mb.ReflectedType == typeof (Report))
+					continue;
+
+				foundUserCode = true;
+
+				sb.Append ("\tin ");
+
+				if (f.GetFileLineNumber () > 0)
+					sb.AppendFormat ("(at {0}:{1}) ", f.GetFileName (), f.GetFileLineNumber ());
+
+				sb.AppendFormat ("{0}.{1} (", mb.ReflectedType.Name, mb.Name);
+
+				bool first = true;
+				foreach (var pi in mb.GetParameters ()) {
+					if (!first)
+						sb.Append (", ");
+					first = false;
+
+					sb.Append (pi.ParameterType.FullName);
+				}
+				sb.Append (")\n");
+			}
+
+			return sb.ToString ();
+		}
 	}
 
 	public abstract class AbstractMessage
@@ -601,27 +548,16 @@ namespace Mono.CSharp {
 	//
 	// Generic base for any message writer
 	//
-	public abstract class ReportPrinter {
-		/// <summary>  
-		///   Whether to dump a stack trace on errors. 
-		/// </summary>
-		public bool Stacktrace;
+	public abstract class ReportPrinter
+	{
+		protected HashSet<ITypeDefinition> reported_missing_definitions;
+
+		#region Properties
+
+		public int ErrorsCount { get; protected set; }
 		
-		int warnings, errors;
-
-		public int WarningsCount {
-			get { return warnings; }
-		}
-		
-		public int ErrorsCount {
-			get { return errors; }
-		}
-
-		protected virtual string FormatText (string txt)
-		{
-			return txt;
-		}
-
+		public int WarningsCount { get; private set; }
+	
 		//
 		// When (symbols related to previous ...) can be used
 		//
@@ -629,19 +565,32 @@ namespace Mono.CSharp {
 			get { return true; }
 		}
 
-		public virtual void Print (AbstractMessage msg)
+		#endregion
+
+
+		protected virtual string FormatText (string txt)
 		{
-			if (msg.IsWarning)
-				++warnings;
-			else
-				++errors;
+			return txt;
 		}
 
-		protected void Print (AbstractMessage msg, TextWriter output)
+		public virtual void Print (AbstractMessage msg, bool showFullPath)
+		{
+			if (msg.IsWarning) {
+				++WarningsCount;
+			} else {
+				++ErrorsCount;
+			}
+		}
+
+		protected void Print (AbstractMessage msg, TextWriter output, bool showFullPath)
 		{
 			StringBuilder txt = new StringBuilder ();
 			if (!msg.Location.IsNull) {
-				txt.Append (msg.Location.ToString ());
+				if (showFullPath)
+					txt.Append (msg.Location.ToStringFullName ());
+				else
+					txt.Append (msg.Location.ToString ());
+
 				txt.Append (" ");
 			}
 
@@ -658,11 +607,31 @@ namespace Mono.CSharp {
 			}
 		}
 
+		//
+		// Tracks reported missing types. It needs to be session specific 
+		// because we can run in probing mode
+		//
+		public bool MissingTypeReported (ITypeDefinition typeDefinition)
+		{
+			if (reported_missing_definitions == null)
+				reported_missing_definitions = new HashSet<ITypeDefinition> ();
+
+			if (reported_missing_definitions.Contains (typeDefinition))
+				return true;
+
+			reported_missing_definitions.Add (typeDefinition);
+			return false;
+		}
+
 		public void Reset ()
 		{
-			// Temporary hack for broken repl flow
-			errors = warnings = 0;
+			// HACK: Temporary hack for broken repl flow
+			ErrorsCount = WarningsCount = 0;
 		}
+	}
+
+	sealed class NullReportPrinter : ReportPrinter
+	{
 	}
 
 	//
@@ -686,19 +655,27 @@ namespace Mono.CSharp {
 		//
 		List<AbstractMessage> merged_messages;
 
-		public override void Print (AbstractMessage msg)
+		bool showFullPaths;
+
+		public void ClearSession ()
+		{
+			session_messages = null;
+		}
+
+		public override void Print (AbstractMessage msg, bool showFullPath)
 		{
 			//
 			// This line is useful when debugging recorded messages
 			//
-			// Console.WriteLine ("RECORDING: {0}", msg.ToString ());
+			// Console.WriteLine ("RECORDING: {0}", msg.Text);
 
 			if (session_messages == null)
 				session_messages = new List<AbstractMessage> ();
 
 			session_messages.Add (msg);
 
-			base.Print (msg);
+			this.showFullPaths = showFullPath;
+			base.Print (msg, showFullPath);
 		}
 
 		public void EndSession ()
@@ -772,15 +749,20 @@ namespace Mono.CSharp {
 
 			bool error_msg = false;
 			foreach (AbstractMessage msg in messages_to_print) {
-				dest.Print (msg);
+				dest.Print (msg, showFullPaths);
 				error_msg |= !msg.IsWarning;
+			}
+
+			if (reported_missing_definitions != null) {
+				foreach (var missing in reported_missing_definitions)
+					dest.MissingTypeReported (missing);
 			}
 
 			return error_msg;
 		}
 	}
 
-	class StreamReportPrinter : ReportPrinter
+	public class StreamReportPrinter : ReportPrinter
 	{
 		readonly TextWriter writer;
 
@@ -789,14 +771,14 @@ namespace Mono.CSharp {
 			this.writer = writer;
 		}
 
-		public override void Print (AbstractMessage msg)
+		public override void Print (AbstractMessage msg, bool showFullPath)
 		{
-			Print (msg, writer);
-			base.Print (msg);
+			Print (msg, writer, showFullPath);
+			base.Print (msg, showFullPath);
 		}
 	}
 
-	class ConsoleReportPrinter : StreamReportPrinter
+	public class ConsoleReportPrinter : StreamReportPrinter
 	{
 		static readonly string prefix, postfix;
 
@@ -857,8 +839,6 @@ namespace Mono.CSharp {
 		{
 		}
 
-		public int Fatal { get; set; }
-
 		static int NameToCode (string s)
 		{
 			switch (s) {
@@ -911,149 +891,97 @@ namespace Mono.CSharp {
 
 			return txt;
 		}
-
-		static string FriendlyStackTrace (StackTrace t)
-		{		
-			StringBuilder sb = new StringBuilder ();
-			
-			bool foundUserCode = false;
-			
-			for (int i = 0; i < t.FrameCount; i++) {
-				StackFrame f = t.GetFrame (i);
-				var mb = f.GetMethod ();
-				
-				if (!foundUserCode && mb.ReflectedType == typeof (Report))
-					continue;
-				
-				foundUserCode = true;
-				
-				sb.Append ("\tin ");
-				
-				if (f.GetFileLineNumber () > 0)
-					sb.AppendFormat ("(at {0}:{1}) ", f.GetFileName (), f.GetFileLineNumber ());
-				
-				sb.AppendFormat ("{0}.{1} (", mb.ReflectedType.Name, mb.Name);
-				
-				bool first = true;
-				foreach (var pi in mb.GetParameters ()) {
-					if (!first)
-						sb.Append (", ");
-					first = false;
-
-					sb.Append (pi.ParameterType.FullName);
-				}
-				sb.Append (")\n");
-			}
-	
-			return sb.ToString ();
-		}
-
-		int print_count;
-		public override void Print (AbstractMessage msg)
-		{
-			base.Print (msg);
-
-			if (Stacktrace)
-				Console.WriteLine (FriendlyStackTrace (new StackTrace (true)));
-
-			if (++print_count == Fatal)
-				throw new Exception (msg.Text);
-		}
-
-		public static string FriendlyStackTrace (Exception e)
-		{
-			return FriendlyStackTrace (new StackTrace (e, true));
-		}
-
-		public static void StackTrace ()
-		{
-			Console.WriteLine (FriendlyStackTrace (new StackTrace (true)));
-		}
 	}
 
-	public enum TimerType {
-		FindMembers	= 0,
-		TcFindMembers	= 1,
-		MemberLookup	= 2,
-		CachedLookup	= 3,
-		CacheInit	= 4,
-		MiscTimer	= 5,
-		CountTimers	= 6
-	}
-
-	public enum CounterType {
-		FindMembers	= 0,
-		MemberCache	= 1,
-		MiscCounter	= 2,
-		CountCounters	= 3
-	}
-
-	public class Timer
+	class TimeReporter
 	{
-		static DateTime[] timer_start;
-		static TimeSpan[] timers;
-		static long[] timer_counters;
-		static long[] counters;
-
-		static Timer ()
+		public enum TimerType
 		{
-			timer_start = new DateTime [(int) TimerType.CountTimers];
-			timers = new TimeSpan [(int) TimerType.CountTimers];
-			timer_counters = new long [(int) TimerType.CountTimers];
-			counters = new long [(int) CounterType.CountCounters];
+			ParseTotal,
+			AssemblyBuilderSetup,
+			CreateTypeTotal,
+			ReferencesLoading,
+			ReferencesImporting,
+			PredefinedTypesInit,
+			ModuleDefinitionTotal,
+			EmitTotal,
+			CloseTypes,
+			Resouces,
+			OutputSave,
+			DebugSave,
+		}
 
-			for (int i = 0; i < (int) TimerType.CountTimers; i++) {
-				timer_start [i] = DateTime.Now;
-				timers [i] = TimeSpan.Zero;
+		readonly Stopwatch[] timers;
+		Stopwatch total;
+
+		public TimeReporter (bool enabled)
+		{
+			if (!enabled)
+				return;
+
+			timers = new Stopwatch[System.Enum.GetValues(typeof (TimerType)).Length];
+		}
+
+		public void Start (TimerType type)
+		{
+			if (timers != null) {
+				var sw = new Stopwatch ();
+				timers[(int) type] = sw;
+				sw.Start ();
 			}
 		}
 
-		[Conditional("TIMER")]
-		static public void IncrementCounter (CounterType which)
+		public void StartTotal ()
 		{
-			++counters [(int) which];
+			total = new Stopwatch ();
+			total.Start ();
 		}
 
-		[Conditional("TIMER")]
-		static public void StartTimer (TimerType which)
+		public void Stop (TimerType type)
 		{
-			timer_start [(int) which] = DateTime.Now;
+			if (timers != null) {
+				timers[(int) type].Stop ();
+			}
 		}
 
-		[Conditional("TIMER")]
-		static public void StopTimer (TimerType which)
+		public void StopTotal ()
 		{
-			timers [(int) which] += DateTime.Now - timer_start [(int) which];
-			++timer_counters [(int) which];
+			total.Stop ();
 		}
 
-		[Conditional("TIMER")]
-		static public void ShowTimers ()
+		public void ShowStats ()
 		{
-			ShowTimer (TimerType.FindMembers, "- FindMembers timer");
-			ShowTimer (TimerType.TcFindMembers, "- TypeContainer.FindMembers timer");
-			ShowTimer (TimerType.MemberLookup, "- MemberLookup timer");
-			ShowTimer (TimerType.CachedLookup, "- CachedLookup timer");
-			ShowTimer (TimerType.CacheInit, "- Cache init");
-			ShowTimer (TimerType.MiscTimer, "- Misc timer");
+			if (timers == null)
+				return;
 
-			ShowCounter (CounterType.FindMembers, "- Find members");
-			ShowCounter (CounterType.MemberCache, "- Member cache");
-			ShowCounter (CounterType.MiscCounter, "- Misc counter");
-		}
+			Dictionary<TimerType, string> timer_names = new Dictionary<TimerType,string> {
+				{ TimerType.ParseTotal, "Parsing source files" },
+				{ TimerType.AssemblyBuilderSetup, "Assembly builder setup" },
+				{ TimerType.CreateTypeTotal, "Compiled types created" },
+				{ TimerType.ReferencesLoading, "Referenced assemblies loading" },
+				{ TimerType.ReferencesImporting, "Referenced assemblies importing" },
+				{ TimerType.PredefinedTypesInit, "Predefined types initialization" },
+				{ TimerType.ModuleDefinitionTotal, "Module definition" },
+				{ TimerType.EmitTotal, "Resolving and emitting members blocks" },
+				{ TimerType.CloseTypes, "Module types closed" },
+				{ TimerType.Resouces, "Embedding resources" },
+				{ TimerType.OutputSave, "Writing output file" },
+				{ TimerType.DebugSave, "Writing debug symbols file" },
+			};
 
-		static public void ShowCounter (CounterType which, string msg)
-		{
-			Console.WriteLine ("{0} {1}", counters [(int) which], msg);
-		}
+			int counter = 0;
+			double percentage = (double) total.ElapsedMilliseconds / 100;
+			long subtotal = total.ElapsedMilliseconds;
+			foreach (var timer in timers) {
+				string msg = timer_names[(TimerType) counter++];
+				var ms = timer == null ? 0 : timer.ElapsedMilliseconds;
+				Console.WriteLine ("{0,4:0.0}% {1,5}ms {2}", ms / percentage, ms, msg);
+				subtotal -= ms;
+			}
 
-		static public void ShowTimer (TimerType which, string msg)
-		{
-			Console.WriteLine (
-				"[{0:00}:{1:000}] {2} (used {3} times)",
-				(int) timers [(int) which].TotalSeconds,
-				timers [(int) which].Milliseconds, msg,
-				timer_counters [(int) which]);
+			Console.WriteLine ("{0,4:0.0}% {1,5}ms Other tasks", subtotal / percentage, subtotal);
+			Console.WriteLine ();
+			Console.WriteLine ("Total elapsed time: {0}", total.Elapsed);
 		}
 	}
 
@@ -1089,6 +1017,14 @@ namespace Mono.CSharp {
 		}
 	}
 
+	class FatalException : Exception
+	{
+		public FatalException (string message)
+			: base (message)
+		{
+		}
+	}
+
 	/// <summary>
 	/// Handles #pragma warning
 	/// </summary>
@@ -1117,7 +1053,7 @@ namespace Mono.CSharp {
 
 			public override bool IsEnabled (int code, bool previous)
 			{
-				return this.code == code ? false : previous;
+				return this.code != code && previous;
 			}
 		}
 
@@ -1143,7 +1079,7 @@ namespace Mono.CSharp {
 
 			public override bool IsEnabled(int code, bool previous)
 			{
-				return this.code == code ? true : previous;
+				return this.code == code || previous;
 			}
 		}
 
@@ -1177,13 +1113,13 @@ namespace Mono.CSharp {
 			regions.Add (new EnableAll (line));
 		}
 
-		public void WarningEnable (Location location, int code, Report Report)
+		public void WarningEnable (Location location, int code, CompilerContext context)
 		{
-			if (!Report.CheckWarningCode (code, location))
+			if (!context.Report.CheckWarningCode (code, location))
 				return;
 
-			if (Report.IsWarningDisabledGlobally (code))
-				Report.Warning (1635, 1, location, "Cannot restore warning `CS{0:0000}' because it was disabled globally", code);
+			if (context.Settings.IsWarningDisabledGlobally (code))
+				context.Report.Warning (1635, 1, location, "Cannot restore warning `CS{0:0000}' because it was disabled globally", code);
 
 			regions.Add (new Enable (location.Row, code));
 		}

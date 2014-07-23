@@ -2,9 +2,10 @@
 // X509CRL.cs: Handles X.509 certificates revocation lists.
 //
 // Author:
-//	Sebastien Pouliot  <sebastien@ximian.com>
+//	Sebastien Pouliot  <sebastien@xamarin.com>
 //
 // Copyright (C) 2004,2006 Novell Inc. (http://www.novell.com)
+// Copyright 2013 Xamarin Inc. (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -32,6 +33,7 @@ using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 
+using Mono.Security.Cryptography;
 using Mono.Security.X509.Extensions;
 
 namespace Mono.Security.X509 {
@@ -58,9 +60,7 @@ namespace Mono.Security.X509 {
 	 *	crlExtensions           [0] Extensions OPTIONAL }
 	 *		-- if present, MUST be v2
 	 */
-#if INSIDE_CORLIB
-	internal
-#else
+#if !INSIDE_CORLIB
 	public 
 #endif
 	class X509Crl {
@@ -218,8 +218,8 @@ namespace Mono.Security.X509 {
 				if (hash_value == null) {
 					ASN1 encodedCRL = new ASN1 (encoded);
 					byte[] toBeSigned = encodedCRL [0].GetBytes ();
-					HashAlgorithm ha = HashAlgorithm.Create (GetHashName ());
-					hash_value = ha.ComputeHash (toBeSigned);
+					using (var ha = PKCS1.CreateFromOid (signatureOID))
+						hash_value = ha.ComputeHash (toBeSigned);
 				}
 				return hash_value;
 			}
@@ -317,19 +317,24 @@ namespace Mono.Security.X509 {
 
 			// 1. x509 certificate must be a CA certificate (unknown for v1 or v2 certs)
 			if (x509.Version >= 3) {
-				// 1.1. Check for "cRLSign" bit in KeyUsage extension
-				X509Extension ext = x509.Extensions ["2.5.29.15"];
-				if (ext != null) {
-					KeyUsageExtension keyUsage = new KeyUsageExtension (ext);
-					if (!keyUsage.Support (KeyUsages.cRLSign))
-						return false;
-				}
+				BasicConstraintsExtension basicConstraints = null;
 				// 1.2. Check for ca = true in BasicConstraint
-				ext = x509.Extensions ["2.5.29.19"];
+				X509Extension ext = x509.Extensions ["2.5.29.19"];
 				if (ext != null) {
-					BasicConstraintsExtension basicConstraints = new BasicConstraintsExtension (ext);
+					basicConstraints = new BasicConstraintsExtension (ext);
 					if (!basicConstraints.CertificateAuthority)
 						return false;
+				}
+				// 1.1. Check for "cRLSign" bit in KeyUsage extension
+				ext = x509.Extensions ["2.5.29.15"];
+				if (ext != null) {
+					KeyUsageExtension keyUsage = new KeyUsageExtension (ext);
+					if (!keyUsage.Support (KeyUsages.cRLSign)) {
+						// 2nd chance if basicConstraints is CertificateAuthority
+						// and KeyUsage support digitalSignature
+						if ((basicConstraints == null) || !keyUsage.Support (KeyUsages.digitalSignature))
+							return false;
+					}
 				}
 			}
 			// 2. CRL issuer must match CA subject name
@@ -341,26 +346,6 @@ namespace Mono.Security.X509 {
 					return VerifySignature (x509.DSA);
 				default:
 					return VerifySignature (x509.RSA);
-			}
-		}
-
-		private string GetHashName ()
-		{
-			switch (signatureOID) {
-			// MD2 with RSA encryption 
-			case "1.2.840.113549.1.1.2":
-				// maybe someone installed MD2 ?
-				return "MD2";
-			// MD5 with RSA encryption 
-			case "1.2.840.113549.1.1.4":
-				return "MD5";
-			// SHA-1 with DSA
-			case "1.2.840.10040.4.3":
-			// SHA-1 with RSA Encryption 
-			case "1.2.840.113549.1.1.5":
-				return "SHA1";
-			default:
-				throw new CryptographicException ("Unsupported hash algorithm: " + signatureOID);
 			}
 		}
 
@@ -392,7 +377,7 @@ namespace Mono.Security.X509 {
 		internal bool VerifySignature (RSA rsa) 
 		{
 			RSAPKCS1SignatureDeformatter v = new RSAPKCS1SignatureDeformatter (rsa);
-			v.SetHashAlgorithm (GetHashName ());
+			v.SetHashAlgorithm (PKCS1.HashNameFromOid (signatureOID));
 			return v.VerifySignature (Hash, signature);
 		}
 

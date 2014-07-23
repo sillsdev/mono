@@ -223,7 +223,7 @@ namespace System.Xml.Serialization
 					return ReadTypedPrimitive (AnyType);
             }
 
-			object ob = Activator.CreateInstance (typeMap.TypeData.Type, true);
+			object ob = CreateInstance (typeMap.TypeData.Type, true);
 
 			Reader.MoveToElement();
 			bool isEmpty = Reader.IsEmptyElement;
@@ -317,12 +317,12 @@ namespace System.Xml.Serialization
 			object[] flatLists = null;
 			object[] flatListsChoices = null;
 			Fixup fixup = null;
-			int ind = 0;
+			int ind = -1;
 			int maxInd;
 
 			if (readBySoapOrder) {
 				if (map.ElementMembers != null) maxInd = map.ElementMembers.Count;
-				else maxInd = 0;
+				else maxInd = -1;
 			}
 			else
 				maxInd = int.MaxValue;
@@ -361,14 +361,15 @@ namespace System.Xml.Serialization
 				AddFixup (fixup);
 			}
 
-			while (Reader.NodeType != System.Xml.XmlNodeType.EndElement && (ind < maxInd)) 
+			XmlTypeMapMember previousMember = null;
+			while (Reader.NodeType != System.Xml.XmlNodeType.EndElement && (ind < maxInd - 1))
 			{
 				if (Reader.NodeType == System.Xml.XmlNodeType.Element) 
 				{
 					XmlTypeMapElementInfo info;
 					
 					if (readBySoapOrder) {
-						info = map.GetElement (ind++);
+						info = map.GetElement (Reader.LocalName, Reader.NamespaceURI, ind);
 					}
 					else if (hasAnyReturnMember) {
 						info = (XmlTypeMapElementInfo) ((XmlTypeMapMemberElement)map.ReturnMember).ElementInfo[0];
@@ -376,16 +377,24 @@ namespace System.Xml.Serialization
 					}
 					else {
 						if (map.IsOrderDependentMap) {
-							while ((info = map.GetElement (ind++)) != null)
-								if (info.ElementName == Reader.LocalName && info.Namespace == Reader.NamespaceURI)
-									break;
+							info = map.GetElement (Reader.LocalName, Reader.NamespaceURI, ind);
 						}
 						else
-							info = map.GetElement (Reader.LocalName, Reader.NamespaceURI, -1);
+							info = map.GetElement (Reader.LocalName, Reader.NamespaceURI);
 					}
 
 					if (info != null && !readFlag[info.Member.Index] )
 					{
+						if (info.Member != previousMember)
+						{
+							ind = info.ExplicitOrder + 1;
+							// If the member is a flat list don't increase the index, since the next element may
+							// be another item of the list. This is a fix for Xamarin bug #9193.
+							if (info.Member is XmlTypeMapMemberFlatList)
+								ind--;
+							previousMember = info.Member;
+						}
+
 						if (info.Member.GetType() == typeof (XmlTypeMapMemberList))
 						{
 							if (_format == SerializationFormat.Encoded && info.MultiReferenceType)
@@ -503,7 +512,6 @@ namespace System.Xml.Serialization
 				}
 				else 
 					UnknownNode(ob);
-
 				Reader.MoveToContent();
 			}
 
@@ -620,7 +628,7 @@ namespace System.Xml.Serialization
 					return ReadObject (elem.MappedType, elem.IsNullable, true);
 
 				case SchemaTypes.XmlSerializable:
-					object ob = Activator.CreateInstance (elem.TypeData.Type, true);
+					object ob = CreateInstance (elem.TypeData.Type, true);
 					return ReadSerializable ((IXmlSerializable)ob);
 
 				default:
@@ -731,13 +739,18 @@ namespace System.Xml.Serialization
 			else	// Must be IEnumerable
 			{
 				if (list == null) {
-					if (canCreateInstance) list = Activator.CreateInstance (type, true);
+					if (canCreateInstance) list = CreateInstance (type, true);
 					else throw CreateReadOnlyCollectionException (type.FullName);
 				}
 
 				MethodInfo mi = type.GetMethod ("Add", new Type[] {listType.ListItemType} );
 				mi.Invoke (list, new object[] { value });
 			}
+		}
+
+		static object CreateInstance (Type type, bool nonPublic)
+		{
+			return Activator.CreateInstance (type, nonPublic);
 		}
 
 		object CreateInstance (Type type)
@@ -750,7 +763,7 @@ namespace System.Xml.Serialization
 			if (listType.IsArray)
 				return EnsureArrayIndex (null, 0, listType.GetElementType());
 			else
-				return Activator.CreateInstance (listType, true);
+				return CreateInstance (listType, true);
 		}
 		
 		object InitializeList (TypeData listType)
@@ -758,7 +771,7 @@ namespace System.Xml.Serialization
 			if (listType.Type.IsArray)
 				return null;
 			else
-				return Activator.CreateInstance (listType.Type, true);
+				return CreateInstance (listType.Type, true);
 		}
 
 		void FillList (object list, object items)
@@ -814,7 +827,7 @@ namespace System.Xml.Serialization
 			EnumMap map = (EnumMap) typeMap.ObjectMap;
 			string ev = map.GetEnumName (typeMap.TypeFullName, val);
 			if (ev == null) throw CreateUnknownConstantException (val, typeMap.TypeData.Type);
-			return Enum.Parse (typeMap.TypeData.Type, ev);
+			return Enum.Parse (typeMap.TypeData.Type, ev, false);
 		}
 
 		object ReadXmlSerializableElement (XmlTypeMapping typeMap, bool isNullable)
@@ -824,7 +837,7 @@ namespace System.Xml.Serialization
 			{
 				if (Reader.LocalName == typeMap.ElementName && Reader.NamespaceURI == typeMap.Namespace)
 				{
-					object ob = Activator.CreateInstance (typeMap.TypeData.Type, true);
+					object ob = CreateInstance (typeMap.TypeData.Type, true);
 					return ReadSerializable ((IXmlSerializable)ob);
 				}
 				else

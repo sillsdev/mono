@@ -27,6 +27,8 @@
 using System;
 using System.Runtime.Serialization;
 using System.ServiceModel;
+using System.ServiceModel.Description;
+using System.Collections.Generic;
 
 namespace System.ServiceModel.Dispatcher
 {

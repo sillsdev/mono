@@ -28,7 +28,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0 && SECURITY_DEP
+#if SECURITY_DEP
 
 using System.Threading;
 namespace System.Net {
@@ -117,6 +117,8 @@ namespace System.Net {
 					}
 				} else {
 					completed = true;
+                    this.synch = false;
+
 					if (handle != null)
 						handle.Set ();
 

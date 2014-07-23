@@ -3,9 +3,11 @@
 //
 // Authors:
 // 	Erik LeBel (eriklebel@yahoo.ca)
+// 	Ilker Cetinkaya (mail@ilker.de)
 //
 // (c) 2003 Erik LeBel
 //
+
 using System;
 using System.CodeDom;
 using System.CodeDom.Compiler;
@@ -174,6 +176,50 @@ namespace MonoTests.Microsoft.CSharp
 			generator.GenerateCodeFromCompileUnit (codeUnit, writer, options);
 			writer.Close ();
 			Assert.AreEqual ("public class Test1 {}" + writer.NewLine, writer.ToString ());
+		}
+
+		[Test]
+		public void AttributeAndGlobalNamespaceWithImportTest ()
+		{
+			CodeNamespace ns = new CodeNamespace ();
+			ns.Imports.Add (new CodeNamespaceImport ("Z"));
+			ns.Imports.Add (new CodeNamespaceImport ("A"));
+			codeUnit.Namespaces.Add (ns);
+
+			CodeAttributeDeclaration attrDec = new CodeAttributeDeclaration ();
+			attrDec.Name = "A";
+			codeUnit.AssemblyCustomAttributes.Add (attrDec);
+
+			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
+				"using A;{0}using Z;{0}{0}[assembly: A()]{0}{0}{0}", NewLine), Generate ());
+		}
+
+		[Test]
+		public void GlobalAttributeBeforeType ()
+		{
+			StringWriter writer = new StringWriter ();
+			writer.NewLine = NewLine;
+
+			codeUnit = new CodeCompileUnit () {
+				AssemblyCustomAttributes = {
+					new CodeAttributeDeclaration (
+						new CodeTypeReference (typeof (CLSCompliantAttribute)),
+						new CodeAttributeArgument (new CodePrimitiveExpression (false))),
+				},
+				Namespaces = {
+					new CodeNamespace () {
+						Types = {
+							new CodeTypeDeclaration ("Resources"),
+						},
+					}
+				},
+			};
+
+			generator.GenerateCodeFromCompileUnit (codeUnit, writer, options);
+			writer.Close ();
+
+			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
+				"[assembly: System.CLSCompliantAttribute(false)]{0}{0}{0}{0}public class Resources {{{0}}}{0}", NewLine), Generate ());
 		}
 	}
 }

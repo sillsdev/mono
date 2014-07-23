@@ -26,7 +26,6 @@
 //	Jonathan Pobst (monkey@jpobst.com)
 //
 
-#if NET_2_0
 
 using System;
 using System.Drawing;
@@ -959,7 +958,7 @@ namespace System.Windows.Forms
 				image = null;
 			}
 
-			if (owner != null)
+			if (owner != null && disposing)
 				owner.Items.Remove (this);
 			
 			base.Dispose (disposing);
@@ -1897,7 +1896,8 @@ namespace System.Windows.Forms
 			set {
 				if (this.owner != value) {
 					this.owner = value;
-					this.CalculateAutoSize ();
+					if (this.owner != null)
+						this.CalculateAutoSize ();
 					OnOwnerChanged (EventArgs.Empty);
 				}
 			}
@@ -2073,5 +2073,3 @@ namespace System.Windows.Forms
 	{
 	}
 }
-
-#endif

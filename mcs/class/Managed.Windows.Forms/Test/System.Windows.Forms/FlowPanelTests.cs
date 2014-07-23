@@ -1,4 +1,3 @@
-#if NET_2_0
 using System;
 using System.Text;
 using NUnit.Framework;
@@ -1642,4 +1641,3 @@ namespace MonoTests.System.Windows.Forms
 		}
 	}
 }
-#endif

@@ -1,23 +1,43 @@
-// Compiler options: -checked
-//
-// from bug #706877
-//
+using System;
 
-
-public class Bug
+interface IA
 {
-    public static int Main()
-    {
-        try
-        {
-            long x = long.MaxValue;
-            System.Console.WriteLine(x+1);
-        }
-        catch(System.OverflowException ex)
-        {
-            return 0;
-        }
-        return 1;
-    }
+	int Foo { get; }
 }
 
+interface IB_1 : IA
+{
+	new string Foo { get; }
+}
+
+interface IB_2 : IA
+{
+	new char Foo { get; }
+}
+
+interface IC : IB_2, IB_1
+{
+	new byte Foo { get; }
+}
+
+class A : IA
+{
+	public int Foo { get { return 3; } }
+}
+
+class B : A, IB_1
+{
+	public new string Foo { get { return "1"; } }
+}
+
+class C : B, IC
+{
+	char IB_2.Foo { get { return 'a'; } }
+	
+	public new byte Foo { get { return 2; } }
+	
+	public static void Main ()
+	{
+		new C ();
+	}
+}

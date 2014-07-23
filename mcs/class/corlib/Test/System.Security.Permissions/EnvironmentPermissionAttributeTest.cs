@@ -36,6 +36,9 @@ using System.Security.Permissions;
 namespace MonoTests.System.Security.Permissions {
 
 	[TestFixture]
+#if MOBILE
+	[Ignore]
+#endif
 	public class EnvironmentPermissionAttributeTest {
 
 		private static string envar = "TMP";
@@ -101,7 +104,6 @@ namespace MonoTests.System.Security.Permissions {
 			Assert.AreEqual (envar, p.GetPathList (EnvironmentPermissionAccess.Read), "All=EnvironmentPermission-Read");
 			Assert.AreEqual (envar, p.GetPathList (EnvironmentPermissionAccess.Write), "All=EnvironmentPermission-Write");
 		}
-#if NET_1_1
 		[Test]
 		[ExpectedException (typeof (NotSupportedException))]
 		public void All_Get () 
@@ -109,7 +111,7 @@ namespace MonoTests.System.Security.Permissions {
 			EnvironmentPermissionAttribute attr = new EnvironmentPermissionAttribute (SecurityAction.Assert);
 			string s = attr.All;
 		}
-#endif
+
 		[Test]
 		public void Read () 
 		{

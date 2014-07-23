@@ -76,6 +76,17 @@ namespace MonoTests.System.Xml.Linq
 		}
 
 		[Test]
+		public void Bug4739 ()
+		{
+			string data = "<root><parent>A<child>B</child>C</parent></root>";
+			XElement doc = XElement.Parse (data);
+			var iterator = doc.CreateNavigator ().Select ("//parent/child");
+			iterator.MoveNext ();
+			var element = iterator.Current;
+			Assert.AreEqual ("B", element.InnerXml);
+		}
+
+		[Test]
 		public void MoveToRoot_Bug4690 ()
 		{
 			string data = "<root><parent><child/></parent></root>";
@@ -85,17 +96,6 @@ namespace MonoTests.System.Xml.Linq
 			var element = iterator.Current;
 			element.MoveToRoot ();
 			Assert.AreEqual ("root", element.Name);
-		}
-
-		[Test]
-		public void Bug4739 ()
-		{
-			string data = "<root><parent>A<child>B</child>C</parent></root>";
-			XElement doc = XElement.Parse (data);
-			var iterator = doc.CreateNavigator ().Select ("//parent/child");
-			iterator.MoveNext ();
-			var element = iterator.Current;
-			Assert.AreEqual ("B", element.InnerXml);
 		}
 	}
 }

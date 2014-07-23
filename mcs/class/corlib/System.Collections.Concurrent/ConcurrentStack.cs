@@ -1,6 +1,10 @@
 // ConcurrentStack.cs
 //
+// Authors:
+//	Marek Safar  <marek.safar@gmail.com>
+//
 // Copyright (c) 2008 Jérémie "Garuma" Laval
+// Copyright (C) 2014 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +26,7 @@
 //
 //
 
-#if NET_4_0 || MOBILE
+#if NET_4_0
 
 using System;
 using System.Threading;
@@ -41,10 +45,10 @@ namespace System.Collections.Concurrent
 		class Node
 		{
 			public T Value = default (T);
-			public Node Next = null;
+			public Node Next;
 		}
 		
-		Node head = null;
+		Node head;
 		
 		int count;
 		
@@ -54,6 +58,9 @@ namespace System.Collections.Concurrent
 		
 		public ConcurrentStack (IEnumerable<T> collection)
 		{
+			if (collection == null)
+				throw new ArgumentNullException ("collection");
+
 			foreach (T item in collection) 
 				Push (item);
 		}
@@ -77,11 +84,16 @@ namespace System.Collections.Concurrent
 
 		public void PushRange (T[] items)
 		{
+			if (items == null)
+				throw new ArgumentNullException ("items");
+
 			PushRange (items, 0, items.Length);
 		}
 		
 		public void PushRange (T[] items, int startIndex, int count)
 		{
+			RangeArgumentsCheck (items, startIndex, count);
+
 			Node insert = null;
 			Node first = null;
 			
@@ -99,7 +111,7 @@ namespace System.Collections.Concurrent
 				first.Next = head;
 			} while (Interlocked.CompareExchange (ref head, insert, first.Next) != first.Next);
 			
-			Interlocked.Add (ref count, count);
+			Interlocked.Add (ref this.count, count);
 		}
 		
 		public bool TryPop (out T result)
@@ -117,25 +129,30 @@ namespace System.Collections.Concurrent
 			Interlocked.Decrement (ref count);
 			
 			result = temp.Value;
+
 			return true;
 		}
 
 		public int TryPopRange (T[] items)
 		{
+			if (items == null)
+				throw new ArgumentNullException ("items");
 			return TryPopRange (items, 0, items.Length);
 		}
 
 		public int TryPopRange (T[] items, int startIndex, int count)
 		{
+			RangeArgumentsCheck (items, startIndex, count);
+
 			Node temp;
 			Node end;
 			
 			do {
 				temp = head;
 				if (temp == null)
-					return -1;
+					return 0;
 				end = temp;
-				for (int j = 0; j < count - 1; j++) {
+				for (int j = 0; j < count; j++) {
 					end = end.Next;
 					if (end == null)
 						break;
@@ -143,12 +160,14 @@ namespace System.Collections.Concurrent
 			} while (Interlocked.CompareExchange (ref head, end, temp) != temp);
 			
 			int i;
-			for (i = startIndex; i < count && temp != null; i++) {
+			for (i = startIndex; i < startIndex + count && temp != null; i++) {
 				items[i] = temp.Value;
+				end = temp;
 				temp = temp.Next;
 			}
+			Interlocked.Add (ref this.count, -(i - startIndex));
 			
-			return i - 1;
+			return i - startIndex;
 		}
 		
 		public bool TryPeek (out T result)
@@ -193,23 +212,30 @@ namespace System.Collections.Concurrent
 		
 		void ICollection.CopyTo (Array array, int index)
 		{
-			T[] dest = array as T[];
-			if (dest == null)
-				return;
-			CopyTo (dest, index);
+			ICollection ic = new List<T> (this);
+			ic.CopyTo (array, index);
 		}
 		
 		public void CopyTo (T[] array, int index)
 		{
+			if (array == null)
+				throw new ArgumentNullException ("array");
+			if (index < 0)
+				throw new ArgumentOutOfRangeException ("index");
+			if (index > array.Length)
+				throw new ArgumentException ("index is equals or greather than array length", "index");
+
 			IEnumerator<T> e = InternalGetEnumerator ();
 			int i = index;
 			while (e.MoveNext ()) {
+				if (i == array.Length - index)
+					throw new ArgumentException ("The number of elememts in the collection exceeds the capacity of array", "array");
 				array[i++] = e.Current;
 			}
 		}
 		
 		bool ICollection.IsSynchronized {
-			get { return true; }
+			get { return false; }
 		}
 		
 		bool IProducerConsumerCollection<T>.TryTake (out T item)
@@ -217,16 +243,15 @@ namespace System.Collections.Concurrent
 			return TryPop (out item);
 		}
 		
-		object syncRoot = new object ();
 		object ICollection.SyncRoot {
-			get { return syncRoot; }
+			get {
+				throw new NotSupportedException ();
+			}
 		}
 		
 		public T[] ToArray ()
 		{
-			T[] dest = new T [count];
-			CopyTo (dest, 0);
-			return dest;
+			return new List<T> (this).ToArray ();
 		}
 		
 		public int Count {
@@ -240,6 +265,19 @@ namespace System.Collections.Concurrent
 				return count == 0;
 			}
 		}
+
+		static void RangeArgumentsCheck (T[] items, int startIndex, int count)
+		{
+			if (items == null)
+				throw new ArgumentNullException ("items");
+			if (startIndex < 0 || startIndex >= items.Length)
+				throw new ArgumentOutOfRangeException ("startIndex");
+			if (count < 0)
+				throw new ArgumentOutOfRangeException ("count");
+			if (startIndex + count > items.Length)
+				throw new ArgumentException ("startIndex + count is greater than the length of items.");
+		}
 	}
 }
 #endif
+

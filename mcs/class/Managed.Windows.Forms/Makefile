@@ -8,12 +8,10 @@ LIB_MCS_FLAGS = /unsafe \
 	/r:System.Drawing.dll /r:Accessibility.dll \
 	/r:System.Data.dll /r:Mono.Posix.dll \
 	/r:Mono.WebBrowser \
+	/r:System.Configuration.dll \
+	/r:System.Runtime.Serialization.Formatters.Soap \
 	@System.Windows.Forms.dll.resources \
-	-debug -nowarn:618,612,809
-
-ifneq (1, $(FRAMEWORK_VERSION_MAJOR))
-LIB_MCS_FLAGS += /r:System.Configuration.dll
-endif
+	-nowarn:618,612,809
 
 ifeq (true, $(GENERATE_RESOURCES))
 LIB_MCS_FLAGS += /define:GENERATING_RESOURCES
@@ -21,6 +19,8 @@ endif
 
 RESX_RESOURCES = \
 	resources/keyboards.resources
+	
+CLEAN_FILES += $(RESX_RESOURCES)
 
 CUR_RESOURCES = resources/NWSE.cur resources/NESW.cur \
 	resources/SplitterNS.cur \
@@ -101,7 +101,7 @@ EXTRA_DISTFILES = \
 	$(IMAGES_RESOURCES) \
 	$(TEST_DISTFILES)
 
-TEST_MCS_FLAGS = /r:System.Data.dll /r:System.Drawing.dll /r:Accessibility.dll \
+TEST_MCS_FLAGS = /r:System.Data.dll /r:System.Drawing.dll /r:Accessibility.dll -r:System.dll -r:System.Xml.dll -r:System.Runtime.Serialization.Formatters.Soap\
 	-resource:Test/resources/a.cur,a.cur \
 	-resource:Test/resources/32x32.ico,32x32.ico \
 	-nowarn:618,612

@@ -31,10 +31,8 @@ using System.Runtime.InteropServices;
 
 namespace System.Windows.Forms {
 	[Designer ("System.Windows.Forms.Design.ScrollableControlDesigner, " + Consts.AssemblySystem_Design, "System.ComponentModel.Design.IDesigner")]
-#if NET_2_0
 	[ClassInterface (ClassInterfaceType.AutoDispatch)]
 	[ComVisible (true)]
-#endif
 	public class ScrollableControl : Control {
 		#region Local Variables
 		private bool			force_hscroll_visible;
@@ -50,12 +48,9 @@ namespace System.Windows.Forms {
 		internal Size			canvas_size;
 		private Rectangle		display_rectangle;
 		private Control			old_parent;
-		private bool			child_autosized;
-
-#if NET_2_0
 		private HScrollProperties	horizontalScroll;
 		private VScrollProperties	verticalScroll;
-#endif
+		private bool			autosized_child;
 		#endregion	// Local Variables
 
 		[TypeConverter(typeof(ScrollableControl.DockPaddingEdgesConverter))]
@@ -64,7 +59,6 @@ namespace System.Windows.Forms {
 		{
 			private Control	owner;
 			
-#if NET_2_0
 			internal DockPaddingEdges (Control owner)
 			{
 				this.owner = owner;
@@ -140,145 +134,6 @@ namespace System.Windows.Forms {
 			{
 				return new DockPaddingEdges (owner);
 			}
-#else
-			#region DockPaddingEdges Local Variables
-			private int	all;
-			private int	left;
-			private int	right;
-			private int	top;
-			private int	bottom;
-			#endregion	// DockPaddingEdges Local Variables
-
-			#region DockPaddingEdges Constructor
-			internal DockPaddingEdges(Control owner) {
-				all = 0;
-				left = 0;
-				right = 0;
-				top = 0;
-				bottom = 0;
-				this.owner = owner;
-			}
-			#endregion	// DockPaddingEdges Constructor
-
-			#region DockPaddingEdges Public Instance Properties
-			[RefreshProperties(RefreshProperties.All)]
-			public int All {
-				get {
-					return all;
-				}
-
-				set {
-					all = value;
-					left = value;
-					right = value;
-					top = value;
-					bottom = value;
-
-					owner.PerformLayout();
-				}
-			}
-
-			[RefreshProperties(RefreshProperties.All)]
-			public int Bottom {
-				get {
-					return bottom;
-				}
-
-				set {
-					bottom = value;
-					all = 0;
-
-					owner.PerformLayout();
-				}
-			}
-
-			[RefreshProperties(RefreshProperties.All)]
-			public int Left {
-				get {
-					return left;
-				}
-
-				set {
-					left=value;
-					all = 0;
-
-					owner.PerformLayout();
-				}
-			}
-
-			[RefreshProperties(RefreshProperties.All)]
-			public int Right {
-				get {
-					return right;
-				}
-
-				set {
-					right=value;
-					all = 0;
-
-					owner.PerformLayout();
-				}
-			}
-
-			[RefreshProperties(RefreshProperties.All)]
-			public int Top {
-				get {
-					return top;
-				}
-
-				set {
-					top=value;
-					all = 0;
-
-					owner.PerformLayout();
-				}
-			}
-			#endregion	// DockPaddingEdges Public Instance Properties
-
-			// Public Instance Methods
-			public override bool Equals(object other) {
-				if (! (other is DockPaddingEdges)) {
-					return false;
-				}
-
-				if (	(this.all == ((DockPaddingEdges)other).all) && (this.left == ((DockPaddingEdges)other).left) &&
-					(this.right == ((DockPaddingEdges)other).right) && (this.top == ((DockPaddingEdges)other).top) && 
-					(this.bottom == ((DockPaddingEdges)other).bottom)) {
-					return true;
-				}
-
-				return false;
-			}
-
-			public override int GetHashCode() {
-				return all*top*bottom*right*left;
-			}
-
-			public override string ToString() {
-				return "All = "+all.ToString()+" Top = "+top.ToString()+" Left = "+left.ToString()+" Bottom = "+bottom.ToString()+" Right = "+right.ToString();
-			}
-
-			internal void Scale(float dx, float dy) {
-				left = (int) (left * dx);
-				right = (int) (right * dx);
-				top = (int) (top * dy);
-				bottom = (int) (bottom * dy);
-			}
-
-			object ICloneable.Clone() {
-				DockPaddingEdges padding_edge;
-
-				padding_edge=new DockPaddingEdges(owner);
-
-				padding_edge.all=all;
-				padding_edge.left=left;
-				padding_edge.right=right;
-				padding_edge.top=top;
-				padding_edge.bottom=bottom;
-
-				return padding_edge;
-			}
-#endif
 		}
 		#endregion	// Subclass DockPaddingEdges
 
@@ -318,10 +173,8 @@ namespace System.Windows.Forms {
 
 			CreateScrollbars ();
 			
-#if NET_2_0
 			horizontalScroll = new HScrollProperties (this);
 			verticalScroll = new VScrollProperties (this);
-#endif
 		}
 
 		void VisibleChangedHandler (object sender, EventArgs e)
@@ -342,26 +195,22 @@ namespace System.Windows.Forms {
 				
 			if (old_parent != null) {
 				old_parent.SizeChanged -= new EventHandler (Parent_SizeChanged);
-#if NET_2_0				
 				old_parent.PaddingChanged -= new EventHandler (Parent_PaddingChanged);
-#endif
 			}
 			
 			if (Parent != null) {
 				Parent.SizeChanged += new EventHandler (Parent_SizeChanged);
-#if NET_2_0
 				Parent.PaddingChanged += new EventHandler (Parent_PaddingChanged);
-#endif
 			}
 			
 			old_parent = Parent;
 		}
-#if NET_2_0
+
 		void Parent_PaddingChanged (object sender, EventArgs e)
 		{
 			UpdateSizeGripVisible ();
 		}
-#endif
+
 		void Parent_SizeChanged (object sender, EventArgs e)
 		{
 			UpdateSizeGripVisible ();
@@ -530,14 +379,9 @@ namespace System.Windows.Forms {
 		}
 
 		[MWFCategory("Layout")]
-#if NET_2_0
 		[Browsable (false)]
 		[EditorBrowsable (EditorBrowsableState.Never)]
 		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-#else
-		[DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
-		[Localizable(true)]
-#endif
 		public DockPaddingEdges DockPadding {
 			get {
 				if (dock_padding == null)
@@ -547,7 +391,6 @@ namespace System.Windows.Forms {
 			}
 		}
 
-#if NET_2_0
 		[Browsable (false)]
 		[EditorBrowsable (EditorBrowsableState.Always)]
 		public HScrollProperties HorizontalScroll {
@@ -559,7 +402,6 @@ namespace System.Windows.Forms {
 		public VScrollProperties VerticalScroll {
 			get { return verticalScroll; }
 		}
-#endif
 		#endregion	// Public Instance Properties
 
 		#region Protected Instance Methods
@@ -699,9 +541,10 @@ namespace System.Windows.Forms {
 			base.OnLayout(levent);
 
 			// The first time through, we just set the canvas to clientsize
-			// so we could re-layout everything.
+			// so we could re-layout everything according to the flow.
 			// This time we want to actually calculate the canvas.
-			if (child_autosized && AutoScroll && !(this is FlowLayoutPanel)) {
+			// If a child is autosized, we need to rethink scrollbars as well. (Xamarin bug 18874)
+			if (this is FlowLayoutPanel || autosized_child) {
 				CalculateCanvasSize (false);
 				AdjustFormScrollbars (AutoScroll);
 			}
@@ -737,9 +580,7 @@ namespace System.Windows.Forms {
 			base.OnVisibleChanged(e);
 		}
 
-#if NET_2_0
 		[EditorBrowsable (EditorBrowsableState.Never)]
-#endif
 		protected override void ScaleCore(float dx, float dy) {
 			if (dock_padding != null)
 				dock_padding.Scale(dx, dy);
@@ -747,7 +588,6 @@ namespace System.Windows.Forms {
 			base.ScaleCore(dx, dy);
 		}
 
-#if NET_2_0
 		protected override void ScaleControl (SizeF factor, BoundsSpecified specified)
 		{
 			base.ScaleControl (factor, specified);
@@ -788,7 +628,6 @@ namespace System.Windows.Forms {
 			
 			return new Point (corner_x, corner_y);
 		}
-#endif
 
 		protected void SetDisplayRectLocation(int x, int y) {
 			// This method is weird. MS documents that the scrollbars are not
@@ -850,11 +689,11 @@ namespace System.Windows.Forms {
 				extra_height += dock_padding.Bottom;
 			}
 
-			child_autosized = false;
+			autosized_child = false;
 			for (int i = 0; i < num_of_children; i++) {
 				child = Controls[i];
 				if (child.AutoSize)
-					child_autosized = true;
+					autosized_child = true;
 				if (child.Dock == DockStyle.Right) {
 					extra_width += child.Width;
 				} else if (child.Dock == DockStyle.Bottom) {
@@ -1095,12 +934,10 @@ namespace System.Windows.Forms {
 			}
 		}
 
-#if NET_2_0
 		private void HandleScrollEvent (object sender, ScrollEventArgs args)
 		{
 			OnScroll (args);
 		}
-#endif
 
 		private void AddScrollbars (object o, EventArgs e)
 		{
@@ -1115,18 +952,14 @@ namespace System.Windows.Forms {
 			hscrollbar.ValueChanged += new EventHandler (HandleScrollBar);
 			hscrollbar.Height = SystemInformation.HorizontalScrollBarHeight;
 			hscrollbar.use_manual_thumb_size = true;
-#if NET_2_0
 			hscrollbar.Scroll += new ScrollEventHandler (HandleScrollEvent);
-#endif
 
 			vscrollbar = new ImplicitVScrollBar ();
 			vscrollbar.Visible = false;
 			vscrollbar.ValueChanged += new EventHandler (HandleScrollBar);
 			vscrollbar.Width = SystemInformation.VerticalScrollBarWidth;
 			vscrollbar.use_manual_thumb_size = true;
-#if NET_2_0
 			vscrollbar.Scroll += new ScrollEventHandler (HandleScrollEvent);
-#endif
 
 			sizegrip = new SizeGrip (this);
 			sizegrip.Visible = false;
@@ -1158,7 +991,6 @@ namespace System.Windows.Forms {
 		}
 		#endregion	// Internal & Private Methods
 
-#if NET_2_0
 		static object OnScrollEvent = new object ();
 		
 		protected virtual void OnScroll (ScrollEventArgs se)
@@ -1188,6 +1020,5 @@ namespace System.Windows.Forms {
 			add { Events.AddHandler (OnScrollEvent, value); }
 			remove { Events.RemoveHandler (OnScrollEvent, value); }
 		}
-#endif
 	}
 }

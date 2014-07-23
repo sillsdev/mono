@@ -53,7 +53,7 @@ namespace System.Windows.Forms {
 
 		~DataGridViewBand ()
 		{
-			Dispose(false);
+			Dispose (false);
 		}
 
 		[DefaultValue (null)]
@@ -227,8 +227,8 @@ namespace System.Windows.Forms {
 		//public sealed void Dispose () {
 		public void Dispose ()
 		{
-			Dispose(true);
-			GC.SuppressFinalize(this);
+			Dispose (true);
+			GC.SuppressFinalize (this);
 		}
 
 		public override string ToString ()

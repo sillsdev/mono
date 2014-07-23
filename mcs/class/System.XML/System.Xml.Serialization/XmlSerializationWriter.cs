@@ -31,6 +31,7 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Xml;
@@ -486,12 +487,11 @@ namespace System.Xml.Serialization
 			WriteAttribute ("id", GetId (o, true));
 		}
 
-		protected void WriteNamespaceDeclarations (XmlSerializerNamespaces ns)
+		protected void WriteNamespaceDeclarations (XmlSerializerNamespaces xmlns)
 		{
-			if (ns == null)
+			if (xmlns == null)
 				return;
-
-			ICollection namespaces = ns.Namespaces.Values;
+			ICollection namespaces = xmlns.Namespaces.Values;
 			foreach (XmlQualifiedName qn in namespaces) {
 				if (qn.Namespace != String.Empty && Writer.LookupPrefix (qn.Namespace) != qn.Name)
 					WriteAttribute ("xmlns", qn.Name, xmlNamespace, qn.Namespace);
@@ -570,11 +570,7 @@ namespace System.Xml.Serialization
 		protected void WriteNullTagEncoded (string name, string ns)
 		{
 			Writer.WriteStartElement (name, ns);
-#if NET_1_1
 			Writer.WriteAttributeString ("nil", XmlSchema.InstanceNamespace, "true");
-#else
-			Writer.WriteAttributeString ("null", XmlSchema.InstanceNamespace, "1");
-#endif
 			Writer.WriteEndElement ();
 		}
 
@@ -613,19 +609,21 @@ namespace System.Xml.Serialization
 				return;
 			}
 
+			var t = o.GetType ();
+
 			WriteStartElement (n, ns, true);
 
 			CheckReferenceQueue ();
 
 			if (callbacks != null && callbacks.ContainsKey (o.GetType ()))
 			{
-				WriteCallbackInfo info = (WriteCallbackInfo) callbacks[o.GetType()];
-				if (o.GetType ().IsEnum) {
+				WriteCallbackInfo info = (WriteCallbackInfo) callbacks[t];
+				if (t.IsEnum) {
 					info.Callback (o);
 				}
 				else if (suppressReference) {
 					Writer.WriteAttributeString ("id", GetId (o, false));
-					if (ambientType != o.GetType ()) WriteXsiType(info.TypeName, info.TypeNs);
+					if (ambientType != t) WriteXsiType(info.TypeName, info.TypeNs);
 					info.Callback (o);
 				}
 				else {
@@ -636,15 +634,17 @@ namespace System.Xml.Serialization
 			else
 			{
 				// Must be a primitive type or array of primitives
-				TypeData td = TypeTranslator.GetTypeData (o.GetType ());
+				TypeData td = TypeTranslator.GetTypeData (t, null, true);
 				if (td.SchemaType == SchemaTypes.Primitive) {
-					WriteXsiType (td.XmlType, XmlSchema.Namespace);
+					if (t != ambientType)
+						WriteXsiType (td.XmlType, XmlSchema.Namespace);
 					Writer.WriteString (XmlCustomFormatter.ToXmlString (td, o));
 				} else if (IsPrimitiveArray (td)) {
 					if (!AlreadyQueued (o)) referencedElements.Enqueue (o);
 					Writer.WriteAttributeString ("href", "#" + GetId (o, true));
-				} else
-					throw new InvalidOperationException ("Invalid type: " + o.GetType().FullName);
+				} else {
+					throw new InvalidOperationException ("Invalid type: " + t.FullName);
+				}
 			}
 
 			WriteEndElement ();
@@ -870,7 +870,7 @@ namespace System.Xml.Serialization
 		protected void WriteTypedPrimitive (string name, string ns, object o, bool xsiType)
 		{
 			string value;
-			TypeData td = TypeTranslator.GetTypeData (o.GetType ());
+			TypeData td = TypeTranslator.GetTypeData (o.GetType (), null, true);
 			if (td.SchemaType != SchemaTypes.Primitive)
 				throw new InvalidOperationException (String.Format ("The type of the argument object '{0}' is not primitive.", td.FullTypeName));
 
@@ -954,9 +954,9 @@ namespace System.Xml.Serialization
 				return CreateInvalidAnyTypeException (o.GetType ());
 		}
 		
-		protected Exception CreateInvalidAnyTypeException (Type t)
+		protected Exception CreateInvalidAnyTypeException (Type type)
 		{
-			return new InvalidOperationException (String.Format ("An object of type '{0}' is invalid as anyType in XmlSerializer", t));
+			return new InvalidOperationException (String.Format ("An object of type '{0}' is invalid as anyType in XmlSerializer", type));
 		}
 
 		protected Exception CreateInvalidEnumValueException (object value, string typeName)

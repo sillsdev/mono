@@ -49,7 +49,6 @@ public class CompareInfoTest
 		Assert.AreEqual (0, CultureInfo.InvariantCulture.CompareInfo.Compare (null, null), "Compare two null references");
 		Assert.AreEqual (1, CultureInfo.InvariantCulture.CompareInfo.Compare ("", null), "Compare a string to a null reference");
 		Assert.AreEqual (-1, CultureInfo.InvariantCulture.CompareInfo.Compare (null, ""), "Compare a null reference to a string");
-		
 	}
 
 	// Culture-sensitive collation tests
@@ -253,7 +252,7 @@ public class CompareInfoTest
 	public void GetSortKey ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		// AE == \u00C6
 		AssertSortKey ("#1", new byte [] {0xE, 2, 0xE, 0x21, 1, 1,
@@ -289,7 +288,7 @@ public class CompareInfoTest
 	public void GetSortKeyIgnoreWidth ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertSortKey ("#i1", new byte [] {
 			0xE, 2, 1, 1, 0x13, 1, 1, 0}, "\uFF21");
@@ -305,7 +304,7 @@ public class CompareInfoTest
 	public void GetSortKeyDiacritical ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertSortKey ("#i1", new byte [] {
 			0xE, 0x21, 1, 0xE, 1, 1, 1, 0}, "e\u0301");
@@ -358,7 +357,7 @@ public class CompareInfoTest
 	public void GetSortKeyIgnoreNonSpaceKana ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertSortKey ("#i1", new byte [] {
 			0x22, 0x1A, 1, 1, 1, 0xFF, 2, 0xFF, 0xFF, 1, 0},
@@ -378,7 +377,7 @@ public class CompareInfoTest
 	public void GetSortKeySpecialWeight ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertSortKey ("#i1", new byte [] {
 			0x22, 0xA, 0x22, 2, 1, 1, 1, 0xFF, 2, 0xFF, 0xFF, 1, 0},
@@ -469,7 +468,7 @@ public class CompareInfoTest
 	public void GetSortKeyLevel5 ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		// shift weight
 		AssertSortKeyLevel5 ("#8", new byte [] {
@@ -531,7 +530,7 @@ public class CompareInfoTest
 	public void FrenchSort ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		// invariant
 		AssertSortKey ("#inv-1", new byte [] {0xE, 0xA, 0xE, 0x7C, 0xE, 0x99, 0xE, 0x21, 1, 2, 0x12, 1, 1, 1, 0}, "c\u00F4te");
@@ -559,7 +558,7 @@ public class CompareInfoTest
 	public void GetSortKeyThai ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertSortKey ("#i1", new byte [] {
 			0x1E, 7, 0x1F, 0x28, 1, 3, 3, 1, 1, 1, 0},
@@ -624,7 +623,7 @@ public class CompareInfoTest
 	public void GetSortKeyCzechTailoring ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertSortKey ("#i1", new byte [] {
 			0xE, 0xA, 0xE, 0x2C, 1, 1, 1, 1, 0},
@@ -641,11 +640,10 @@ public class CompareInfoTest
 	}
 
 	[Test]
-	[Ignore ("#1358")]
 	public void GetSortKeyHungarianTailoring ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertSortKey ("#1", new byte [] {
 			0xE, 0xE, 1, 1, 0x1A, 1, 1, 0},
@@ -697,7 +695,7 @@ public class CompareInfoTest
 	public void CustomCJKTable ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertSortKey ("#1", new byte [] {
 			0x9E, 9, 0x9E, 0x11, 1, 1, 1, 1, 0},
@@ -714,7 +712,7 @@ public class CompareInfoTest
 	public void CultureSensitiveCompare ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertCompare ("#1", -1, "1", "2");
 		AssertCompare ("#2", 1, "A", "a");
@@ -768,7 +766,7 @@ public class CompareInfoTest
 	public void CompareSpecialWeight ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		// Japanese (in invariant)
 // BUG in .NET 2.0 : half-width kana should be bigger.
@@ -795,7 +793,7 @@ public class CompareInfoTest
 	public void IndexOfChar ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertIndexOf ("#1", -1, "ABC", '1');
 		AssertIndexOf ("#2", 2, "ABCABC", 'c', CompareOptions.IgnoreCase);
@@ -815,7 +813,7 @@ public class CompareInfoTest
 	public void IndexOfCharMSBug ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertIndexOf ("#1", 0, "\u00E6", 'a');
 	}
@@ -824,7 +822,7 @@ public class CompareInfoTest
 	public void LastIndexOfChar ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertLastIndexOf ("#1", -1, "ABC", '1');
 		AssertLastIndexOf ("#2", 5, "ABCABC", 'c', CompareOptions.IgnoreCase);
@@ -849,7 +847,7 @@ public class CompareInfoTest
 	public void LastIndexOfCharMSBug ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertIndexOf ("#1", 0, "\u00E6", 'a');
 	}
@@ -861,7 +859,7 @@ public class CompareInfoTest
 	public void IsPrefix ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertIsPrefix ("#1", false, "ABC", "c", CompareOptions.IgnoreCase);
 		AssertIsPrefix ("#2", false, "BC", "c", CompareOptions.IgnoreCase);
@@ -893,7 +891,7 @@ public class CompareInfoTest
 	public void IsPrefixSpecialWeight ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		// Japanese (in invariant)
 		AssertIsPrefix ("#1", false, "\u30D1\u30FC\u30B9", "\uFF8A\uFF9F\uFF70\uFF7D");
@@ -930,7 +928,7 @@ public class CompareInfoTest
 	public void IsSuffix ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertIsSuffix ("#1", true, "ABC", "c", CompareOptions.IgnoreCase);
 		AssertIsSuffix ("#2", true, "BC", "c", CompareOptions.IgnoreCase);
@@ -972,19 +970,16 @@ public class CompareInfoTest
 	public void IsSuffixMSBug ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertIsSuffix ("#1", true, "\u00E6", "e", CompareOptions.None);
 	}
 
 	[Test]
-#if NET_2_0
-	[Category ("NotDotNet")]
-#endif
 	public void IndexOfString ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertIndexOf ("#0", 0, "", "", CompareOptions.None);
 		AssertIndexOf ("#1", -1, "ABC", "1", CompareOptions.None);
@@ -997,19 +992,16 @@ public class CompareInfoTest
 		AssertIndexOf ("#8", 0, "-ABC", "-", CompareOptions.None);
 		AssertIndexOf ("#9", 0, "--ABC", "--", CompareOptions.None);
 		AssertIndexOf ("#10", -1, "--ABC", "--", 1, 2, CompareOptions.None, invariant);
-// BUG in .NET 2.0 : see GetSortKey() test (mentioned above).
-		AssertIndexOf ("#11", 0, "AE", "\u00C6", CompareOptions.None);
+
 		// U+3007 is completely ignored character.
 		AssertIndexOf ("#12", 0, "\uff21\uff21", "\uff21", CompareOptions.None);
-// BUG in .NET 2.0 : see \u3007 issue (mentioned above).
-		AssertIndexOf ("#13", 0, "\uff21\uff21", "\u3007\uff21", CompareOptions.None);
+
 		AssertIndexOf ("#14", 0, "\uff21\uff21", "\uff21\u3007", CompareOptions.None);
 		AssertIndexOf ("#15", 0, "\uff21\uff21", "\u3007", CompareOptions.None);
 		AssertIndexOf ("#15-2", 1, "\u3007\uff21", "\uff21", CompareOptions.None);
 		// target is "empty" (in culture-sensitive context).
 		AssertIndexOf ("#16", -1, String.Empty, "\u3007");
-// BUG in .NET 2.0 : see \u3007 issue (mentioned above).
-		AssertIndexOf ("#17", 0, "A", "\u3007");
+
 		AssertIndexOf ("#18", 0, "ABC", "\u3007");
 
 		AssertIndexOf ("#19", 0, "\\b\\a a", "\\b\\a a");
@@ -1018,10 +1010,26 @@ public class CompareInfoTest
 	}
 
 	[Test]
+#if NET_2_0
+	[Category ("NotDotNet")]
+#endif
+	public void IndexOfStringWeird ()
+	{
+// BUG in .NET 2.0 : see GetSortKey() test (mentioned above).
+		AssertIndexOf ("#11", 0, "AE", "\u00C6", CompareOptions.None);
+
+// BUG in .NET 2.0 : see \u3007 issue (mentioned above).
+		AssertIndexOf ("#13", 0, "\uff21\uff21", "\u3007\uff21", CompareOptions.None);
+
+// BUG in .NET 2.0 : see \u3007 issue (mentioned above).
+		AssertIndexOf ("#17", 0, "A", "\u3007");
+	}
+	
+	[Test]
 	public void IndexOfSpecialWeight ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		// Japanese (in invariant)
 		AssertIndexOf ("#1", -1, "\u30D1\u30FC\u30B9", "\uFF8A\uFF9F\uFF70\uFF7D");
@@ -1043,13 +1051,10 @@ public class CompareInfoTest
 	}
 
 	[Test]
-#if NET_2_0
-	[Category ("NotDotNet")]
-#endif
 	public void LastIndexOfString ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertLastIndexOf ("#1", -1, "ABC", "1", CompareOptions.None);
 		AssertLastIndexOf ("#2", 5, "ABCABC", "c", CompareOptions.IgnoreCase);
@@ -1058,18 +1063,15 @@ public class CompareInfoTest
 		AssertLastIndexOf ("#5", 4, "ABCABC", "BC", CompareOptions.IgnoreCase);
 		AssertLastIndexOf ("#6", 4, "BBCBBC", "BC", CompareOptions.IgnoreCase);
 		AssertLastIndexOf ("#7", 1, "original", "rig", CompareOptions.None);
-// BUG in .NET 2.0 : see GetSortKey() test (mentioned above).
-		AssertLastIndexOf ("#8", 0, "\u00E6", "ae", CompareOptions.None);
+
 		AssertLastIndexOf ("#9", 0, "-ABC", "-", CompareOptions.None);
 		AssertLastIndexOf ("#10", 0, "--ABC", "--", CompareOptions.None);
 		AssertLastIndexOf ("#11", -1, "--ABC", "--", 2, 2, CompareOptions.None, invariant);
 		AssertLastIndexOf ("#12", -1, "--ABC", "--", 4, 2, CompareOptions.None, invariant);
-// BUG in .NET 2.0 : see GetSortKey() test (mentioned above).
-		AssertLastIndexOf ("#13", 0, "AE", "\u00C6", CompareOptions.None);
+
 		// U+3007 is completely ignored character.
 		AssertLastIndexOf ("#14", 1, "\uff21\uff21", "\uff21", CompareOptions.None);
-// BUG in .NET 2.0 : see \u3007 issue (mentioned above).
-		AssertLastIndexOf ("#15", 1, "\uff21\uff21", "\u3007\uff21", CompareOptions.None);
+
 		AssertLastIndexOf ("#16", 1, "\uff21\uff21", "\uff21\u3007", CompareOptions.None);
 		AssertLastIndexOf ("#17", 1, "\uff21\uff21", "\u3007", CompareOptions.None);
 		AssertLastIndexOf ("#18", 1, "\u3007\uff21", "\uff21", CompareOptions.None);
@@ -1079,13 +1081,32 @@ public class CompareInfoTest
 		// bug #80612
 		AssertLastIndexOf ("#20", 8, "/system/web", "w");
 		Assert.AreEqual (8, new CultureInfo ("sv").CompareInfo.LastIndexOf ("/system/web", "w"), "#20sv");
+
+		AssertLastIndexOf ("#21", 2, "foo", String.Empty);
+	}
+
+	[Test]
+	[Category ("NotDotNet")]
+	public void LastIndexOfStringDotnetWeird ()
+	{
+		if (!doTest)
+			Assert.Ignore ("Test is disabled.");
+
+// BUG in .NET 2.0 : see GetSortKey() test (mentioned above).
+		AssertLastIndexOf ("#8", 0, "\u00E6", "ae", CompareOptions.None);
+
+// BUG in .NET 2.0 : see GetSortKey() test (mentioned above).
+		AssertLastIndexOf ("#13", 0, "AE", "\u00C6", CompareOptions.None);
+
+// BUG in .NET 2.0 : see \u3007 issue (mentioned above).
+		AssertLastIndexOf ("#15", 1, "\uff21\uff21", "\u3007\uff21", CompareOptions.None);
 	}
 
 	[Test]
 	public void LastIndexOfSpecialWeight ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		// Japanese (in invariant)
 		AssertLastIndexOf ("#1", -1, "\u30D1\u30FC\u30B9", "\uFF8A\uFF9F\uFF70\uFF7D");
@@ -1114,7 +1135,7 @@ public class CompareInfoTest
 	public void LastIndexOfOrdinalString ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		AssertLastIndexOf ("#1", -1, "ABC", "1", CompareOptions.Ordinal);
 		AssertLastIndexOf ("#2", 5, "ABCABC", "C", CompareOptions.Ordinal);
@@ -1126,20 +1147,27 @@ public class CompareInfoTest
 	}
 
 	[Test]
-	// for bug #76702
 	public void NullCharacter ()
 	{
+		// for bug #76702
 		Assert.AreEqual (-1, "MONO".IndexOf ("\0\0\0"), "#1");
 		Assert.AreEqual (-1, "MONO".LastIndexOf ("\0\0\0"), "#2");
 		Assert.AreEqual (1, "MONO".CompareTo ("\0\0\0"), "#3");
+
+		// I don't really understand why they are so...
+		AssertIndexOf ("#4", 0, "\0\0", "\0");
+		AssertIndexOf ("#5", -1, "\0", "\0\0");
+		AssertIndexOf ("#6", -1, "foo", "\0");
+		AssertLastIndexOf ("#7", 1, "\0\0", "\0");
+		AssertLastIndexOf ("#8", -1, "\0", "\0\0");
+		AssertLastIndexOf ("#9", -1, "foo", "\0");
 	}
 
 	[Test]
-	[Category ("NotDotNet")]
-	// MS.NET treats it as equivalent, while in IndexOf() it does not match.
+	// LAMESPEC: MS.NET treats it as equivalent, while in IndexOf() it does not match.
 	public void NullCharacterWeird ()
 	{
-		Assert.AreEqual (-1, "MONO".CompareTo ("MONO\0\0\0"), "#4");
+		Assert.AreEqual (0, "MONO".CompareTo ("MONO\0\0\0"), "#4");
 	}
 
 #if NET_2_0
@@ -1148,7 +1176,7 @@ public class CompareInfoTest
 	public void OrdinalIgnoreCaseCompare ()
 	{
 		if (!doTest)
-			return;
+			Assert.Ignore ("Test is disabled.");
 
 		// matches
 // BUG in .NET 2.0 : see GetSortKey() test (mentioned above).

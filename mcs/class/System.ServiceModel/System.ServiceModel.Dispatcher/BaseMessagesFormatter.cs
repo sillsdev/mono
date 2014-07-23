@@ -7,6 +7,7 @@
 //
 // Copyright (C) 2005-2010 Novell, Inc.  http://www.novell.com
 // Copyright (C) 2008 Mainsoft Co. http://www.mainsoft.com
+// Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -62,12 +63,12 @@ namespace System.ServiceModel.Dispatcher
 			get { return operation_name; }
 		}
 
-		public bool IsValidReturnValue (MessagePartDescription part)
+		internal static bool IsValidReturnValue (MessagePartDescription part)
 		{
 			return part != null && part.Type != typeof (void);
 		}
 
-		void Validate (OperationDescription od, bool isRpc, bool isEncoded)
+		internal static void Validate (OperationDescription od, bool isRpc, bool isEncoded)
 		{
 			bool hasParameter = false, hasVoid = false;
 			foreach (var md in od.Messages) {
@@ -149,11 +150,9 @@ namespace System.ServiceModel.Dispatcher
 		{
 			MethodInfo attrProvider = desc.SyncMethod ?? desc.BeginMethod;
 			object [] attrs;
-#if !MOONLIGHT
 			attrs = attrProvider.GetCustomAttributes (typeof (XmlSerializerFormatAttribute), false);
 			if (attrs != null && attrs.Length > 0)
 				return new XmlMessagesFormatter (desc, (XmlSerializerFormatAttribute) attrs [0]);
-#endif
 
 			attrs = attrProvider.GetCustomAttributes (typeof (DataContractFormatAttribute), false);
 			DataContractFormatAttribute dataAttr = null;
@@ -324,11 +323,14 @@ namespace System.ServiceModel.Dispatcher
 			var l = new List<MessagePartDescription> (md.Body.Parts);
 			if (md.Body.ReturnValue != null)
 				l.Add (md.Body.ReturnValue);
-			foreach (MessagePartDescription partDesc in l)
+			foreach (MessagePartDescription partDesc in l) {
+				if (partDesc.MemberInfo == null)
+					continue;
 				if (partDesc.MemberInfo is FieldInfo)
 					parts [partDesc.Index] = ((FieldInfo) partDesc.MemberInfo).GetValue (msgObject);
 				else
 					parts [partDesc.Index] = ((PropertyInfo) partDesc.MemberInfo).GetValue (msgObject, null);
+			}
 		}
 
 		internal static bool HasReturnValue (MessageBodyDescription desc)
@@ -411,7 +413,7 @@ namespace System.ServiceModel.Dispatcher
 			for (r.MoveToContent (); r.NodeType == XmlNodeType.Element; r.MoveToContent ()) {
 				XmlQualifiedName key = new XmlQualifiedName (r.LocalName, r.NamespaceURI);
 				MessagePartDescription rv = md.Body.ReturnValue;
-				if (rv != null && rv.Name == key.Name && rv.Namespace == key.Namespace)
+				if (rv != null && rv.Name == key.Name && rv.Namespace == key.Namespace && rv.Type != typeof (void))
 					parts [0] = ReadMessagePart (md.Body.ReturnValue, r);
 				else if (md.Body.Parts.Contains (key)) {
 					MessagePartDescription p = md.Body.Parts [key];

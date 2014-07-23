@@ -27,15 +27,18 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !FULL_AOT_RUNTIME
 using System;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace System.Reflection.Emit
 {
 	/*
 	 * This class represents a property of an instantiation of a generic type builder.
 	 */
+	[StructLayout (LayoutKind.Sequential)]
 	internal class PropertyOnTypeBuilderInst : PropertyInfo
 	{
 		MonoGenericClass instantiation;
@@ -112,7 +115,8 @@ namespace System.Reflection.Emit
 			MethodInfo method = GetGetMethod (true);
 			if (method != null)
 				return method.GetParameters ();
-			return new ParameterInfo [0];
+
+			return EmptyArray<ParameterInfo>.Value;
 		}
 
 		public override MethodInfo GetSetMethod (bool nonPublic)
@@ -156,3 +160,4 @@ namespace System.Reflection.Emit
 	}
 }
 
+#endif

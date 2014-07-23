@@ -24,10 +24,11 @@ public class TextInfoTest {
 	{
 		TextInfo ti = new CultureInfo ("en-US", false).TextInfo;
 
-		Assert.AreEqual (" The Dog", ti.ToTitleCase (" the dog"));
-		Assert.AreEqual (" The Dude", ti.ToTitleCase (" The Dude"));
-		Assert.AreEqual ("La Guerra Yla Paz", ti.ToTitleCase ("la Guerra yLa pAz"));
-		Assert.AreEqual ("\tTab\tAnd\tPeace", ti.ToTitleCase ("\ttab\taNd\tpeaCE"));
+		Assert.AreEqual (" The Dog", ti.ToTitleCase (" the dog"), "#1");
+		Assert.AreEqual (" The Dude", ti.ToTitleCase (" The Dude"), "#2");
+		Assert.AreEqual ("La Guerra Yla Paz", ti.ToTitleCase ("la Guerra yLa pAz"), "#3");
+		Assert.AreEqual ("\tTab\tAnd\tPeace", ti.ToTitleCase ("\ttab\taNd\tpeaCE"), "#4");
+		Assert.AreEqual ("This_Is\uFE58A\u0095String\u06D4With\uFE33Separators", ti.ToTitleCase ("this_is\uFE58a\u0095string\u06D4with\uFE33separators"), "#5");
 	}
 
 	[Test]
@@ -86,13 +87,11 @@ public class TextInfoTest {
 		Assert.AreEqual (t1.ListSeparator, t2.ListSeparator, "ListSeparator");
 		Assert.AreEqual (t1.MacCodePage, t2.MacCodePage, "MacCodePage");
 		Assert.AreEqual (t1.OEMCodePage, t2.OEMCodePage, "OEMCodePage");
-#if NET_2_0
 		Assert.AreEqual (t1.CultureName, t2.CultureName, "CultureName");
 		if (compareReadOnly)
 			Assert.AreEqual (t1.IsReadOnly, t2.IsReadOnly, "IsReadOnly");
 //FIXME		Assert.AreEqual (t1.IsRightToLeft, t2.IsRightToLeft, "IsRightToLeft");
 		Assert.AreEqual (t1.LCID, t2.LCID, "LCID");
-#endif
 	}
 
 	[Test]
@@ -109,7 +108,6 @@ public class TextInfoTest {
 		CompareProperties (enus, clone, true);
 	}
 
-#if NET_2_0
 	[Test]
 	public void Clone ()
 	{
@@ -148,6 +146,7 @@ public class TextInfoTest {
 			case 13:	// he
 			case 32:	// ur
 			case 41:	// fa
+			case 0x63:	// ps
 			case 90:	// syr
 			case 101:	// div
 			case 1025:	// ar-SA
@@ -171,6 +170,7 @@ public class TextInfoTest {
 			case 14337:	// ar-AE
 			case 15361:	// ar-BH
 			case 16385:	// ar-QA
+			case 0x463: // ps-AF
 				Assert.IsTrue (ci.TextInfo.IsRightToLeft, ci.Name);
 				break;
 			default:
@@ -179,7 +179,6 @@ public class TextInfoTest {
 			}
 		}
 	}
-#endif
 
 	[Test]
 	public void Deserialization ()

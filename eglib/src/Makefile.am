@@ -31,9 +31,11 @@ libeglib_la_SOURCES = \
 	gbytearray.c	\
 	gerror.c	\
 	ghashtable.c 	\
+	giconv.c	\
 	gmem.c       	\
 	gmodule.h	\
 	goutput.c    	\
+	gqsort.c	\
 	gstr.c       	\
 	gslist.c     	\
 	gstring.c    	\
@@ -57,17 +59,17 @@ libeglib_la_CFLAGS = -g -Wall -D_FORTIFY_SOURCE=2
 libeglib_static_la_SOURCES=$(libeglib_la_SOURCES)
 libeglib_static_la_CFLAGS = $(libeglib_la_CFLAGS)
 
-INCLUDES = -I$(srcdir)
+AM_CPPFLAGS = -I$(srcdir)
 
 if HOST_WIN32
-libeglib_la_LIBADD = -lm $(ICONV_LIBS) -lpsapi
+libeglib_la_LIBADD = -lm $(LIBICONV) -lpsapi
 else
 if PLATFORM_ANDROID
 libeglib_la_LIBADD = -llog
 endif
 endif
 
-libeglib_static_la_LIBADD = $(libeglib_la_LIBADD)
+libeglib_static_la_LIBADD = $(libeglib_la_LIBADD) $(LIBICONV)
 libeglib_static_la_LDFLAGS = -static
 
 MAINTAINERCLEANFILES = Makefile.in

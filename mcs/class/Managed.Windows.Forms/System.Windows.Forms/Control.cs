@@ -714,7 +714,7 @@ namespace System.Windows.Forms
 
 			public virtual void Remove (Control value)
 			{
-				if (value == null)
+				if (value == null || !list.Contains(value))
 					return;
 
 				all_controls = null;
@@ -1812,6 +1812,11 @@ namespace System.Windows.Forms
 				XplatUI.SetCursor (window.Handle, GetAvailableCursor ().handle);
 				return;
 			}
+
+			Point pt = PointToClient (Cursor.Position);
+
+			if (!bounds.Contains (pt) && !Capture)
+				return;
 
 			if (cursor != null || use_wait_cursor) {
 				XplatUI.SetCursor (window.Handle, Cursor.handle);
@@ -4408,7 +4413,7 @@ namespace System.Windows.Forms
 			switch (m.Msg) {
 				case (int)Msg.WM_SYSKEYDOWN:
 				case (int)Msg.WM_KEYDOWN: {
-					key_event = new KeyEventArgs ((Keys) m.WParam.ToInt32 ());
+					key_event = new KeyEventArgs (((Keys) m.WParam.ToInt32 ()) | XplatUI.State.ModifierKeys);
 					OnKeyDown (key_event);
 					suppressing_key_press = key_event.SuppressKeyPress;
 					return key_event.Handled;
@@ -4416,7 +4421,7 @@ namespace System.Windows.Forms
 
 				case (int)Msg.WM_SYSKEYUP:
 				case (int)Msg.WM_KEYUP: {
-					key_event = new KeyEventArgs ((Keys) m.WParam.ToInt32 ());
+					key_event = new KeyEventArgs (((Keys) m.WParam.ToInt32 ()) | XplatUI.State.ModifierKeys);
 					OnKeyUp (key_event);
 					return key_event.Handled;
 				}

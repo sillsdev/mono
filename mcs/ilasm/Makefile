@@ -2,7 +2,7 @@ thisdir = ilasm
 SUBDIRS =
 include ../build/rules.make
 
-PROGRAM = $(topdir)/class/lib/$(PROFILE)/ilasm.exe
+PROGRAM = ilasm.exe
 BUILT_SOURCES = ILParser.cs
 LOCAL_MCS_FLAGS = /lib:../class/lib/$(PROFILE) /r:../class/lib/$(PROFILE)/PEAPI.dll /r:Mono.CompilerServices.SymbolWriter.dll /r:Mono.Security.dll
 
@@ -20,10 +20,3 @@ ILParser.cs: parser/ILParser.jay $(topdir)/jay/skeleton.cs
 
 include ../build/executable.make
 
-ifeq (net_1_1, $(PROFILE))
-# Utility rule to make debugging somewhat easier.
-all-local: ilasm.exe
-ilasm.exe: $(PROGRAM)
-	cp -p $< $@
-	test ! -f $<.mdb || cp -p $<.mdb $@.mdb
-endif

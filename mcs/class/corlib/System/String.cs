@@ -11,6 +11,7 @@
 //
 // (C) 2001 Ximian, Inc.  http://www.ximian.com
 // Copyright (C) 2004-2005 Novell (http://www.novell.com)
+// Copyright (c) 2012 Xamarin, Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -55,6 +56,7 @@ namespace System
 {
 	[Serializable]
 	[ComVisible (true)]
+	[StructLayout (LayoutKind.Sequential)]
 	public sealed class String : IConvertible, ICloneable, IEnumerable, IComparable, IComparable<String>, IEquatable <String>, IEnumerable<char>
 	{
 		[NonSerialized] private int length;
@@ -199,61 +201,67 @@ namespace System
 
 		public String [] Split (params char [] separator)
 		{
-			return Split (separator, Int32.MaxValue);
+			return Split (separator, int.MaxValue, 0);
 		}
 
 		public String[] Split (char[] separator, int count)
 		{
-			if (separator == null || separator.Length == 0)
-				separator = WhiteChars;
-
-			if (count < 0)
-				throw new ArgumentOutOfRangeException ("count");
-
-			if (count == 0) 
-				return new String[0];
-
-			if (count == 1) 
-				return new String[1] { this };
-
-			return InternalSplit (separator, count, 0);
+			return Split (separator, count, 0);
 		}
 
 		[ComVisible (false)]
-		[MonoDocumentationNote ("code should be moved to managed")]
+		public String[] Split (char[] separator, StringSplitOptions options)
+		{
+			return Split (separator, Int32.MaxValue, options);
+		}
+
+		[ComVisible (false)]
 		public String[] Split (char[] separator, int count, StringSplitOptions options)
 		{
-			if (separator == null || separator.Length == 0)
-				return Split (WhiteChars, count, options);
-
 			if (count < 0)
 				throw new ArgumentOutOfRangeException ("count", "Count cannot be less than zero.");
 			if ((options != StringSplitOptions.None) && (options != StringSplitOptions.RemoveEmptyEntries))
 				throw new ArgumentException ("Illegal enum value: " + options + ".");
 
-			if (count == 0)
-				return new string [0];
+			if (Length == 0 && (options & StringSplitOptions.RemoveEmptyEntries) != 0)
+				return EmptyArray<string>.Value;
 
-			return InternalSplit (separator, count, (int)options);
+			if (count <= 1) {
+				return count == 0 ?
+					EmptyArray<string>.Value :
+					new String[1] { this };
+			}
+
+			return SplitByCharacters (separator, count, options != 0);
+		}
+
+		[ComVisible (false)]
+		public String[] Split (string[] separator, StringSplitOptions options)
+		{
+			return Split (separator, Int32.MaxValue, options);
 		}
 
 		[ComVisible (false)]
 		public String[] Split (string[] separator, int count, StringSplitOptions options)
 		{
-			if (separator == null || separator.Length == 0)
-				return Split (WhiteChars, count, options);
-
 			if (count < 0)
 				throw new ArgumentOutOfRangeException ("count", "Count cannot be less than zero.");
 			if ((options != StringSplitOptions.None) && (options != StringSplitOptions.RemoveEmptyEntries))
 				throw new ArgumentException ("Illegal enum value: " + options + ".");
-			if (count == 1)
-				return new String [] { this };
 
-			bool removeEmpty = (options & StringSplitOptions.RemoveEmptyEntries) == StringSplitOptions.RemoveEmptyEntries;
+			if (count <= 1) {
+				return count == 0 ?
+					EmptyArray<string>.Value :
+					new String[1] { this };
+			}
 
-			if (count == 0 || (this == String.Empty && removeEmpty))
-				return new String [0];
+			bool removeEmpty = (options & StringSplitOptions.RemoveEmptyEntries) != 0;
+
+			if (separator == null || separator.Length == 0)
+				return SplitByCharacters (null, count, removeEmpty);
+
+			if (Length == 0 && removeEmpty)
+				return EmptyArray<string>.Value;
 
 			List<String> arr = new List<String> ();
 
@@ -266,11 +274,11 @@ namespace System
 				// Find the first position where any of the separators matches
 				for (int i = 0; i < separator.Length; ++i) {
 					string sep = separator [i];
-					if (sep == null || sep == String.Empty)
+					if (sep == null || sep.Length == 0)
 						continue;
 
-					int match = IndexOf (sep, pos);
-					if (match > -1 && match < matchPos) {
+					int match = IndexOfOrdinalUnchecked (sep, pos, length - pos);
+					if (match >= 0 && match < matchPos) {
 						matchIndex = i;
 						matchPos = match;
 					}
@@ -295,7 +303,7 @@ namespace System
 
 			// string contained only separators
 			if (removeEmpty && matchCount != 0 && pos == this.Length && arr.Count == 0)
-				return new String [0];
+				return EmptyArray<string>.Value;
 
 			if (!(removeEmpty && pos == this.Length))
 				arr.Add (this.Substring (pos));
@@ -303,16 +311,118 @@ namespace System
 			return arr.ToArray ();
 		}
 
-		[ComVisible (false)]
-		public String[] Split (char[] separator, StringSplitOptions options)
-		{
-			return Split (separator, Int32.MaxValue, options);
-		}
+		// .NET 2.0 compatibility only
+#if !NET_4_0 && !MOBILE
+		static readonly char[] WhiteChars = {
+			(char) 0x9, (char) 0xA, (char) 0xB, (char) 0xC, (char) 0xD,
+			(char) 0x85, (char) 0x1680, (char) 0x2028, (char) 0x2029,
+			(char) 0x20, (char) 0xA0, (char) 0x2000, (char) 0x2001, (char) 0x2002, (char) 0x2003, (char) 0x2004,
+			(char) 0x2005, (char) 0x2006, (char) 0x2007, (char) 0x2008, (char) 0x2009, (char) 0x200A, (char) 0x200B,
+			(char) 0x3000, (char) 0xFEFF
+		};
+#endif
 
-		[ComVisible (false)]
-		public String[] Split (String[] separator, StringSplitOptions options)
+		unsafe string[] SplitByCharacters (char[] sep, int count, bool removeEmpty)
 		{
-			return Split (separator, Int32.MaxValue, options);
+#if !NET_4_0 && !MOBILE
+			if (sep == null || sep.Length == 0)
+				sep = WhiteChars;
+#endif
+
+			int[] split_points = null;
+			int total_points = 0;
+			--count;
+
+			if (sep == null || sep.Length == 0) {
+				fixed (char* src = this) {
+					char* src_ptr = src;
+					int len = Length;
+
+					while (len > 0) {
+						if (char.IsWhiteSpace (*src_ptr++)) {
+							if (split_points == null) {
+								split_points = new int[8];
+							} else if (split_points.Length == total_points) {
+								Array.Resize (ref split_points, split_points.Length * 2);
+							}
+
+							split_points[total_points++] = Length - len;
+							if (total_points == count && !removeEmpty)
+								break;
+						}
+						--len;
+					}
+				}
+			} else {
+				fixed (char* src = this) {
+					fixed (char* sep_src = sep) {
+						char* src_ptr = src;
+						char* sep_ptr_end = sep_src + sep.Length;
+						int len = Length;
+						while (len > 0) {
+							char* sep_ptr = sep_src;
+							do {
+								if (*sep_ptr++ == *src_ptr) {
+									if (split_points == null) {
+										split_points = new int[8];
+									} else if (split_points.Length == total_points) {
+										Array.Resize (ref split_points, split_points.Length * 2);
+									}
+
+									split_points[total_points++] = Length - len;
+									if (total_points == count && !removeEmpty)
+										len = 0;
+
+									break;
+								}
+							} while (sep_ptr != sep_ptr_end);
+
+							++src_ptr;
+							--len;
+						}
+					}
+				}
+			}
+
+			if (total_points == 0)
+				return new string[] { this };
+
+			var res = new string[Math.Min (total_points, count) + 1];
+			int prev_index = 0;
+			int i = 0;
+			if (!removeEmpty) {
+				for (; i < total_points; ++i) {
+					var start = split_points[i];
+					res[i] = SubstringUnchecked (prev_index, start - prev_index);
+					prev_index = start + 1;
+				}
+
+				res[i] = SubstringUnchecked (prev_index, Length - prev_index);
+			} else {
+				int used = 0;
+				int length;
+				for (; i < total_points; ++i) {
+					var start = split_points[i];
+					length = start - prev_index;
+					if (length != 0) {
+						if (used == count)
+							break;
+
+						res[used++] = SubstringUnchecked (prev_index, length);
+					}
+
+					prev_index = start + 1;
+				}
+
+				length = Length - prev_index;
+				if (length != 0)
+					res[used++] = SubstringUnchecked (prev_index, length);
+
+				if (used != res.Length)
+					Array.Resize (ref res, used);
+			}
+
+			return res;
 		}
 
 		public String Substring (int startIndex)
@@ -334,7 +444,7 @@ namespace System
 			if (startIndex > this.length)
 				throw new ArgumentOutOfRangeException ("startIndex", "Cannot exceed length of string.");
 			if (startIndex > this.length - length)
-				throw new ArgumentOutOfRangeException ("length", "startIndex + length > this.length");
+				throw new ArgumentOutOfRangeException ("length", "startIndex + length cannot exceed length of string.");
 			if (startIndex == 0 && length == this.length)
 				return this;
 
@@ -346,7 +456,7 @@ namespace System
 		internal unsafe String SubstringUnchecked (int startIndex, int length)
 		{
 			if (length == 0)
-				return String.Empty;
+				return Empty;
 
 			string tmp = InternalAllocateStr (length);
 			fixed (char* dest = tmp, src = this) {
@@ -355,26 +465,14 @@ namespace System
 			return tmp;
 		}
 
-		private static readonly char[] WhiteChars = {
-			(char) 0x9, (char) 0xA, (char) 0xB, (char) 0xC, (char) 0xD,
-			(char) 0x85, (char) 0x1680, (char) 0x2028, (char) 0x2029,
-			(char) 0x20, (char) 0xA0, (char) 0x2000, (char) 0x2001, (char) 0x2002, (char) 0x2003, (char) 0x2004,
-			(char) 0x2005, (char) 0x2006, (char) 0x2007, (char) 0x2008, (char) 0x2009, (char) 0x200A, (char) 0x200B,
-			(char) 0x3000, (char) 0xFEFF,
-#if NET_2_1
-		        // Silverlight 
-		        (char) 0x202f, (char) 0x205f,
-#endif
-		};
-
 		public String Trim ()
 		{
 			if (length == 0) 
-				return String.Empty;
+				return Empty;
 			int start = FindNotWhiteSpace (0, length, 1);
 
 			if (start == length)
-				return String.Empty;
+				return Empty;
 
 			int end = FindNotWhiteSpace (length - 1, start, -1);
 
@@ -391,11 +489,11 @@ namespace System
 				return Trim ();
 
 			if (length == 0) 
-				return String.Empty;
+				return Empty;
 			int start = FindNotInTable (0, length, 1, trimChars);
 
 			if (start == length)
-				return String.Empty;
+				return Empty;
 
 			int end = FindNotInTable (length - 1, start, -1, trimChars);
 
@@ -409,7 +507,7 @@ namespace System
 		public String TrimStart (params char[] trimChars)
 		{
 			if (length == 0) 
-				return String.Empty;
+				return Empty;
 			int start;
 			if (trimChars == null || trimChars.Length == 0)
 				start = FindNotWhiteSpace (0, length, 1);
@@ -425,7 +523,7 @@ namespace System
 		public String TrimEnd (params char[] trimChars)
 		{
 			if (length == 0) 
-				return String.Empty;
+				return Empty;
 			int end;
 			if (trimChars == null || trimChars.Length == 0)
 				end = FindNotWhiteSpace (length - 1, -1, -1);
@@ -439,8 +537,18 @@ namespace System
 			return SubstringUnchecked (0, end);
 		}
 
-		private int FindNotWhiteSpace (int pos, int target, int change)
+		unsafe int FindNotWhiteSpace (int pos, int target, int change)
 		{
+#if NET_4_0
+			fixed (char* src = this) {
+				while (pos != target) {
+					if (!char.IsWhiteSpace (src[pos]))
+						return pos;
+
+					pos += change;
+				}
+			}
+#else
 			while (pos != target) {
 				char c = this[pos];
 				if (c < 0x85) {
@@ -451,18 +559,14 @@ namespace System
 				}
 				else {
 					if (c != 0xA0 && c != 0xFEFF && c != 0x3000) {
-						if (c != 0x85 && c != 0x1680 && c != 0x2028 && c != 0x2029
-#if NET_2_1
-						    // On Silverlight this whitespace participates in Trim
-						    && c != 0x202f && c != 0x205f
-#endif
-							)
+						if (c != 0x85 && c != 0x1680 && c != 0x2028 && c != 0x2029)
 							if (c < 0x2000 || c > 0x200B)
 								return pos;
 					}
 				}
 				pos += change;
 			}
+#endif
 			return pos;
 		}
 
@@ -606,12 +710,12 @@ namespace System
 
 		public static bool Equals (string a, string b, StringComparison comparisonType)
 		{
-			return String.Compare (a, b, comparisonType) == 0;
+			return Compare (a, b, comparisonType) == 0;
 		}
 
 		public bool Equals (string value, StringComparison comparisonType)
 		{
-			return String.Compare (value, this, comparisonType) == 0;
+			return Compare (value, this, comparisonType) == 0;
 		}
 
 		public static int Compare (string strA, string strB, CultureInfo culture, CompareOptions options)
@@ -665,16 +769,30 @@ namespace System
 
 		public static int CompareOrdinal (String strA, int indexA, String strB, int indexB, int length)
 		{
-			if ((indexA > strA.Length) || (indexB > strB.Length) || (indexA < 0) || (indexB < 0) || (length < 0))
-				throw new ArgumentOutOfRangeException ();
+			if (strA != null && strB != null)
+			{
+				if (indexA > strA.Length || indexA < 0)
+					throw new ArgumentOutOfRangeException ("indexA");
+				if (indexB > strB.Length || indexB < 0)
+					throw new ArgumentOutOfRangeException ("indexB");
+				if (length < 0)
+					throw new ArgumentOutOfRangeException ("length");
+			}
 
 			return CompareOrdinalUnchecked (strA, indexA, length, strB, indexB, length);
 		}
 
 		internal static int CompareOrdinalCaseInsensitive (String strA, int indexA, String strB, int indexB, int length)
 		{
-			if ((indexA > strA.Length) || (indexB > strB.Length) || (indexA < 0) || (indexB < 0) || (length < 0))
-				throw new ArgumentOutOfRangeException ();
+			if (strA != null && strB != null)
+			{
+				if (indexA > strA.Length || indexA < 0)
+					throw new ArgumentOutOfRangeException ("indexA");
+				if (indexB > strB.Length || indexB < 0)
+					throw new ArgumentOutOfRangeException ("indexB");
+				if (length < 0)
+					throw new ArgumentOutOfRangeException ("length");
+			}
 
 			return CompareOrdinalCaseInsensitiveUnchecked (strA, indexA, length, strB, indexB, length);
 		}
@@ -682,17 +800,15 @@ namespace System
 		internal static unsafe int CompareOrdinalUnchecked (String strA, int indexA, int lenA, String strB, int indexB, int lenB)
 		{
 			if (strA == null) {
-				if (strB == null)
-					return 0;
-				else
-					return -1;
-			} else if (strB == null) {
+				return strB == null ? 0 : -1;
+			}
+			if (strB == null) {
 				return 1;
 			}
 			int lengthA = Math.Min (lenA, strA.Length - indexA);
 			int lengthB = Math.Min (lenB, strB.Length - indexB);
 
-			if (lengthA == lengthB && Object.ReferenceEquals (strA, strB))
+			if (lengthA == lengthB && indexA == indexB && Object.ReferenceEquals (strA, strB))
 				return 0;
 
 			fixed (char* aptr = strA, bptr = strB) {
@@ -709,15 +825,21 @@ namespace System
 			}
 		}
 
+		//
+		// Fastest method for internal case insensitive comparison
+		//
+		internal static int CompareOrdinalCaseInsensitiveUnchecked (string strA, string strB)
+		{
+			return CompareOrdinalCaseInsensitiveUnchecked (strA, 0, int.MaxValue, strB, 0, int.MaxValue);
+		}
+
 		internal static unsafe int CompareOrdinalCaseInsensitiveUnchecked (String strA, int indexA, int lenA, String strB, int indexB, int lenB)
 		{
 			// Same as above, but checks versus uppercase characters
 			if (strA == null) {
-				if (strB == null)
-					return 0;
-				else
-					return -1;
-			} else if (strB == null) {
+				return strB == null ? 0 : -1;
+			}
+			if (strB == null) {
 				return 1;
 			}
 			int lengthA = Math.Min (lenA, strA.Length - indexA);
@@ -892,6 +1014,11 @@ namespace System
 			return IndexOfOrdinalIgnoreCaseUnchecked (value, startIndex, count);
 		}
 
+		internal unsafe int IndexOfOrdinalUnchecked (string value)
+		{
+			return IndexOfOrdinalUnchecked (value, 0, length);
+		}
+
 		internal unsafe int IndexOfOrdinalUnchecked (string value, int startIndex, int count)
 		{
 			int valueLen = value.Length;
@@ -950,7 +1077,7 @@ namespace System
 		public int LastIndexOf (string value, StringComparison comparisonType)
 		{
 			if (this.Length == 0)
-				return value == String.Empty ? 0 : -1;
+				return value.Length == 0 ? 0 : -1;
 			else
 				return LastIndexOf (value, this.Length - 1, this.Length, comparisonType);
 		}
@@ -986,7 +1113,7 @@ namespace System
 			if (value == null)
 				throw new ArgumentNullException ("value");
 			if (this.Length == 0)
-				return value == String.Empty ? 0 : -1;
+				return value.Length == 0 ? 0 : -1;
 			if (value.Length == 0)
 				return Math.Min (this.Length - 1, startIndex);
 			if (startIndex < 0 || startIndex > length)
@@ -1151,11 +1278,11 @@ namespace System
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			if (value.length == 0)
+			if (value.Length == 0)
 				return 0;
 			if (this.length == 0)
 				return -1;
-			return CultureInfo.CurrentCulture.CompareInfo.IndexOf (this, value, 0, length, CompareOptions.Ordinal);
+			return CultureInfo.CurrentCulture.CompareInfo.IndexOf (this, value, 0, length, CompareOptions.None);
 		}
 
 		public int IndexOf (String value, int startIndex)
@@ -1360,7 +1487,7 @@ namespace System
 				throw new ArgumentNullException ("value");
 
 			if (this.length == 0)
-				return value == String.Empty ? 0 : -1;
+				return value.Length == 0 ? 0 : -1;
 			// -1 > startIndex > for string (0 > startIndex >= for char)
 			if ((startIndex < -1) || (startIndex > this.Length))
 				throw new ArgumentOutOfRangeException ("startIndex", "< 0 || > this.Length");
@@ -1389,7 +1516,10 @@ namespace System
 
 		public bool Contains (String value)
 		{
-			return IndexOf (value) != -1;
+			if (value == null)
+				throw new ArgumentNullException ("value");
+
+			return IndexOfOrdinalUnchecked (value, 0, Length) != -1;
 		}
 
 		public static bool IsNullOrEmpty (String value)
@@ -1397,7 +1527,6 @@ namespace System
 			return (value == null) || (value.Length == 0);
 		}
 
-#if !MOONLIGHT
 		public string Normalize ()
 		{
 			return Normalization.Normalize (this, 0);
@@ -1435,7 +1564,6 @@ namespace System
 				return Normalization.IsNormalized (this, 3);
 			}
 		}
-#endif
 
 		public string Remove (int startIndex)
 		{
@@ -1461,12 +1589,20 @@ namespace System
 
 			if (totalWidth < this.length)
 				return this;
+			if (totalWidth == 0)
+				return Empty;
 
 			String tmp = InternalAllocateStr (totalWidth);
 
 			fixed (char* dest = tmp, src = this) {
 				char* padPos = dest;
-				char* padTo = dest + (totalWidth - length);
+				char* padTo;
+				try {
+					padTo = checked (dest + (totalWidth - length));
+				} catch (OverflowException) {
+					throw new OutOfMemoryException ();
+				}
+
 				while (padPos != padTo)
 					*padPos++ = paddingChar;
 
@@ -1490,17 +1626,21 @@ namespace System
 			if (totalWidth < this.length)
 				return this;
 			if (totalWidth == 0)
-				return String.Empty;
+				return Empty;
 
 			String tmp = InternalAllocateStr (totalWidth);
 
 			fixed (char* dest = tmp, src = this) {
 				CharCopy (dest, src, length);
 
-				char* padPos = dest + length;
-				char* padTo = dest + totalWidth;
-				while (padPos != padTo)
-					*padPos++ = paddingChar;
+				try {
+					char* padPos = checked (dest + length);
+					char* padTo = checked (dest + totalWidth);
+					while (padPos != padTo)
+						*padPos++ = paddingChar;
+				} catch (OverflowException) {
+					throw new OutOfMemoryException ();
+				}
 			}
 			return tmp;
 		}
@@ -1529,13 +1669,23 @@ namespace System
 			case StringComparison.InvariantCultureIgnoreCase:
 				return CultureInfo.InvariantCulture.CompareInfo.IsPrefix (this, value, CompareOptions.IgnoreCase);
 			case StringComparison.Ordinal:
-				return CultureInfo.CurrentCulture.CompareInfo.IsPrefix (this, value, CompareOptions.Ordinal);
+				return StartsWithOrdinalUnchecked (value);
 			case StringComparison.OrdinalIgnoreCase:
-				return CultureInfo.CurrentCulture.CompareInfo.IsPrefix (this, value, CompareOptions.OrdinalIgnoreCase);
+				return StartsWithOrdinalCaseInsensitiveUnchecked (value);
 			default:
 				string msg = Locale.GetText ("Invalid value '{0}' for StringComparison", comparisonType);
 				throw new ArgumentException (msg, "comparisonType");
 			}
+		}
+
+		internal bool StartsWithOrdinalUnchecked (string value)
+		{
+			return length >= value.length && CompareOrdinalUnchecked (this, 0, value.length, value, 0, value.length) == 0;
+		}
+
+		internal bool StartsWithOrdinalCaseInsensitiveUnchecked (string value)
+		{
+			return length >= value.Length && CompareOrdinalCaseInsensitiveUnchecked (this, 0, value.length, value, 0, value.length) == 0;
 		}
 
 		[ComVisible (false)]
@@ -1554,9 +1704,9 @@ namespace System
 			case StringComparison.InvariantCultureIgnoreCase:
 				return CultureInfo.InvariantCulture.CompareInfo.IsSuffix (this, value, CompareOptions.IgnoreCase);
 			case StringComparison.Ordinal:
-				return CultureInfo.CurrentCulture.CompareInfo.IsSuffix (this, value, CompareOptions.Ordinal);
+				return CultureInfo.InvariantCulture.CompareInfo.IsSuffix (this, value, CompareOptions.Ordinal);
 			case StringComparison.OrdinalIgnoreCase:
-				return CultureInfo.CurrentCulture.CompareInfo.IsSuffix (this, value, CompareOptions.OrdinalIgnoreCase);
+				return CultureInfo.InvariantCulture.CompareInfo.IsSuffix (this, value, CompareOptions.OrdinalIgnoreCase);
 			default:
 				string msg = Locale.GetText ("Invalid value '{0}' for StringComparison", comparisonType);
 				throw new ArgumentException (msg, "comparisonType");
@@ -1622,7 +1772,7 @@ namespace System
 				return this;
 			
 			if (newValue == null)
-				newValue = String.Empty;
+				newValue = Empty;
 
 			return ReplaceUnchecked (oldValue, newValue);
 		}
@@ -1655,7 +1805,14 @@ namespace System
 				}
 				if (count == 0)
 					return this;
-				int nlen = this.length + ((newValue.length - oldValue.length) * count);
+				int nlen = 0;
+				checked {
+					try {
+						nlen = this.length + ((newValue.length - oldValue.length) * count);
+					} catch (OverflowException) {
+						throw new OutOfMemoryException ();
+					}
+				}
 				String tmp = InternalAllocateStr (nlen);
 
 				int curPos = 0, lastReadPos = 0;
@@ -1732,7 +1889,7 @@ namespace System
 		public unsafe String ToLowerInvariant ()
 		{
 			if (length == 0)
-				return String.Empty;
+				return Empty;
 
 			string tmp = InternalAllocateStr (length);
 			fixed (char* source = &start_char, dest = tmp) {
@@ -1768,7 +1925,7 @@ namespace System
 		public unsafe String ToUpperInvariant ()
 		{
 			if (length == 0)
-				return String.Empty;
+				return Empty;
 
 			string tmp = InternalAllocateStr (length);
 			fixed (char* source = &start_char, dest = tmp) {
@@ -1848,6 +2005,8 @@ namespace System
 
 			int ptr = 0;
 			int start = ptr;
+			var formatter = provider != null ? provider.GetFormat (typeof (ICustomFormatter)) as ICustomFormatter : null;
+
 			while (ptr < format.length) {
 				char c = format[ptr ++];
 
@@ -1876,21 +2035,21 @@ namespace System
 					object arg = args[n];
 
 					string str;
-					ICustomFormatter formatter = null;
-					if (provider != null)
-						formatter = provider.GetFormat (typeof (ICustomFormatter))
-							as ICustomFormatter;
 					if (arg == null)
-						str = String.Empty;
+						str = Empty;
 					else if (formatter != null)
 						str = formatter.Format (arg_format, arg, provider);
-					else if (arg is IFormattable)
-						str = ((IFormattable)arg).ToString (arg_format, provider);
 					else
-						str = arg.ToString ();
+						str = null;
+
+					if (str == null) {
+						if (arg is IFormattable)
+							str = ((IFormattable)arg).ToString (arg_format, provider);
+						else
+							str = arg.ToString ();
+					}
 
 					// pad formatted string and append to result
-
 					if (width > str.length) {
 						const char padchar = ' ';
 						int padlen = width - str.length;
@@ -1903,9 +2062,9 @@ namespace System
 							result.Append (padchar, padlen);
 							result.Append (str);
 						}
-					}
-					else
+					} else {
 						result.Append (str);
+					}
 
 					start = ptr;
 				}
@@ -1943,7 +2102,7 @@ namespace System
 		public static String Concat (Object arg0)
 		{
 			if (arg0 == null)
-				return String.Empty;
+				return Empty;
 
 			return arg0.ToString ();
 		}
@@ -1957,17 +2116,17 @@ namespace System
 		{
 			string s1, s2, s3;
 			if (arg0 == null)
-				s1 = String.Empty;
+				s1 = Empty;
 			else
 				s1 = arg0.ToString ();
 
 			if (arg1 == null)
-				s2 = String.Empty;
+				s2 = Empty;
 			else
 				s2 = arg1.ToString ();
 
 			if (arg2 == null)
-				s3 = String.Empty;
+				s3 = Empty;
 			else
 				s3 = arg2.ToString ();
 
@@ -1981,17 +2140,17 @@ namespace System
 			string s1, s2, s3, s4;
 
 			if (arg0 == null)
-				s1 = String.Empty;
+				s1 = Empty;
 			else
 				s1 = arg0.ToString ();
 
 			if (arg1 == null)
-				s2 = String.Empty;
+				s2 = Empty;
 			else
 				s2 = arg1.ToString ();
 
 			if (arg2 == null)
-				s3 = String.Empty;
+				s3 = Empty;
 			else
 				s3 = arg2.ToString ();
 
@@ -2016,14 +2175,17 @@ namespace System
 		{
 			if (str0 == null || str0.Length == 0) {
 				if (str1 == null || str1.Length == 0)
-					return String.Empty;
+					return Empty;
 				return str1;
 			}
 
 			if (str1 == null || str1.Length == 0)
 				return str0; 
 
-			String tmp = InternalAllocateStr (str0.length + str1.length);
+			int nlen = str0.length + str1.length;
+			if (nlen < 0)
+				throw new OutOfMemoryException ();
+			String tmp = InternalAllocateStr (nlen);
 
 			fixed (char *dest = tmp, src = str0)
 				CharCopy (dest, src, str0.length);
@@ -2038,26 +2200,32 @@ namespace System
 			if (str0 == null || str0.Length == 0){
 				if (str1 == null || str1.Length == 0){
 					if (str2 == null || str2.Length == 0)
-						return String.Empty;
+						return Empty;
 					return str2;
 				} else {
 					if (str2 == null || str2.Length == 0)
 						return str1;
 				}
-				str0 = String.Empty;
+				str0 = Empty;
 			} else {
 				if (str1 == null || str1.Length == 0){
 					if (str2 == null || str2.Length == 0)
 						return str0;
 					else
-						str1 = String.Empty;
+						str1 = Empty;
 				} else {
 					if (str2 == null || str2.Length == 0)
-						str2 = String.Empty;
+						str2 = Empty;
 				}
 			}
 
-			String tmp = InternalAllocateStr (str0.length + str1.length + str2.length);
+			int nlen = str0.length + str1.length;
+			if (nlen < 0)
+				throw new OutOfMemoryException ();
+			nlen += str2.length;
+			if (nlen < 0)
+				throw new OutOfMemoryException ();
+			String tmp = InternalAllocateStr (nlen);
 
 			if (str0.Length != 0) {
 				fixed (char *dest = tmp, src = str0) {
@@ -2081,17 +2249,26 @@ namespace System
 		public unsafe static String Concat (String str0, String str1, String str2, String str3)
 		{
 			if (str0 == null && str1 == null && str2 == null && str3 == null)
-				return String.Empty;
+				return Empty;
 
 			if (str0 == null)
-				str0 = String.Empty;
+				str0 = Empty;
 			if (str1 == null)
-				str1 = String.Empty;
+				str1 = Empty;
 			if (str2 == null)
-				str2 = String.Empty;
+				str2 = Empty;
 			if (str3 == null)
-				str3 = String.Empty;
+				str3 = Empty;
 
+			int nlen = str0.length + str1.length;
+			if (nlen < 0)
+				throw new OutOfMemoryException ();
+			nlen += str2.length;
+			if (nlen < 0)
+				throw new OutOfMemoryException ();
+			nlen += str3.length;
+			if (nlen < 0)
+				throw new OutOfMemoryException ();
 			String tmp = InternalAllocateStr (str0.length + str1.length + str2.length + str3.length);
 
 			if (str0.Length != 0) {
@@ -2125,7 +2302,7 @@ namespace System
 
 			int argLen = args.Length;
 			if (argLen == 0)
-				return String.Empty;
+				return Empty;
 
 			string [] strings = new string [argLen];
 			int len = 0;
@@ -2133,6 +2310,8 @@ namespace System
 				if (args[i] != null) {
 					strings[i] = args[i].ToString ();
 					len += strings[i].length;
+					if (len < 0)
+						throw new OutOfMemoryException ();
 				}
 			}
 
@@ -2149,6 +2328,8 @@ namespace System
 				String s = values[i];
 				if (s != null)
 					len += s.length;
+					if (len < 0)
+						throw new OutOfMemoryException ();
 			}
 
 			return ConcatInternal (values, len);
@@ -2157,7 +2338,9 @@ namespace System
 		private static unsafe String ConcatInternal (String[] values, int length)
 		{
 			if (length == 0)
-				return String.Empty;
+				return Empty;
+			if (length < 0)
+				throw new OutOfMemoryException ();
 
 			String tmp = InternalAllocateStr (length);
 
@@ -2188,7 +2371,12 @@ namespace System
 				return this;
 			if (this.Length == 0)
 				return value;
-			String tmp = InternalAllocateStr (this.length + value.length);
+
+			int nlen = this.length + value.length;
+			if (nlen < 0)
+				throw new OutOfMemoryException ();
+
+			String tmp = InternalAllocateStr (nlen);
 
 			fixed (char *dest = tmp, src = this, val = value) {
 				char *dst = dest;
@@ -2217,7 +2405,7 @@ namespace System
 			return InternalIsInterned (str);
 		}
 	
-#if NET_4_0 || MOONLIGHT || MOBILE
+#if NET_4_0
 		public static string Join (string separator, params string [] value)
 #else
 		public static string Join (string separator, string [] value)
@@ -2226,7 +2414,7 @@ namespace System
 			if (value == null)
 				throw new ArgumentNullException ("value");
 			if (separator == null)
-				separator = String.Empty;
+				separator = Empty;
 
 			return JoinUnchecked (separator, value, 0, value.Length);
 		}
@@ -2243,9 +2431,9 @@ namespace System
 				throw new ArgumentOutOfRangeException ("startIndex", "startIndex + count > value.length");
 
 			if (startIndex == value.Length)
-				return String.Empty;
+				return Empty;
 			if (separator == null)
-				separator = String.Empty;
+				separator = Empty;
 
 			return JoinUnchecked (separator, value, startIndex, count);
 		}
@@ -2266,7 +2454,7 @@ namespace System
 			}
 			length += separator.length * (count - 1);
 			if (length <= 0)
-				return String.Empty;
+				return Empty;
 
 			String tmp = InternalAllocateStr (length);
 
@@ -2435,7 +2623,7 @@ namespace System
 			else {
 				width = 0;
 				left_align = false;
-				format = String.Empty;
+				format = Empty;
 			}
 			
 			// F = argument format (string)
@@ -2525,7 +2713,7 @@ namespace System
 			}
 		}
 
-#if MOONLIGHT || MOBILE || NET_4_0
+#if NET_4_0
 		[ComVisible(false)]
 		public static string Concat (IEnumerable<string> values)
 		{
@@ -2538,6 +2726,8 @@ namespace System
 				if (v == null)
 					continue;
 				len += v.Length;
+				if (len < 0)
+					throw new OutOfMemoryException ();
 				stringList.Add (v);
 			}
 			return ConcatInternal (stringList.ToArray (), len);
@@ -2554,6 +2744,8 @@ namespace System
 			foreach (var v in values){
 				string sr = v.ToString ();
 				len += sr.Length;
+				if (len < 0)
+					throw new OutOfMemoryException ();
 				stringList.Add (sr);
 			}
 			return ConcatInternal (stringList.ToArray (), len);
@@ -2568,9 +2760,7 @@ namespace System
 			if (values == null)
 				throw new ArgumentNullException ("values");
 			
-			var stringList = new List<string> ();
-			foreach (var v in values)
-				stringList.Add (v);
+			var stringList = new List<string> (values);
 
 			return JoinUnchecked (separator, stringList.ToArray (), 0, stringList.Count);
 		}
@@ -2601,11 +2791,13 @@ namespace System
 			if (values == null)
 				throw new ArgumentNullException ("values");
 			
-			var stringList = new List<string> ();
-			foreach (var v in values)
-				stringList.Add (v.ToString ());
+			var stringList = values as IList<T> ?? new List<T> (values);
+			var strCopy = new string [stringList.Count];
+			int i = 0;
+			foreach (var v in stringList)
+				strCopy [i++] = v.ToString ();
 
-			return JoinUnchecked (separator, stringList.ToArray (), 0, stringList.Count);
+			return JoinUnchecked (separator, strCopy, 0, strCopy.Length);
 		}
 
 		public static bool IsNullOrWhiteSpace (string value)
@@ -2640,11 +2832,11 @@ namespace System
 
 		// Certain constructors are redirected to CreateString methods with
 		// matching argument list. The this pointer should not be used.
-#pragma warning disable 169
+
 		private unsafe String CreateString (sbyte* value)
 		{
 			if (value == null)
-				return String.Empty;
+				return Empty;
 
 			byte* bytes = (byte*) value;
 			int length = 0;
@@ -2653,8 +2845,6 @@ namespace System
 				while (bytes++ [0] != 0)
 					length++;
 			} catch (NullReferenceException) {
-				throw new ArgumentOutOfRangeException ("ptr", "Value does not refer to a valid string.");
-			} catch (AccessViolationException) {
 				throw new ArgumentOutOfRangeException ("ptr", "Value does not refer to a valid string.");
 		}
 
@@ -2675,13 +2865,11 @@ namespace System
 			if (value + startIndex < value)
 				throw new ArgumentOutOfRangeException ("startIndex", "Value, startIndex and length do not refer to a valid string.");
 
-			bool isDefaultEncoding;
-
-			if (isDefaultEncoding = (enc == null)) {
+			if (enc == null) {
 				if (value == null)
 					throw new ArgumentNullException ("value");
 				if (length == 0)
-					return String.Empty;
+					return Empty;
 
 				enc = Encoding.Default;
 			}
@@ -2694,11 +2882,6 @@ namespace System
 						memcpy (bytePtr, (byte*) (value + startIndex), length);
 					} catch (NullReferenceException) {
 						throw new ArgumentOutOfRangeException ("ptr", "Value, startIndex and length do not refer to a valid string.");
-					} catch (AccessViolationException) {
-						if (!isDefaultEncoding)
-							throw;
-
-						throw new ArgumentOutOfRangeException ("value", "Value, startIndex and length do not refer to a valid string.");
 					}
 
 			// GetString () is called even when length == 0
@@ -2708,7 +2891,7 @@ namespace System
 		unsafe string CreateString (char *value)
 		{
 			if (value == null)
-				return string.Empty;
+				return Empty;
 			char *p = value;
 			int i = 0;
 			while (*p != 0) {
@@ -2728,7 +2911,7 @@ namespace System
 		unsafe string CreateString (char *value, int startIndex, int length)
 		{
 			if (length == 0)
-				return string.Empty;
+				return Empty;
 			if (value == null)
 				throw new ArgumentNullException ("value");
 			if (startIndex < 0)
@@ -2755,7 +2938,7 @@ namespace System
 			if (startIndex > val.Length - length)
 				throw new ArgumentOutOfRangeException ("startIndex", "Cannot be negative, and should be less than length of string.");
 			if (length == 0)
-				return string.Empty;
+				return Empty;
 
 			string result = InternalAllocateStr (length);
 
@@ -2767,10 +2950,8 @@ namespace System
 
 		unsafe string CreateString (char [] val)
 		{
-			if (val == null)
-				return string.Empty;
-			if (val.Length == 0)
-				return string.Empty;
+			if (val == null || val.Length == 0)
+				return Empty;
 			string result = InternalAllocateStr (val.Length);
 
 			fixed (char *dest = result, src = val) {
@@ -2784,7 +2965,7 @@ namespace System
 			if (count < 0)
 				throw new ArgumentOutOfRangeException ("count");
 			if (count == 0)
-				return string.Empty;
+				return Empty;
 			string result = InternalAllocateStr (count);
 			fixed (char *dest = result) {
 				char *p = dest;
@@ -2796,7 +2977,6 @@ namespace System
 			}
 			return result;
 		}
-#pragma warning restore 169
 
 		/* helpers used by the runtime as well as above or eslewhere in corlib */
 		internal static unsafe void memset (byte *dest, int val, int len)
@@ -2954,6 +3134,43 @@ namespace System
 			memcpy4 (dest, src, size);
 		}
 
+		/* Used by the runtime */
+		internal static unsafe void bzero (byte *dest, int len) {
+			memset (dest, 0, len);
+		}
+
+		internal static unsafe void bzero_aligned_1 (byte *dest, int len) {
+			((byte*)dest) [0] = 0;
+		}
+
+		internal static unsafe void bzero_aligned_2 (byte *dest, int len) {
+			((short*)dest) [0] = 0;
+		}
+
+		internal static unsafe void bzero_aligned_4 (byte *dest, int len) {
+			((int*)dest) [0] = 0;
+		}
+
+		internal static unsafe void bzero_aligned_8 (byte *dest, int len) {
+			((long*)dest) [0] = 0;
+		}
+
+		internal static unsafe void memcpy_aligned_1 (byte *dest, byte *src, int size) {
+			((byte*)dest) [0] = ((byte*)src) [0];
+		}			
+
+		internal static unsafe void memcpy_aligned_2 (byte *dest, byte *src, int size) {
+			((short*)dest) [0] = ((short*)src) [0];
+		}			
+
+		internal static unsafe void memcpy_aligned_4 (byte *dest, byte *src, int size) {
+			((int*)dest) [0] = ((int*)src) [0];
+		}			
+
+		internal static unsafe void memcpy_aligned_8 (byte *dest, byte *src, int size) {
+			((long*)dest) [0] = ((long*)src) [0];
+		}			
+
 		internal static unsafe void CharCopy (char *dest, char *src, int count) {
 			// Same rules as for memcpy, but with the premise that 
 			// chars can only be aligned to even addresses if their
@@ -3026,9 +3243,6 @@ namespace System
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		public extern String (char c, int count);
-
-		[MethodImplAttribute (MethodImplOptions.InternalCall)]
-		private extern String[] InternalSplit (char[] separator, int count, int options);
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		internal extern static String InternalAllocateStr (int length);

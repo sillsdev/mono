@@ -294,7 +294,11 @@ namespace DbLinq.Data.Linq
             _VendorProvider = ObjectFactory.Get<IVendorProvider>();
             Vendor = vendor ?? 
                 (connectionString != null ? GetVendor(ref connectionString) : null) ??
+#if MOBILE
+                _VendorProvider.FindVendorByProviderType(typeof(DbLinq.Sqlite.SqliteSqlProvider));
+#else
                 _VendorProvider.FindVendorByProviderType(typeof(SqlClient.Sql2005Provider));
+#endif
             
             DatabaseContext = databaseContext;
 
@@ -987,7 +991,7 @@ namespace DbLinq.Data.Linq
         /// <summary>
         /// Execute raw SQL query and return object
         /// </summary>
-        public IEnumerable<TResult> ExecuteQuery<TResult>(string query, params object[] parameters) where TResult : class, new()
+        public IEnumerable<TResult> ExecuteQuery<TResult>(string query, params object[] parameters) where TResult : new()
         {
             if (query == null)
                 throw new ArgumentNullException("query");
@@ -996,7 +1000,7 @@ namespace DbLinq.Data.Linq
         }
 
         private IEnumerable<TResult> CreateExecuteQueryEnumerable<TResult>(string query, object[] parameters)
-            where TResult : class, new()
+            where TResult : new()
         {
             foreach (TResult result in ExecuteQuery(typeof(TResult), query, parameters))
                 yield return result;

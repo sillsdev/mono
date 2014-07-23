@@ -1,8 +1,10 @@
 //
 // System.Net.WebUtility
 //
-// Author: Mike Kestner  <mkestner@novell.com>
+// Authors: Mike Kestner  <mkestner@novell.com>
+//          Marek Safar (marek.safar@gmail.com)
 //
+// Copyright (C) 2014 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -37,11 +39,17 @@ namespace System.Net
 		
 		public static string HtmlDecode (string value)
 		{
+			if (string.IsNullOrEmpty (value))
+				return value;
+
 			return HttpUtility.HtmlDecode (value);
 		}
 		
 		public static void HtmlDecode (string value, TextWriter output)
 		{
+			if (output == null)
+				throw new ArgumentNullException ("output");
+
 			output.Write (HtmlDecode (value));
 		}
 		
@@ -52,7 +60,32 @@ namespace System.Net
 		
 		public static void HtmlEncode (string value, TextWriter output)
 		{
+			if (output == null)
+				throw new ArgumentNullException ("output");
+
 			output.Write (HtmlEncode (value));
+		}
+		
+		public static string UrlDecode (string encodedValue)
+		{
+			return HttpUtility.UrlDecode (encodedValue);
+		}
+		
+		public static byte[] UrlDecodeToBytes (
+			byte[] encodedValue, int offset, int count)
+		{
+			return HttpUtility.UrlDecodeToBytes (encodedValue, offset, count);
+		}
+		
+		public static string UrlEncode (string value)
+		{
+			return HttpUtility.UrlEncode (value);
+		}
+		
+		public static byte[] UrlEncodeToBytes (
+			byte[] value, int offset, int count)
+		{
+			return HttpUtility.UrlEncodeToBytes (value, offset, count);
 		}
 	}
 }

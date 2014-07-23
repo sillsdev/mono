@@ -49,6 +49,7 @@ namespace System
 	[ClassInterface (ClassInterfaceType.AutoDual)]
 	[System.Runtime.InteropServices.ComVisible (true)]
 	[Serializable]
+	[StructLayout (LayoutKind.Sequential)]
 	public abstract class Delegate : ICloneable, ISerializable
 	{
 		#region Sync with object-internals.h
@@ -132,10 +133,25 @@ namespace System
 				if (!argType.IsValueType && argType.IsAssignableFrom (delArgType))
 					match = true;
 			}
+			// enum basetypes
+			if (!match) {
+				if (delArgType.IsEnum && Enum.GetUnderlyingType (delArgType) == argType)
+					match = true;
+			}
 
 			return match;
 		}
 
+		private static bool arg_type_match_this (Type delArgType, Type argType, bool boxedThis) {
+			bool match;
+			if (argType.IsValueType)
+				match = delArgType.IsByRef && delArgType.GetElementType () == argType ||
+						(boxedThis && delArgType == argType);
+			else
+				match = delArgType == argType || argType.IsAssignableFrom (delArgType);
+
+			return match;
+		}
 		private static bool return_type_match (Type delReturnType, Type returnType) {
 			bool returnMatch = returnType == delReturnType;
 
@@ -175,8 +191,8 @@ namespace System
 				else
 					return null;
 
-			ParameterInfo[] delargs = invoke.GetParameters ();
-			ParameterInfo[] args = method.GetParameters ();
+			ParameterInfo[] delargs = invoke.GetParametersInternal ();
+			ParameterInfo[] args = method.GetParametersInternal ();
 
 			bool argLengthMatch;
 
@@ -216,7 +232,7 @@ namespace System
 			bool argsMatch;
 			if (target != null) {
 				if (!method.IsStatic) {
-					argsMatch = arg_type_match (target.GetType (), method.DeclaringType);
+					argsMatch = arg_type_match_this (target.GetType (), method.DeclaringType, true);
 					for (int i = 0; i < args.Length; i++)
 						argsMatch &= arg_type_match (delargs [i].ParameterType, args [i].ParameterType);
 				} else {
@@ -228,7 +244,7 @@ namespace System
 				if (!method.IsStatic) {
 					if (args.Length + 1 == delargs.Length) {
 						// The first argument should match this
-						argsMatch = arg_type_match (delargs [0].ParameterType, method.DeclaringType);
+						argsMatch = arg_type_match_this (delargs [0].ParameterType, method.DeclaringType, false);
 						for (int i = 0; i < args.Length; i++)
 							argsMatch &= arg_type_match (delargs [i + 1].ParameterType, args [i].ParameterType);
 					} else {
@@ -240,7 +256,7 @@ namespace System
 				} else {
 					if (delargs.Length + 1 == args.Length) {
 						// closed over a null reference
-						argsMatch = !args [0].ParameterType.IsValueType && allowClosed;
+						argsMatch = !(args [0].ParameterType.IsValueType || args [0].ParameterType.IsByRef) && allowClosed;
 						for (int i = 0; i < delargs.Length; i++)
 							argsMatch &= arg_type_match (delargs [i].ParameterType, args [i + 1].ParameterType);
 					} else {
@@ -295,7 +311,7 @@ namespace System
 				throw new ArgumentException ("type is not subclass of MulticastDelegate.");
 
 			MethodInfo invoke = type.GetMethod ("Invoke");
-			ParameterInfo [] delargs = invoke.GetParameters ();
+			ParameterInfo [] delargs = invoke.GetParametersInternal ();
 			Type[] delargtypes = new Type [delargs.Length];
 
 			for (int i=0; i<delargs.Length; i++)
@@ -322,7 +338,7 @@ namespace System
 
 			for (Type targetType = target; targetType != null; targetType = targetType.BaseType) {
 				MethodInfo mi = targetType.GetMethod (method, flags,
-					null, delargtypes, new ParameterModifier [0]);
+					null, delargtypes, EmptyArray<ParameterModifier>.Value);
 				if (mi != null && return_type_match (invoke.ReturnType, mi.ReturnType)) {
 					info = mi;
 					break;
@@ -392,7 +408,7 @@ namespace System
 				method_info = m_target.GetType ().GetMethod (data.method_name, mtypes);
 			}
 
-			if ((m_target != null) && Method.IsStatic) {
+			if (Method.IsStatic && (args != null ? args.Length : 0) == Method.GetParametersCount () - 1) {
 				// The delegate is bound to m_target
 				if (args != null) {
 					object[] newArgs = new object [args.Length + 1];
@@ -413,10 +429,8 @@ namespace System
 			return MemberwiseClone ();
 		}
 
-		public override bool Equals (object obj)
+		internal bool Compare (Delegate d)
 		{
-			Delegate d = obj as Delegate;
-			
 			if (d == null)
 				return false;
 			
@@ -433,6 +447,11 @@ namespace System
 			}
 
 			return false;
+		}
+
+		public override bool Equals (object obj)
+		{
+			return Compare (obj as Delegate);
 		}
 
 		public override int GetHashCode ()
@@ -471,7 +490,7 @@ namespace System
 					return a;
 
 			if (a.GetType () != b.GetType ())
-				throw new ArgumentException (Locale.GetText ("Incompatible Delegate Types."));
+				throw new ArgumentException (Locale.GetText ("Incompatible Delegate Types. First is {0} second is {1}.", a.GetType ().FullName, b.GetType ().FullName));
 			
 			return a.CombineImpl (b);
 		}
@@ -508,7 +527,7 @@ namespace System
 				return source;
 
 			if (source.GetType () != value.GetType ())
-				throw new ArgumentException ("Delegate type mismatch");
+				throw new ArgumentException (Locale.GetText ("Incompatible Delegate Types. First is {0} second is {1}.", source.GetType ().FullName, value.GetType ().FullName));
 
 			return source.RemoveImpl (value);
 		}
@@ -549,7 +568,11 @@ namespace System
 
 		internal bool IsTransparentProxy ()
 		{
+#if DISABLE_REMOTING
+			return false;
+#else
 			return RemotingServices.IsTransparentProxy (m_target);
+#endif
 		}
 	}
 }
