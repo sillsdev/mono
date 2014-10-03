@@ -2656,7 +2656,6 @@ namespace System.Windows.Forms
 					break;
 				}
 
-
 				if (clicked_item != null) {
 					bool changed = !clicked_item.Selected;
 					if (me.Button == MouseButtons.Left || (XplatUI.State.ModifierKeys == Keys.None && changed))
@@ -2668,6 +2667,11 @@ namespace System.Windows.Forms
 							owner.UpdateMultiSelection (clicked_item.DisplayIndex, reselect);
 					} else {
 						clicked_item.Selected = true;
+						// Side-effects to setting Selected can possibly result in ItemsMouseUp() being called and
+						// and clicked_item being set to null.  (See Xamarin bug 23591.)  In such a case, assume
+						// that there's nothing more we can do here.
+						if (clicked_item == null)
+							return;
 					}
 
 					if (owner.VirtualMode && changed) {
