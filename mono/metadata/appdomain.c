@@ -355,9 +355,10 @@ mono_runtime_cleanup (MonoDomain *domain)
 
 	mono_thread_cleanup ();
 
-#ifndef DISABLE_SOCKETS
-	mono_network_cleanup ();
-#endif
+	// This call was moved to mono_thread_manage().
+//#ifndef DISABLE_SOCKETS
+//	mono_network_cleanup ();
+//#endif
 	mono_marshal_cleanup ();
 
 	mono_type_initialization_cleanup ();

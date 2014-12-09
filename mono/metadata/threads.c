@@ -2873,6 +2873,24 @@ void mono_thread_manage (void)
 		mono_thread_execute_interruption (mono_thread_internal_current ());
 	}
 
+#ifndef DISABLE_SOCKETS
+	// If a thread is currently in the middle of a blocking socket call and
+	// the socket is not closed properly, it can cause the thread to not
+	// abort when requested, which can cause the process to hang. There is
+	// a known race condition with socket file descriptors that can cause
+	// a socket to not be closed properly (see bug 19665).
+	//
+	// We are about to attempt to abort all background threads, so we cleanup
+	// all open sockets to ensure that any blocking socket calls that are
+	// currently in process stop blocking. Previously, mono_network_cleanup()
+	// was called in mono_runtime_cleanup().
+
+	// FIXME: I (DJD) don't completely understand the implications of moving
+	// network cleanup here, but it seems to fix the problem. Once the race
+	// condition and the inability to abort threads that are blocked by socket
+	// calls are fixed, this call can be moved back.
+	mono_network_cleanup ();
+#endif
 	/* 
 	 * Remove everything but the finalizer thread and self.
 	 * Also abort all the background threads
