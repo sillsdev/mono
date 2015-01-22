@@ -16,7 +16,7 @@
 /NumericUpDownAcceleration.cs -crlf
 /NumericUpDownAccelerationCollection.cs -crlf
 /PowerStatus.cs -crlf
-/TextBoxTextRenderer.cs -crlf
+/TextBoxTextRenderer.cs -crlf -whitespace
 /ToolStripDropDownItemAccessibleObject.cs -crlf
 /ToolStripSystemRenderer.cs -crlf
 /TreeViewImageKeyConverter.cs -crlf
