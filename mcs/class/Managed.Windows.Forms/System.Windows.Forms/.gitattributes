@@ -9,7 +9,7 @@
 /HtmlElementEventHandler.cs -crlf
 /HtmlWindowCollection.cs -crlf
 /ImageKeyConverter.cs -crlf
-/Line.cs -crlf
+/Line.cs -crlf -whitespace
 /LineTag.cs -crlf
 /LinkConverter.cs -crlf
 /MdiControlStrip.cs -crlf
