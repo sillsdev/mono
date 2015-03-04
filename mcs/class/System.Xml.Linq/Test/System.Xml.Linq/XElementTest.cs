@@ -2073,6 +2073,17 @@ namespace MonoTests.System.Xml.Linq
 			Assert.IsNotNull (e.Attribute ("Name"), "#2");
 			Assert.IsNotNull (e.Attribute ("Cluster"), "#3");
 		}
+		
+		[Test]
+		public void AncestorsAndSelfExcludesNonMatchingSelf () // Bug 27650
+		{
+			var element = XElement.Parse ("<foo><bar>bar</bar><baz>baz</baz></foo>");
+			var bar = (XElement) element.FirstNode;
+			var ancestorMatches = bar.AncestorsAndSelf ("foo");
+
+			Assert.AreEqual (1, ancestorMatches.Count (), "Self should have been excluded");
+			Assert.AreEqual ("foo", ancestorMatches.FirstOrDefault ().Name.LocalName, "The only returned element should be the parent 'foo'");
+		}
 
 		[XmlType ("Root")]
 		public class SerializableClass
