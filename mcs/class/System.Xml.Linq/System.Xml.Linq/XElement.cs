@@ -383,7 +383,7 @@ namespace System.Xml.Linq
 		IEnumerable <XElement> GetAncestorList (XName name, bool getMeIn)
 		{
 			List <XElement> list = new List <XElement> ();
-			if (getMeIn)
+			if (getMeIn && (name == null || name == this.name))
 				list.Add (this);
 			for (XElement el = Parent as XElement; el != null; el = el.Parent as XElement)
 				if (name == null || el.Name == name)
