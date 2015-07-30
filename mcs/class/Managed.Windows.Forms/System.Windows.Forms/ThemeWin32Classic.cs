@@ -207,7 +207,7 @@ namespace System.Windows.Forms
 		{
 			// Ensure that at least one line is going to get displayed.
 			// Line limit does not ensure that despite its description.
-			if (button.Font.Height != null)
+			if (button.Font != null && button.Font.Height > 0)
 				textBounds.Height = Math.Max (textBounds.Height, button.Font.Height);
 
 			if (button.Enabled)
