@@ -61,7 +61,6 @@ namespace Microsoft.Build.Execution
 		~BuildManager ()
 		{
 			// maybe processes created by out-of-process nodes should be signaled.
-			BuildNodeManager.Stop ();
 		}
 
 		readonly List<BuildSubmission> submissions = new List<BuildSubmission> ();
@@ -113,7 +112,6 @@ namespace Microsoft.Build.Execution
 				throw new InvalidOperationException ("Build has not started");
 			if (submissions.Count > 0)
 				WaitHandle.WaitAll (submissions.Select (s => s.WaitHandle).ToArray ());
-			BuildNodeManager.Stop ();
 			ongoing_build_parameters = null;
 		}
 		

@@ -37,12 +37,19 @@ namespace System.Runtime
 			get { return false; }
 		}
 
-		[MonoTODO ("Always returns GCLatencyMode.Interactive and ignores set (.NET 2.0 SP1 member)")]
+		[MonoTODO ("Always returns GCLatencyMode.Interactive and ignores set")]
 		public static GCLatencyMode LatencyMode {
 			[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
 			get { return GCLatencyMode.Interactive; }
 			[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
 			set { ; }
+		}
+
+		public static GCLargeObjectHeapCompactionMode LargeObjectHeapCompactionMode {
+			[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+			get;
+			[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+			set;
 		}
 	}
 }

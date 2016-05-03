@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
 
 using System;
 using System.Resources;
@@ -39,7 +38,6 @@ namespace Microsoft.Build.Utilities
 		string			helpKeywordPrefix;
 		ITaskHost		hostObject;
 		TaskLoggingHelper	log;
-		ResourceManager		taskResources;
 		
 		protected Task()
 			: this (null, null)
@@ -54,7 +52,8 @@ namespace Microsoft.Build.Utilities
 		protected Task(ResourceManager taskResources,
 			       string helpKeywordPrefix)
 		{
-			this.taskResources = taskResources;
+			log = new TaskLoggingHelper (this);
+			log.TaskResources = taskResources;
 			this.helpKeywordPrefix = helpKeywordPrefix;
 		}
 
@@ -66,7 +65,6 @@ namespace Microsoft.Build.Utilities
 			}
 			set {
 				buildEngine = value;
-				log = new TaskLoggingHelper (this); 
 			}
 		}
 
@@ -100,13 +98,12 @@ namespace Microsoft.Build.Utilities
 
 		protected ResourceManager TaskResources	{
 			get {
-				return taskResources;
+				return log.TaskResources;
 			}
 			set {
-				taskResources = value;
+				log.TaskResources = value;
 			}
 		}
 	}
 }
 
-#endif

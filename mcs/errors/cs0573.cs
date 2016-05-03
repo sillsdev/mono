@@ -1,13 +1,7 @@
-// CS0573: `A.a': Structs cannot have instance field initializers
-// Line: 5
-struct A {
-	int a = 1;
-}
+// CS0573: 'S': Structs cannot have instance property or field initializers
+// Line: 6
 
-class D {
-	static void Main ()
-	{
-		A [] a = new A [10];
-
-	}
+struct S
+{
+	int v = 0;
 }

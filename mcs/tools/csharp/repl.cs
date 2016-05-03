@@ -197,7 +197,9 @@ namespace Mono {
 			} else
 				dumb = false;
 			
-			editor = new Mono.Terminal.LineEditor ("csharp", 300);
+			editor = new Mono.Terminal.LineEditor ("csharp", 300) {
+				HeuristicsMode = "csharp"
+			};
 			InteractiveBaseShell.Editor = editor;
 
 			editor.AutoCompleteEvent += delegate (string s, int pos){
@@ -258,11 +260,7 @@ namespace Mono {
 			int p = (int) Environment.OSVersion.Platform;
 			is_unix = (p == 4) || (p == 128);
 
-#if NET_4_5
 			isatty = !Console.IsInputRedirected && !Console.IsOutputRedirected;
-#else
-			isatty = true;
-#endif
 
 			// Work around, since Console is not accounting for
 			// cursor position when writing to Stderr.  It also
@@ -403,9 +401,45 @@ namespace Mono {
 			output.Write (s);
 		}
 
-		static string EscapeString (string s)
+		static void EscapeString (TextWriter output, string s)
 		{
-			return s.Replace ("\"", "\\\"");
+			foreach (var c in s){
+				if (c >= 32){
+					output.Write (c);
+					continue;
+				}
+				switch (c){
+				case '\"':
+					output.Write ("\\\""); break;
+				case '\a':
+					output.Write ("\\a"); break;
+				case '\b':
+					output.Write ("\\b"); break;
+				case '\n':
+					output.Write ("\n");
+					break;
+				
+				case '\v':
+					output.Write ("\\v");
+					break;
+				
+				case '\r':
+					output.Write ("\\r");
+					break;
+				
+				case '\f':
+					output.Write ("\\f");
+					break;
+				
+				case '\t':
+					output.Write ("\\t");
+					break;
+
+				default:
+					output.Write ("\\x{0:x}", (int) c);
+					break;
+				}
+			}
 		}
 		
 		static void EscapeChar (TextWriter output, char c)
@@ -414,7 +448,7 @@ namespace Mono {
 				output.Write ("'\\''");
 				return;
 			}
-			if (c > 32){
+			if (c >= 32){
 				output.Write ("'{0}'", c);
 				return;
 			}
@@ -448,7 +482,7 @@ namespace Mono {
 				break;
 
 			default:
-				output.Write ("'\\x{0:x}", (int) c);
+				output.Write ("'\\x{0:x}'", (int) c);
 				break;
 			}
 		}
@@ -495,7 +529,9 @@ namespace Mono {
 				else
 					p (output, "false");
 			} else if (result is string){
-				p (output, String.Format ("\"{0}\"", EscapeString ((string)result)));
+				p (output, "\"");
+				EscapeString (output, (string)result);
+				p (output, "\"");
 			} else if (result is IDictionary){
 				IDictionary dict = (IDictionary) result;
 				int top = dict.Count, count = 0;

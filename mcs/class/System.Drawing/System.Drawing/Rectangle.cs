@@ -39,7 +39,9 @@ namespace System.Drawing
 {
 	[Serializable]
 	[ComVisible (true)]
+#if !MONOTOUCH && !MONOMAC
 	[TypeConverter (typeof (RectangleConverter))]
+#endif
 	public struct Rectangle
 	{
 		private int x, y, width, height;
@@ -54,13 +56,6 @@ namespace System.Drawing
 		
 		public static readonly Rectangle Empty;
 
-#if TARGET_JVM
-		internal java.awt.Rectangle NativeObject {
-			get {
-				return new java.awt.Rectangle(X,Y,Width,Height);
-			}
-		}
-#endif
 
 		/// <summary>
 		///	Ceiling Shared Method

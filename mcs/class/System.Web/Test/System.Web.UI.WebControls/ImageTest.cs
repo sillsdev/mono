@@ -88,9 +88,7 @@ namespace MonoTests.System.Web.UI.WebControls {
 			Assert.AreEqual (String.Empty, i.ImageUrl, "ImageUrl");
 			// this was added in Fx 1.1 SP1
 			Assert.AreEqual (String.Empty, i.DescriptionUrl, "DescriptionUrl");
-#if NET_2_0
 			Assert.IsFalse (i.GenerateEmptyAlternateText, "GenerateEmptyAlternateText");
-#endif
 			Assert.AreEqual ("img", i.Tag, "TagName");
 			Assert.AreEqual (0, i.Attributes.Count, "Attributes.Count-2");
 		}
@@ -123,10 +121,8 @@ namespace MonoTests.System.Web.UI.WebControls {
 
 			Assert.AreEqual (0, i.Attributes.Count, "Attributes.Count");
 			Assert.AreEqual (1, i.StateBag.Count, "ViewState.Count-1");
-#if NET_2_0
 			i.GenerateEmptyAlternateText = false;
 			Assert.AreEqual (2, i.StateBag.Count, "ViewState.Count-2");
-#endif
 		}
 
 		[Test]
@@ -139,12 +135,8 @@ namespace MonoTests.System.Web.UI.WebControls {
 			i.ImageAlign = ImageAlign.Top;
 			i.ImageUrl = imageUrl;
 			i.DescriptionUrl = "http://www.mono-project.com/";
-#if NET_2_0
 			i.GenerateEmptyAlternateText = true;
 			Assert.AreEqual (5, i.StateBag.Count, "ViewState.Count");
-#else
-			Assert.AreEqual (4, i.StateBag.Count, "ViewState.Count");
-#endif
 			Assert.AreEqual (0, i.Attributes.Count, "Attributes.Count");
 
 			i.AlternateText = null;
@@ -152,17 +144,11 @@ namespace MonoTests.System.Web.UI.WebControls {
 			i.ImageAlign = ImageAlign.NotSet;
 			i.ImageUrl = null;
 			i.DescriptionUrl = null;
-#if NET_2_0
 			i.GenerateEmptyAlternateText = false;
 			// ImageAlign and GenerateEmptyAlternateText can't be removed by returning to default value
 			Assert.AreEqual (2, i.StateBag.Count, "ViewState.Count-2");
 			Assert.AreEqual (ImageAlign.NotSet, i.StateBag["ImageAlign"], "ImageAlign");
 			Assert.IsFalse ((bool)i.StateBag["GenerateEmptyAlternateText"], "GenerateEmptyAlternateText");
-#else
-			// ImageAlign can't be removed by returning to default value
-			Assert.AreEqual (1, i.StateBag.Count, "ViewState.Count-2");
-			Assert.AreEqual (ImageAlign.NotSet, i.StateBag["ImageAlign"], "ImageAlign");
-#endif
 			Assert.AreEqual (0, i.Attributes.Count, "Attributes.Count-2");
 		}
 
@@ -181,11 +167,7 @@ namespace MonoTests.System.Web.UI.WebControls {
 			img.Enabled = false;
 
 			string html = img.Render ();
-#if NET_4_0
 			Assert.IsTrue (html.IndexOf (" class=\"aspNetDisabled\"") > 0, "#");
-#else
-			Assert.IsTrue (html.IndexOf (" disabled=\"") > 0, "#");
-#endif
 		}
 
 		[Test]
@@ -210,21 +192,12 @@ namespace MonoTests.System.Web.UI.WebControls {
 			s = i.Render ();
 			Assert.IsTrue (i.Render ().IndexOf (" alt=\"alt\"") > 0, "alt");
 			i.AlternateText = String.Empty;
-#if NET_4_0
 			s = i.Render ();
 			Assert.IsTrue (s.IndexOf (" class=\"aspNetDisabled\"") < 0, "enabled");
 			i.Enabled = false;
 			s = i.Render ();
 			Assert.IsTrue (s.IndexOf (" class=\"aspNetDisabled\"") > 0, "disabled");
 			i.Enabled = true;
-#else
-			s = i.Render ();
-			Assert.IsTrue (i.Render ().IndexOf (" disabled=\"disabled\"") < 0, "enabled");
-			i.Enabled = false;
-			s = i.Render ();
-			Assert.IsTrue (i.Render ().IndexOf (" disabled=\"disabled\"") > 0, "disabled");
-			i.Enabled = true;
-#endif
 
 			// note: align is in mixed-case in 1.x so we lower everything to test
 			i.ImageAlign = ImageAlign.AbsBottom;

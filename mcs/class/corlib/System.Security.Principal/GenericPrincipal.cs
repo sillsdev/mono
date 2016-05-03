@@ -29,12 +29,15 @@
 //
 
 using System.Runtime.InteropServices;
+using System.Security.Claims;
 
 namespace System.Security.Principal {
 
 	[Serializable]
 	[ComVisible (true)]
-	public class GenericPrincipal : IPrincipal {
+	public class GenericPrincipal :
+		ClaimsPrincipal
+	{
 
 		// field names are serialization compatible with .net
 		private IIdentity m_identity;
@@ -58,11 +61,13 @@ namespace System.Security.Principal {
 			get { return m_roles; }
 		}
 
-		public virtual IIdentity Identity {
+		override
+		public IIdentity Identity {
 			get { return m_identity; }
 		}
 
-		public virtual bool IsInRole (string role)
+		override
+		public bool IsInRole (string role)
 		{
 			if (m_roles == null)
 				return false;

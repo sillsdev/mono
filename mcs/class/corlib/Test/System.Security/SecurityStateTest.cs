@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Security;
@@ -45,14 +44,15 @@ namespace MonoTests.System.Security {
 			}
 		}
 
+#if MONO_FEATURE_MULTIPLE_APPDOMAINS
 		[Test]
 		public void Defaults ()
 		{
 			ContreteSecurityState ss = new ContreteSecurityState ();
 			Assert.IsFalse (ss.IsStateAvailable (), "IsStateAvailable");
 		}
+#endif // MONO_FEATURE_MULTIPLE_APPDOMAINS
 	}
 }
 
-#endif
 

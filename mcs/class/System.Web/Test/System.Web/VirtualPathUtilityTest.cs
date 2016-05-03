@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Web;
@@ -43,11 +42,7 @@ namespace MonoTests.System.Web {
 	[TestFixture]
 	public class VirtualPathUtilityTest {
 
-#if TARGET_JVM
-		const string NunitWebAppName = "MainsoftWebApp20";
-#else
 		const string NunitWebAppName = "NunitWeb";
-#endif
 
 		[Test]
 		public void AppendTrailingSlash ()
@@ -918,7 +913,6 @@ namespace MonoTests.System.Web {
 	}
 }
 
-#endif
 
 
 

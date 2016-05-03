@@ -28,7 +28,6 @@
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
 //
 
-#if NET_2_0
 
 using System;
 using System.Collections;
@@ -504,12 +503,7 @@ namespace System.Web.UI.WebControls
 		
 		public void ToggleExpandState ()
 		{
-#if TARGET_JVM //No support for Nullable<bool>.GetValueOrDefault() yet
-			bool? value = Expanded;
-			Expanded = value.HasValue ? !value.Value : true;
-#else
 			Expanded = !Expanded.GetValueOrDefault(false);
-#endif
 		}
 
 		void IStateManager.LoadViewState (object savedState)
@@ -805,4 +799,3 @@ namespace System.Web.UI.WebControls
 		}
 	}
 }
-#endif

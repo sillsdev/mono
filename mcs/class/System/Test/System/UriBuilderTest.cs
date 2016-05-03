@@ -11,6 +11,7 @@
 
 using NUnit.Framework;
 using System;
+using System.Reflection;
 
 namespace MonoTests.System
 {
@@ -18,11 +19,20 @@ namespace MonoTests.System
 	public class UriBuilderTest
 	{
 		private UriBuilder b, b2, b3;
+		public bool IriParsing;
 		
 		[SetUp]
 		public void GetReady()
 		{
 			b = new UriBuilder ("http", "www.ximian.com", 80, "foo/bar/index.html");
+
+			//Make sure Uri static constructor is called
+			Uri.EscapeDataString ("");
+
+			FieldInfo iriParsingField = typeof (Uri).GetField ("s_IriParsing",
+				BindingFlags.Static | BindingFlags.GetField | BindingFlags.NonPublic);
+			if (iriParsingField != null)
+				IriParsing = (bool) iriParsingField.GetValue (null);
 		}
 
 		[Test] // ctor ()
@@ -78,11 +88,7 @@ namespace MonoTests.System
 		}
 
 		[Test] // ctor (Uri)
-#if NET_4_0
 		[ExpectedException (typeof (ArgumentNullException))]
-#else
-		[ExpectedException (typeof (NullReferenceException))]
-#endif
 		public void Constructor2_Uri_Null ()
 		{
 			new UriBuilder ((Uri) null);
@@ -286,9 +292,13 @@ namespace MonoTests.System
 		{
 			UriBuilder ub = new UriBuilder ("http", "[1:2:3:4:5:6:7:8]", 8080, "/dir/subdir/file");
 			Assert.AreEqual ("[1:2:3:4:5:6:7:8]", ub.Host, "Host.1");
-			Assert.AreEqual ("[0001:0002:0003:0004:0005:0006:0007:0008]", ub.Uri.Host, "Uri.Host");
-			// once the Uri is created then some builder properties may change
-			Assert.AreEqual ("[0001:0002:0003:0004:0005:0006:0007:0008]", ub.Host, "Host.2");
+			if (IriParsing)
+				Assert.AreEqual ("[1:2:3:4:5:6:7:8]", ub.Uri.Host, "Uri.Host");
+			else {
+				Assert.AreEqual ("[0001:0002:0003:0004:0005:0006:0007:0008]", ub.Uri.Host, "Uri.Host");
+				// once the Uri is created then some builder properties may change
+				Assert.AreEqual ("[0001:0002:0003:0004:0005:0006:0007:0008]", ub.Host, "Host.2");
+			}
 		}
 
 		[Test]
@@ -372,6 +382,13 @@ namespace MonoTests.System
 			ub.UserName = null;
 			// this is what ASP.NET really means (the ?)
 			Assert.AreEqual ("http://192.168.0.21/error404.aspx?aspxerrorpath=/WebResource.axd", ub.Uri.ToString ());
+		}
+
+		[Test]
+		public void NoHostname ()
+		{
+			UriBuilder ub = new UriBuilder ("about", null, -1, "config");
+			Assert.AreEqual ("about:config", ub.ToString ());
 		}
 	}
 }

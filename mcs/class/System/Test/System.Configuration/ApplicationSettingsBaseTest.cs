@@ -30,6 +30,10 @@
 //#define SPEW
 
 using System;
+using System.IO;
+using System.Xml;
+using System.Xml.Serialization;
+using System.Xml.Schema;
 using System.Text;
 using System.Configuration;
 using System.ComponentModel;
@@ -37,7 +41,6 @@ using System.Collections;
 using System.Collections.Specialized;
 using NUnit.Framework;
 using CategoryAttribute = NUnit.Framework.CategoryAttribute;
-using System.IO;
 
 namespace MonoTests.System.Configuration {
 	class ProviderPoker : LocalFileSettingsProvider {
@@ -161,29 +164,6 @@ namespace MonoTests.System.Configuration {
 	[TestFixture]
 	public class ApplicationSettingsBaseTest
 	{
-		string tempDir;
-
-		[TestFixtureSetUp]
-		public void FixtureSetup ()
-		{
-			// Use random temp directory to store settings files of tests.
-			tempDir = Path.Combine (Path.GetTempPath (), Path.GetRandomFileName ());
-			Directory.CreateDirectory (tempDir);
-			var localAppData = Path.Combine (tempDir, "LocalAppData");
-			Directory.CreateDirectory (localAppData);
-			var appData = Path.Combine (tempDir, "AppData");
-			Directory.CreateDirectory (appData);
-
-			Environment.SetEnvironmentVariable ("XDG_DATA_HOME", localAppData);
-			Environment.SetEnvironmentVariable ("XDG_CONFIG_HOME", appData);
-		}
-
-		[TestFixtureTearDown]
-		public void FixtureTearDown ()
-		{
-			Directory.Delete (tempDir);
-		}
-
 		[Test]
 		public void TestSettings1_Properties ()
 		{
@@ -191,12 +171,12 @@ namespace MonoTests.System.Configuration {
 
 			IEnumerator props = settings.Properties.GetEnumerator();
 			Assert.IsNotNull (props, "A1");
-			
-			Assert.IsTrue (props.MoveNext(), "A2");
-			Assert.AreEqual ("Address", ((SettingsProperty)props.Current).Name, "A3");
 
 			Assert.IsTrue (props.MoveNext(), "A4");
-			Assert.AreEqual ("Username", ((SettingsProperty)props.Current).Name, "A5");
+			Assert.AreEqual ("Address", ((SettingsProperty)props.Current).Name, "A5");
+			
+			Assert.IsTrue (props.MoveNext(), "A2");
+			Assert.AreEqual ("Username", ((SettingsProperty)props.Current).Name, "A3");
 
 			Assert.AreEqual ("root", settings.Username, "A6");
 			Assert.AreEqual ("8 Cambridge Center", settings.Address, "A7");
@@ -307,18 +287,7 @@ namespace MonoTests.System.Configuration {
 		[Test]
 		public void TestSettings2_Properties ()
 		{
-			// This test will fail when there are newer versions
-			// of the test assemblies - so conditionalize it in
-			// such cases.
-#if TARGET_JVM
-			string expected = "MonoTests.System.Configuration.ProviderPoker, System.Test, Version=0.0.0.0";
-#elif NET_4_5
-			string expected = "MonoTests.System.Configuration.ProviderPoker, System_test_net_4_5, Version=0.0.0.0";
-#elif NET_4_0
-			string expected = "MonoTests.System.Configuration.ProviderPoker, System_test_net_4_0, Version=0.0.0.0";
-#else
-			string expected = "MonoTests.System.Configuration.ProviderPoker, System_test_net_2_0, Version=0.0.0.0";
-#endif
+			string expected = "MonoTests.System.Configuration.ProviderPoker, System_test_net_4_x, Version=0.0.0.0";
 			Assert.AreEqual (expected, new SettingsProviderAttribute (typeof (ProviderPoker)).ProviderTypeName.Substring (0, expected.Length), "#1");
 			TestSettings2 settings = new TestSettings2 ();
 
@@ -425,19 +394,19 @@ namespace MonoTests.System.Configuration {
 			var holder = new Bug8592ConfHolder ();
 			holder.Reset ();
 			holder.Save ();
-			Assert.AreEqual ("", holder.TestKey1OnHolder, "A1");
+			Assert.AreEqual ("", holder.TestKey1OnHolder, "#1");
 			holder.TestKey1OnHolder = "candy";
-			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "A2");
+			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "#2");
 			holder.Reload ();
-			Assert.AreEqual ("", holder.TestKey1OnHolder, "A3");
+			Assert.AreEqual ("", holder.TestKey1OnHolder, "#3");
 			holder.TestKey1OnHolder = "candy";
-			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "A4");
+			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "#4");
 			holder.Save ();
-			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "A5");
+			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "#5");
 			holder.Reload ();
-			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "A6");
+			Assert.AreEqual ("candy", holder.TestKey1OnHolder, "#6");
 			holder.Reset ();
-			Assert.AreEqual ("", holder.TestKey1OnHolder, "A7");
+			Assert.AreEqual ("", holder.TestKey1OnHolder, "#7");
 		}
 
 		class Bug8533ConfHolder1 : ApplicationSettingsBase {
@@ -478,226 +447,77 @@ namespace MonoTests.System.Configuration {
 		public void TestBug8533ConfHandlerWronglyMixedUp ()
 		{
 			var holder1 = new Bug8533ConfHolder1 ();
-			var holder2 = new Bug8533ConfHolder2 ();
 			holder1.TestKey1OnHolder1 = "candy";
-			holder2.TestKey1OnHolder2 = "donut";
 			holder1.TestKey = "eclair";
+			Assert.AreEqual ("", holder1.TestKey1OnHolder2, "#-1");
 			holder1.Save ();
-			holder2.Save ();
+			Assert.AreEqual ("", holder1.TestKey1OnHolder2, "#0");
 			holder1.Reload ();
+			
+			var holder2 = new Bug8533ConfHolder2 ();
+			holder2.TestKey1OnHolder2 = "donut";
+			Assert.AreEqual ("", holder1.TestKey1OnHolder2, "#1");
+			holder2.Save ();
 			holder2.Reload();
-			Assert.AreEqual ("", holder1.TestKey1OnHolder2);
-			Assert.AreEqual ("candy", holder1.TestKey1OnHolder1);
-			Assert.AreEqual ("donut", holder2.TestKey1OnHolder2);
-			Assert.AreEqual ("eclair", holder1.TestKey);
-			Assert.AreEqual ("", holder2.TestKey);
+			Assert.AreEqual ("candy", holder1.TestKey1OnHolder1, "#2");
+			Assert.AreEqual ("donut", holder2.TestKey1OnHolder2, "#3");
+			Assert.AreEqual ("eclair", holder1.TestKey, "#4");
+			Assert.AreEqual ("", holder2.TestKey, "#5");
 		}
 
-		#region Bug #2315
-		class Bug2315Settings : ApplicationSettingsBase
+		class Settings : ApplicationSettingsBase
 		{
-			public Bug2315Settings () : base ("Bug2315Settings")
-			{
-			}
-
 			[UserScopedSetting]
-			[DefaultSettingValue ("some text")]
-			public string Text {
-				get { return (string)this ["Text"]; }
-				set { this ["Text"] = value; }
-			}
-		}
-
-		[Test]
-		public void SettingSavingEventFired_Bug2315 ()
-		{
-			bool settingsSavingCalled = false;
-			var settings = new Bug2315Settings ();
-			settings.SettingsSaving += (object sender, CancelEventArgs e) => {
-				settingsSavingCalled = true;
-			};
-
-			settings.Text = DateTime.Now.ToString ();
-			settings.Save ();
-
-			Assert.IsTrue (settingsSavingCalled);
-		}
-		#endregion
-
-		#region Bug #15818
-		class Bug15818SettingsProvider: SettingsProvider, IApplicationSettingsProvider
-		{
-			public Bug15818SettingsProvider ()
-			{
-			}
-
-			public static void ResetUpgradeCalled ()
-			{
-				UpgradeCalled = false;
-			}
-
-			public static bool UpgradeCalled { get; private set; }
-
-			public override void Initialize (string name, NameValueCollection config)
-			{
-				if (name != null && config != null) {
-					base.Initialize (name, config);
+			public WindowPositionList WindowPositions {
+				get {
+					return ((WindowPositionList)(this ["WindowPositions"]));
+				}
+				set {
+					this ["WindowPositions"] = value;
 				}
 			}
+		}
 
-			public override string Name
-			{
-				get { return "Bug15818SettingsProvider"; }
-			}
-
-			public override string Description
-			{
-				get { return "Bug15818SettingsProvider"; }
-			}
-
-			public override string ApplicationName
-			{
-				get { return "Bug15818"; }
-				set { }
-			}
-
-			public override SettingsPropertyValueCollection GetPropertyValues (SettingsContext context, SettingsPropertyCollection collection)
+		[Serializable]
+		public class WindowPositionList : IXmlSerializable
+		{
+			public XmlSchema GetSchema ()
 			{
 				return null;
 			}
 
-			public override void SetPropertyValues (SettingsContext context, SettingsPropertyValueCollection collection)
+			public void ReadXml (XmlReader reader)
 			{
+				reader.ReadStartElement ("sampleNode");
+				reader.ReadEndElement ();
 			}
 
-			#region IApplicationSettingsProvider implementation
-
-			public SettingsPropertyValue GetPreviousVersion (SettingsContext context, SettingsProperty property)
+			public void WriteXml (XmlWriter writer)
 			{
-				return null;
+				writer.WriteStartElement ("sampleNode");
+				writer.WriteEndElement ();
 			}
-
-			public void Reset (SettingsContext context)
-			{
-			}
-
-			public void Upgrade (SettingsContext context, SettingsPropertyCollection properties)
-			{
-				UpgradeCalled = true;
-			}
-
-			#endregion
 		}
 
-		class Bug15818Settings : ApplicationSettingsBase
+		[Test] //Covers 36388
+		public void XmlHeader ()
 		{
-			public Bug15818Settings () : base ("Bug15818Settings")
-			{
-			}
+			try {
+				var settings = new Settings ();
+				settings.Reset ();
+				settings.Save ();
 
-			[UserScopedSetting]
-			[SettingsProvider (typeof (Bug15818SettingsProvider))]
-			[DefaultSettingValue ("some text")]
-			public string Text {
-				get { return (string)this ["Text"]; }
-				set { this ["Text"] = value; }
-			}
-		}
+				settings.WindowPositions = new WindowPositionList ();
 
-		public class Bug15818Class
-		{
-			public string Name { get; set; }
-			public int Value { get; set; }
-		}
-
-		class Bug15818Settings2 : ApplicationSettingsBase
-		{
-			public Bug15818Settings2 () : base ("Bug15818Settings2")
-			{
-			}
-
-			[UserScopedSetting]
-			[DefaultSettingValue ("default text")]
-			public string Text {
-				get { return (string)this ["Text"]; }
-				set { this ["Text"] = value; }
-			}
-
-			[UserScopedSetting]
-			public Bug15818Class MyObject {
-				get { return (Bug15818Class)this ["MyObject"]; }
-				set { this ["MyObject"] = value; }
+				settings.Save ();
+				// If Reloads fails then saved data is corrupted
+				settings.Reload ();
+			} catch (ConfigurationErrorsException e) {
+				// Delete corrupted config file so other test won't fail.
+				File.Delete (e.Filename);
+				Assert.Fail ("Invalid data was saved to config file.");
 			}
 		}
-
-		[Test]
-		public void UpgradeGetsCalled_Bug15818 ()
-		{
-			Bug15818SettingsProvider.ResetUpgradeCalled ();
-
-			var settings = new Bug15818Settings ();
-			settings.Upgrade ();
-			Assert.IsTrue (Bug15818SettingsProvider.UpgradeCalled);
-		}
-
-		[Test]
-		public void CustomClass_Roundtrip ()
-		{
-			var settings = new Bug15818Settings2
-			{
-				Text = "foo",
-				MyObject = new Bug15818Class { Name = "Some Name", Value = 15818 }
-			};
-			settings.Save ();
-
-			var settings2 = new Bug15818Settings2 ();
-			Assert.AreEqual ("foo", settings2.Text);
-			Assert.IsNotNull (settings2.MyObject);
-			Assert.AreEqual ("Some Name", settings2.MyObject.Name);
-			Assert.AreEqual (15818, settings2.MyObject.Value);
-		}
-
-		[Test]
-		public void ModifiedObjectsAreSerialized_Bug15818 ()
-		{
-			var settings = new Bug15818Settings2
-			{
-				Text = "foo",
-				MyObject = new Bug15818Class { Name = "Some Name", Value = 15818 }
-			};
-			settings.Save ();
-
-			// Modify the value of the object - bug #15818
-			settings.Text = "bla";
-			settings.MyObject.Name = "xyz";
-			settings.MyObject.Value = -1;
-			settings.Save ();
-
-			// Verify that the new values got saved
-			var settings2 = new Bug15818Settings2 ();
-			Assert.AreEqual ("bla", settings2.Text);
-			Assert.IsNotNull (settings2.MyObject);
-			Assert.AreEqual ("xyz", settings2.MyObject.Name);
-			Assert.AreEqual (-1, settings2.MyObject.Value);
-		}
-
-		[Test]
-		public void Reset_FiresPropChangedOnly_Bug15818 ()
-		{
-			bool propChangedCalled = false;
-			bool settingsLoadedCalled = false;
-			bool settingsSavingCalled = false;
-			var settings = new Bug15818Settings2 ();
-			settings.PropertyChanged += (sender, e) => { propChangedCalled = true; };
-			settings.SettingsLoaded += (sender, e) => { settingsLoadedCalled = true; };
-			settings.SettingsSaving += (sender, e) => { settingsSavingCalled = true; };
-
-			settings.Reset ();
-
-			Assert.IsTrue (propChangedCalled, "#1");
-			Assert.IsFalse (settingsLoadedCalled, "#2");
-			Assert.IsFalse (settingsSavingCalled, "#3");
-		}
-		#endregion
 	}
 }
+

@@ -161,10 +161,10 @@ namespace Cairo {
 			}
 		}
 
-		[Obsolete ("Use SetSourceRGBA method")]
+		[Obsolete ("Use SetSourceColor method")]
 		public Color Color {
 			set {
-				NativeMethods.cairo_set_source_rgba (handle, value.R, value.G, value.B, value.A);
+				SetSourceColor (value);
 			}
 		}
 
@@ -230,7 +230,7 @@ namespace Cairo {
 			NativeMethods.cairo_set_dash (handle, dashes, dashes.Length, offset);
 		}
 
-		[Obsolete("Use GetSource/GetSource")]
+		[Obsolete("Use GetSource/SetSource")]
 		public Pattern Pattern {
 			set {
 				SetSource (value);
@@ -241,7 +241,7 @@ namespace Cairo {
 		}
 
 		//This is obsolete because it wasn't obvious it needed to be disposed
-		[Obsolete("Use GetSource/GetSource")]
+		[Obsolete("Use GetSource/SetSource")]
 		public Pattern Source {
 			set {
 				SetSource (value);
@@ -277,6 +277,12 @@ namespace Cairo {
 				double x, y;
 				NativeMethods.cairo_get_current_point (handle, out x, out y);
 				return new PointD (x, y);
+			}
+		}
+
+		public bool HasCurrentPoint {
+			get {
+				return NativeMethods.cairo_has_current_point (handle);
 			}
 		}
 
@@ -329,6 +335,11 @@ namespace Cairo {
 
 		public uint ReferenceCount {
 			get { return NativeMethods.cairo_get_reference_count (handle); }
+		}
+
+		public void SetSourceColor (Color color)
+		{
+			NativeMethods.cairo_set_source_rgba (handle, color.R, color.G, color.B, color.A);
 		}
 
 		public void SetSourceRGB (double r, double g, double b)
@@ -546,6 +557,11 @@ namespace Cairo {
 		public void ResetClip ()
 		{
 			NativeMethods.cairo_reset_clip (handle);
+		}
+
+		public bool InClip (double x, double y)
+		{
+			return NativeMethods.cairo_in_clip (handle, x, y);
 		}
 
 		public bool InStroke (double x, double y)

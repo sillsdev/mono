@@ -153,14 +153,12 @@ endfinally: len:96
 aot_const: dest:i len:48
 tls_get: dest:i len:48
 atomic_add_i4: src1:b src2:i dest:i len:48
-atomic_add_new_i4: src1:b src2:i dest:i len:48
-atomic_exchange_i4: src1:b src2:i dest:i len:48
 atomic_add_i8: src1:b src2:i dest:i len:48
-atomic_add_new_i8: src1:b src2:i dest:i len:48
-atomic_add_imm_new_i4: src1:b dest:i len:48
-atomic_add_imm_new_i8: src1:b dest:i len:48
+atomic_exchange_i4: src1:b src2:i dest:i len:48
 atomic_exchange_i8: src1:b src2:i dest:i len:48
 memory_barrier: len:48
+atomic_add_imm_i4: src1:b dest:i len:48
+atomic_add_imm_i8: src1:b dest:i len:48
 adc: dest:i src1:i src2:i len:48
 addcc: dest:i src1:i src2:i len:48
 subcc: dest:i src1:i src2:i len:48
@@ -395,3 +393,4 @@ long_and_imm: dest:i src1:i len:48
 long_or_imm: dest:i src1:i len:48
 long_xor_imm: dest:i src1:i len:48
 
+gc_safe_point: len:0

@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0
 
 using System;
 using System.IO;
@@ -51,9 +50,14 @@ namespace MonoTests.System.IO.MemoryMappedFiles {
 			Assert.IsTrue (thrown);
 		}
 
+		static int named_index;
+		static String MkNamedMapping ()
+		{
+			return "test-" + named_index++;
+		}
+
+
 		static string tempDir = Path.Combine (Path.GetTempPath (), typeof (MemoryMappedFileTest).FullName);
-		// there is no way to get the actual system page size, so it is hard-coded here to the typical 4KB
-		private const int PageSize = 4096;
 
 		string fname;
 
@@ -67,13 +71,6 @@ namespace MonoTests.System.IO.MemoryMappedFiles {
 			fname = Path.Combine (tempDir, "basic.txt");
 
 			using (StreamWriter sw = new StreamWriter (fname)) {
-				sw.WriteLine ("Hello!");
-				int len = "Hello!".Length + Environment.NewLine.Length;
-				sw.WriteLine ("World!");
-				len += "World!".Length + Environment.NewLine.Length;
-				for (int i = 0; i < (PageSize - 3) - len; i++) {
-					sw.Write ('\0');
-				}
 				sw.WriteLine ("Hello!");
 				sw.WriteLine ("World!");
 			}
@@ -102,6 +99,43 @@ namespace MonoTests.System.IO.MemoryMappedFiles {
 		}
 
 		[Test]
+		public void CreateNew ()
+		{
+			// This must succeed
+			MemoryMappedFile.CreateNew (Path.Combine (tempDir, "createNew.test"), 8192);
+		}
+
+		[Test]
+		[ExpectedException (typeof (IOException))]
+		public void CreateNew_OnExistingFile ()
+		{
+			// This must succeed
+			MemoryMappedFile.CreateNew (Path.Combine (tempDir, "createNew.test"), 8192);
+			
+			// This should fail, the file exists
+			MemoryMappedFile.CreateNew (Path.Combine (tempDir, "createNew.test"), 8192);
+		}
+
+		// Call this twice, it should always work
+		[Test]
+		public void CreateOrOpen_Multiple ()
+		{
+			MemoryMappedFile.CreateOrOpen (Path.Combine (tempDir, "createOrOpen.test"), 8192);
+			MemoryMappedFile.CreateOrOpen (Path.Combine (tempDir, "createOrOpen.test"), 8192);
+		}
+
+		[Test]
+		[ExpectedException(typeof(ArgumentOutOfRangeException))]
+		public void CreateFromFileWithSmallerCapacityThanFile ()
+		{
+			var f = Path.Combine (tempDir, "8192-file");
+			File.WriteAllBytes (f, new byte [8192]);
+
+			// We are requesting fewer bytes to map.
+			MemoryMappedFile.CreateFromFile (f, FileMode.Open, "myMap", 4192);
+		}
+	
+		[Test]
 		public void CreateFromFile_Null () {
 			AssertThrows<ArgumentNullException> (delegate () {
 					MemoryMappedFile.CreateFromFile (null);
@@ -113,23 +147,6 @@ namespace MonoTests.System.IO.MemoryMappedFiles {
 			var file = MemoryMappedFile.CreateFromFile (fname, FileMode.Open);
 
 			using (var stream = file.CreateViewStream (2, 3)) {
-				byte[] arr = new byte [128];
-
-				int len = stream.Read (arr, 0, 128);
-
-				Assert.AreEqual (3, len);
-
-				Assert.AreEqual ('l', (char)arr [0]);
-				Assert.AreEqual ('l', (char)arr [1]);
-				Assert.AreEqual ('o', (char)arr [2]);
-			}
-		}
-
-		[Test]
-		public void CreateViewStream_PageBoundary () {
-			var file = MemoryMappedFile.CreateFromFile (fname, FileMode.Open);
-
-			using (var stream = file.CreateViewStream (PageSize - 1, 3)) {
 				byte[] arr = new byte [128];
 
 				int len = stream.Read (arr, 0, 128);
@@ -195,8 +212,202 @@ namespace MonoTests.System.IO.MemoryMappedFiles {
 				Assert.AreEqual ("Hello", s);
 			}
 		}
+
+		[Test]
+		public unsafe void ViewAccessorReadArrayWithOffset () {
+			var file = MemoryMappedFile.CreateFromFile (fname, FileMode.Open);
+			var offset = 3;
+			var expected = "lo!";
+
+			using (var v = file.CreateViewAccessor (offset, expected.Length)) {
+				// PointerOffset Mono implementation is always 0.
+				// Assert.AreEqual (offset, v.PointerOffset);
+
+				var a = new byte [expected.Length];
+				var n = v.ReadArray (0, a, 0, expected.Length);
+				Assert.AreEqual (expected.Length, n);
+				var s = new string (Array.ConvertAll (a, b => (char)b));
+				Assert.AreEqual (expected, s);
+			}
+		}
+
+		[Test]
+		public unsafe void ViewStreamReadWithOffset () {
+			var file = MemoryMappedFile.CreateFromFile (fname, FileMode.Open);
+			var offset = 3;
+			var expected = "lo!";
+
+			using (var v = file.CreateViewStream (offset, expected.Length)) {
+				// PointerOffset Mono implementation is always 0.
+				// Assert.AreEqual (offset, v.PointerOffset);
+
+				var a = new byte [expected.Length];
+				var n = v.Read (a, 0, expected.Length);
+				Assert.AreEqual (expected.Length, n);
+				var s = new string (Array.ConvertAll (a, b => (char)b));
+				Assert.AreEqual (expected, s);
+			}
+		}
+
+		[Test]
+		public void NamedMappingToInvalidFile ()
+		{
+			var fileName = Path.Combine (tempDir, "temp_file_123");
+	        if (File.Exists (fileName))
+	            File.Delete (fileName);
+	        var memoryMappedFile90 = MemoryMappedFile.CreateNew (fileName, 4194304, MemoryMappedFileAccess.ReadWrite);
+	        memoryMappedFile90.CreateViewStream (4186112, 3222, MemoryMappedFileAccess.Write);
+		}
+
+		[Test]
+		public void CreateTheSameAreaTwiceShouldFail ()
+		{
+			var name = MkNamedMapping ();
+			using (var m0 = MemoryMappedFile.CreateNew(name, 4096, MemoryMappedFileAccess.ReadWrite)) {
+				try {
+					using (var m1 = MemoryMappedFile.CreateNew (name, 4096, MemoryMappedFileAccess.ReadWrite)) {
+						Assert.Fail ("Must fail");
+					}
+				} catch (IOException) {}
+			}
+		}
+
+		[Test]
+		public void MapAFileToAMemoryAreaShouldFail ()
+		{
+			var name = MkNamedMapping ();
+			using (var m0 = MemoryMappedFile.CreateNew(name, 4096, MemoryMappedFileAccess.ReadWrite)) {
+				try {
+					using (var m1 = MemoryMappedFile.CreateFromFile (fname, FileMode.OpenOrCreate, name)) {
+						Assert.Fail ("Must fail");
+					}
+				} catch (IOException) {}
+			}
+		}
+
+		[Test]
+		public void NamedMappingsShareMemoryArea ()
+		{
+			var name = MkNamedMapping ();
+			using (var m0 = MemoryMappedFile.CreateNew(name, 4096, MemoryMappedFileAccess.ReadWrite)) {
+				using (var m1 = MemoryMappedFile.CreateOrOpen (name, 4096, MemoryMappedFileAccess.ReadWrite)) {
+					using (MemoryMappedViewAccessor v0 = m0.CreateViewAccessor (), v1 = m1.CreateViewAccessor ()) {
+						v0.Write (10, 0x12345);
+						Assert.AreEqual (0x12345, v1.ReadInt32 (10));
+					}
+				}
+			}
+		}
+
+		[Test]
+		public void NamedFileCanBeOpen ()
+		{
+			var name = MkNamedMapping ();
+			using (var sw = new FileStream (fname, FileMode.Open)) {
+				byte[] b = new byte[20];
+				for (int i = 0; i < 20; ++i)
+					b[i] = 0xFF;
+				sw.Write (b, 0, 20);
+			}
+
+			using (var m0 = MemoryMappedFile.CreateFromFile (fname, FileMode.Open, name)) {
+				using (var m1 = MemoryMappedFile.CreateOrOpen (name, 4096)) {
+					using (MemoryMappedViewAccessor v0 = m0.CreateViewAccessor (), v1 = m1.CreateViewAccessor ()) {
+						v0.Write (10, 0x11223344);
+						Assert.AreEqual (0x11223344, v1.ReadInt32 (10));
+					}
+				}
+			}
+		}
+
+		[Test]
+		public void MapAtEdgeOfPage ()
+		{
+			using (var f = new FileStream (fname, FileMode.Open)) {
+				var b = new byte [4096];
+				for (int i = 0; i < 4096; ++i)
+					b[i] = 0xAA;
+				for (int i = 0; i < 2; ++i)
+					f.Write (b, 0, 4096);
+			}
+			var m0 = MemoryMappedFile.CreateFromFile (fname, FileMode.Open);
+			var v0 = m0.CreateViewAccessor (500, 4096);
+			var v1 = m0.CreateViewAccessor (0, 4096 * 2);
+			for (int i = 0; i < 4096; ++i) {
+				Assert.AreEqual (0xAA, v1.ReadByte (i + 500));
+				v0.Write (i, (byte)0xFF);
+				Assert.AreEqual (0xFF, v1.ReadByte (i + 500));
+			}
+		}
+
+		[Test]
+		public void DoubleAccountingInOffsetCalculation ()
+		{
+			var memoryMappedFile90 = MemoryMappedFile.CreateNew (MkNamedMapping (), 4194304, MemoryMappedFileAccess.ReadWrite);
+			var stream = memoryMappedFile90.CreateViewStream (4186112, 3222, MemoryMappedFileAccess.Write);
+			using (var tw = new StreamWriter(stream))
+			{
+				tw.WriteLine ("Hello World!");
+			}
+		}
+
+		[Test]
+		[ExpectedException(typeof(IOException))]
+		public void CreateViewStreamWithOffsetPastFileEnd ()
+		{
+			string f = Path.Combine (tempDir, "8192-file");
+			File.WriteAllBytes (f, new byte [8192]);
+
+			MemoryMappedFile mappedFile = MemoryMappedFile.CreateFromFile (f, FileMode.Open, "myMap", 8192);
+
+			/* Should throw exception when trying to map past end of file */
+			MemoryMappedViewStream stream = mappedFile.CreateViewStream (8200, 10, MemoryMappedFileAccess.ReadWrite);
+		}
+
+		[Test]
+		[ExpectedException(typeof(IOException))]
+		public void CreateViewStreamWithOffsetPastFileEnd2 ()
+		{
+			string f = Path.Combine (tempDir, "8192-file");
+			File.WriteAllBytes (f, new byte [8192]);
+
+			MemoryMappedFile mappedFile = MemoryMappedFile.CreateFromFile (f, FileMode.Open);
+
+			MemoryMappedViewStream stream = mappedFile.CreateViewStream (8191, 8191, MemoryMappedFileAccess.ReadWrite);
+		}
+
+		[Test]
+		public void CreateViewStreamAlignToPageSize ()
+		{
+#if MONOTOUCH
+			// iOS bugs on ARM64 - bnc #27667 - apple #
+			int pageSize = (IntPtr.Size == 4) ? Environment.SystemPageSize : 4096;
+#else
+			int pageSize = Environment.SystemPageSize;
+#endif
+			string f = Path.Combine (tempDir, "p-file");
+			File.WriteAllBytes (f, new byte [pageSize * 2 + 1]);
+
+			MemoryMappedFile mappedFile = MemoryMappedFile.CreateFromFile (f, FileMode.Open);
+
+			MemoryMappedViewStream stream = mappedFile.CreateViewStream (pageSize * 2, 0, MemoryMappedFileAccess.ReadWrite);
+#if !MONOTOUCH
+			Assert.AreEqual (stream.Capacity, Environment.SystemPageSize);
+#endif
+			stream.Write (new byte [pageSize], 0, pageSize);
+		}
+
+		[Test] // #30741 #30825
+		public void CreateFromFileNullMapName ()
+		{
+			int size = 100;
+			string f = Path.Combine (tempDir, "null-map-name-file");
+			File.WriteAllBytes (f, new byte [size]);
+
+			FileStream file = File.OpenRead (f);
+			MemoryMappedFile.CreateFromFile (file, null, size, MemoryMappedFileAccess.ReadExecute, null, 0, false);
+		}
 	}
 }
 
-#endif
 

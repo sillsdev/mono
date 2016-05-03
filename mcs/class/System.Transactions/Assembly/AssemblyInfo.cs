@@ -52,14 +52,11 @@ using System.Security.Permissions;
 [assembly: NeutralResourcesLanguage ("en-US")]
 
 [assembly: ComVisible (false)]
-[assembly: ComCompatibleVersion (1, 0, 3300, 0)]
 [assembly: AllowPartiallyTrustedCallers]
 
-#if !TARGET_JVM
 	[assembly: CLSCompliant (true)]
 	[assembly: AssemblyDelaySign (true)]
 	[assembly: AssemblyKeyFile("../ecma.pub")]
-#endif
 
 [assembly: AssemblyFileVersion (Consts.FxFileVersion)]
 [assembly: BestFitMapping (false)]

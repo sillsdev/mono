@@ -17,7 +17,7 @@
 #include "mono/metadata/mono-config.h"
 #include "mono/metadata/metadata-internals.h"
 #include "mono/metadata/object-internals.h"
-#include "mono/utils/mono-logger-internal.h"
+#include "mono/utils/mono-logger-internals.h"
 
 #if defined(TARGET_PS3)
 #define CONFIG_OS "CellOS"
@@ -75,6 +75,9 @@
 #elif defined(__arm__)
 #define CONFIG_CPU "arm"
 #define CONFIG_WORDSIZE "32"
+#elif defined(__aarch64__)
+#define CONFIG_CPU "armv8"
+#define CONFIG_WORDSIZE "64"
 #elif defined(__ia64__)
 #define CONFIG_CPU "ia64"
 #define CONFIG_WORDSIZE "64"
@@ -163,9 +166,9 @@ static void start_element (GMarkupParseContext *context,
 			   gpointer             user_data,
 			   GError             **error)
 {
-	ParseState *state = user_data;
+	ParseState *state = (ParseState *)user_data;
 	if (!state->current) {
-		state->current = g_hash_table_lookup (config_handlers, element_name);
+		state->current = (MonoParseHandler *)g_hash_table_lookup (config_handlers, element_name);
 		if (state->current && state->current->init)
 			state->user_data = state->current->init (state->assembly);
 	}
@@ -178,7 +181,7 @@ static void end_element   (GMarkupParseContext *context,
 			   gpointer             user_data,
 			   GError             **error)
 {
-	ParseState *state = user_data;
+	ParseState *state = (ParseState *)user_data;
 	if (state->current) {
 		if (state->current->end)
 			state->current->end (state->user_data, element_name);
@@ -197,7 +200,7 @@ static void parse_text    (GMarkupParseContext *context,
 			   gpointer             user_data,
 			   GError             **error)
 {
-	ParseState *state = user_data;
+	ParseState *state = (ParseState *)user_data;
 	if (state->current && state->current->text)
 		state->current->text (state->user_data, text, text_len);
 }
@@ -215,7 +218,7 @@ static void parse_error   (GMarkupParseContext *context,
                            GError              *error,
 			   gpointer             user_data)
 {
-	ParseState *state = user_data;
+	ParseState *state = (ParseState *)user_data;
 	const gchar *msg;
 	const gchar *filename;
 
@@ -264,7 +267,7 @@ dllmap_start (gpointer user_data,
               const gchar        **attribute_values)
 {
 	int i;
-	DllInfo *info = user_data;
+	DllInfo *info = (DllInfo *)user_data;
 	
 	if (strcmp (element_name, "dllmap") == 0) {
 		g_free (info->dll);
@@ -274,9 +277,21 @@ dllmap_start (gpointer user_data,
 		for (i = 0; attribute_names [i]; ++i) {
 			if (strcmp (attribute_names [i], "dll") == 0)
 				info->dll = g_strdup (attribute_values [i]);
-			else if (strcmp (attribute_names [i], "target") == 0)
-				info->target = g_strdup (attribute_values [i]);
-			else if (strcmp (attribute_names [i], "os") == 0 && !arch_matches (CONFIG_OS, attribute_values [i]))
+			else if (strcmp (attribute_names [i], "target") == 0){
+				char *p = strstr (attribute_values [i], "$mono_libdir");
+				if (p != NULL){
+					const char *libdir = mono_assembly_getrootdir ();
+					size_t libdir_len = strlen (libdir);
+					char *result;
+					
+					result = (char *)g_malloc (libdir_len-strlen("$mono_libdir")+strlen(attribute_values[i])+1);
+					strncpy (result, attribute_values[i], p-attribute_values[i]);
+					strcpy (result+(p-attribute_values[i]), libdir);
+					strcat (result, p+strlen("$mono_libdir"));
+					info->target = result;
+				} else 
+					info->target = g_strdup (attribute_values [i]);
+			} else if (strcmp (attribute_names [i], "os") == 0 && !arch_matches (CONFIG_OS, attribute_values [i]))
 				info->ignore = TRUE;
 			else if (strcmp (attribute_names [i], "cpu") == 0 && !arch_matches (CONFIG_CPU, attribute_values [i]))
 				info->ignore = TRUE;
@@ -312,7 +327,7 @@ dllmap_start (gpointer user_data,
 static void
 dllmap_finish (gpointer user_data)
 {
-	DllInfo *info = user_data;
+	DllInfo *info = (DllInfo *)user_data;
 
 	g_free (info->dll);
 	g_free (info->target);
@@ -354,6 +369,55 @@ legacyUEP_handler = {
 	NULL, /* finish */
 };
 
+static void
+aot_cache_start (gpointer user_data,
+				 const gchar         *element_name,
+				 const gchar        **attribute_names,
+				 const gchar        **attribute_values)
+{
+	int i;
+	MonoAotCacheConfig *config;
+
+	if (strcmp (element_name, "aotcache") != 0)
+		return;
+
+	config = mono_get_aot_cache_config ();
+
+	/* Per-app configuration */
+	for (i = 0; attribute_names [i]; ++i) {
+		if (!strcmp (attribute_names [i], "app")) {
+			config->apps = g_slist_prepend (config->apps, g_strdup (attribute_values [i]));
+		}
+	}
+
+	/* Global configuration */
+	for (i = 0; attribute_names [i]; ++i) {
+		if (!strcmp (attribute_names [i], "assemblies")) {
+			char **parts, **ptr;
+			char *part;
+
+			parts = g_strsplit (attribute_values [i], " ", -1);
+			for (ptr = parts; ptr && *ptr; ptr ++) {
+				part = *ptr;
+				config->assemblies = g_slist_prepend (config->assemblies, g_strdup (part));
+			}
+			g_strfreev (parts);
+		} else if (!strcmp (attribute_names [i], "options")) {
+			config->aot_options = g_strdup (attribute_values [i]);
+		}
+	}
+}
+
+static const MonoParseHandler
+aot_cache_handler = {
+	"aotcache",
+	NULL, /* init */
+	aot_cache_start,
+	NULL, /* text */
+	NULL, /* end */
+	NULL, /* finish */
+};
+
 static int inited = 0;
 
 static void
@@ -363,6 +427,7 @@ mono_config_init (void)
 	config_handlers = g_hash_table_new (g_str_hash, g_str_equal);
 	g_hash_table_insert (config_handlers, (gpointer) dllmap_handler.element_name, (gpointer) &dllmap_handler);
 	g_hash_table_insert (config_handlers, (gpointer) legacyUEP_handler.element_name, (gpointer) &legacyUEP_handler);
+	g_hash_table_insert (config_handlers, (gpointer) aot_cache_handler.element_name, (gpointer) &aot_cache_handler);
 }
 
 void
@@ -383,7 +448,7 @@ mono_config_parse_xml_with_context (ParseState *state, const char *text, gsize l
 	if (!inited)
 		mono_config_init ();
 
-	context = g_markup_parse_context_new (&mono_parser, 0, state, NULL);
+	context = g_markup_parse_context_new (&mono_parser, (GMarkupParseFlags)0, state, NULL);
 	if (g_markup_parse_context_parse (context, text, len, NULL)) {
 		g_markup_parse_context_end_parse (context, NULL);
 	}
@@ -403,7 +468,6 @@ mono_config_parse_file_with_context (ParseState *state, const char *filename)
 
 	if (!g_file_get_contents (filename, &text, &len, NULL))
 		return 0;
-
 
 	offset = 0;
 	if (len > 3 && text [0] == '\xef' && text [1] == (gchar) '\xbb' && text [2] == '\xbf')
@@ -499,7 +563,6 @@ mono_config_for_assembly (MonoImage *assembly)
 	int got_it = 0, i;
 	char *aname, *cfg, *cfg_name;
 	const char *bundled_config;
-	const char *home;
 	
 	state.assembly = assembly;
 
@@ -515,14 +578,13 @@ mono_config_for_assembly (MonoImage *assembly)
 
 	cfg_name = g_strdup_printf ("%s.config", mono_image_get_name (assembly));
 
-	home = g_get_home_dir ();
-
 	for (i = 0; (aname = get_assembly_filename (assembly, i)) != NULL; ++i) {
 		cfg = g_build_filename (mono_get_config_dir (), "mono", "assemblies", aname, cfg_name, NULL);
 		got_it += mono_config_parse_file_with_context (&state, cfg);
 		g_free (cfg);
 
 #ifdef TARGET_WIN32
+		const char *home = g_get_home_dir ();
 		cfg = g_build_filename (home, ".mono", "assemblies", aname, cfg_name, NULL);
 		got_it += mono_config_parse_file_with_context (&state, cfg);
 		g_free (cfg);
@@ -606,7 +668,7 @@ mono_get_machine_config (void)
 static void
 assembly_binding_end (gpointer user_data, const char *element_name)
 {
-	ParserUserData *pud = user_data;
+	ParserUserData *pud = (ParserUserData *)user_data;
 
 	if (!strcmp (element_name, "dependentAssembly")) {
 		if (pud->info_parsed && pud->info) {
@@ -627,7 +689,7 @@ publisher_policy_start (gpointer user_data,
 	MonoAssemblyBindingInfo *info;
 	int n;
 
-	pud = user_data;
+	pud = (ParserUserData *)user_data;
 	info = pud->info;
 	if (!strcmp (element_name, "dependentAssembly")) {
 		info->name = NULL;

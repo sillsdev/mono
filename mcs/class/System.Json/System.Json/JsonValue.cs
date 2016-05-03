@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Json;
@@ -196,13 +197,37 @@ namespace System.Json
 			throw new InvalidOperationException ();
 		}
 
+		// Characters which have to be escaped:
+		// - Required by JSON Spec: Control characters, '"' and '\\'
+		// - Broken surrogates to make sure the JSON string is valid Unicode
+		//   (and can be encoded as UTF8)
+		// - JSON does not require U+2028 and U+2029 to be escaped, but
+		//   JavaScript does require this:
+		//   http://stackoverflow.com/questions/2965293/javascript-parse-error-on-u2028-unicode-character/9168133#9168133
+		// - '/' also does not have to be escaped, but escaping it when
+		//   preceeded by a '<' avoids problems with JSON in HTML <script> tags
+		bool NeedEscape (string src, int i) {
+			char c = src [i];
+			return c < 32 || c == '"' || c == '\\'
+				// Broken lead surrogate
+				|| (c >= '\uD800' && c <= '\uDBFF' &&
+					(i == src.Length - 1 || src [i + 1] < '\uDC00' || src [i + 1] > '\uDFFF'))
+				// Broken tail surrogate
+				|| (c >= '\uDC00' && c <= '\uDFFF' &&
+					(i == 0 || src [i - 1] < '\uD800' || src [i - 1] > '\uDBFF'))
+				// To produce valid JavaScript
+				|| c == '\u2028' || c == '\u2029'
+				// Escape "</" for <script> tags
+				|| (c == '/' && i > 0 && src [i - 1] == '<');
+		}
+		
 		internal string EscapeString (string src)
 		{
 			if (src == null)
 				return null;
 
 			for (int i = 0; i < src.Length; i++)
-				if (src [i] == '"' || src [i] == '\\') {
+				if (NeedEscape (src, i)) {
 					var sb = new StringBuilder ();
 					if (i > 0)
 						sb.Append (src, 0, i);
@@ -215,11 +240,23 @@ namespace System.Json
 		{
 			int start = cur;
 			for (int i = cur; i < src.Length; i++)
-				if (src [i] == '"' || src [i] == '\\') {
+				if (NeedEscape (src, i)) {
 					sb.Append (src, start, i - start);
-					sb.Append ('\\');
-					sb.Append (src [i++]);
-					start = i;
+					switch (src [i]) {
+					case '\b': sb.Append ("\\b"); break;
+					case '\f': sb.Append ("\\f"); break;
+					case '\n': sb.Append ("\\n"); break;
+					case '\r': sb.Append ("\\r"); break;
+					case '\t': sb.Append ("\\t"); break;
+					case '\"': sb.Append ("\\\""); break;
+					case '\\': sb.Append ("\\\\"); break;
+					case '/': sb.Append ("\\/"); break;
+					default:
+						sb.Append ("\\u");
+						sb.Append (((int) src [i]).ToString ("x04"));
+						break;
+					}
+					start = i + 1;
 				}
 			sb.Append (src, start, src.Length - start);
 			return sb.ToString ();
@@ -328,70 +365,70 @@ namespace System.Json
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToBoolean (((JsonPrimitive) value).Value);
+			return Convert.ToBoolean (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator byte (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToByte (((JsonPrimitive) value).Value);
+			return Convert.ToByte (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator char (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToChar (((JsonPrimitive) value).Value);
+			return Convert.ToChar (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator decimal (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToDecimal (((JsonPrimitive) value).Value);
+			return Convert.ToDecimal (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator double (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToDouble (((JsonPrimitive) value).Value);
+			return Convert.ToDouble (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator float (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToSingle (((JsonPrimitive) value).Value);
+			return Convert.ToSingle (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator int (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToInt32 (((JsonPrimitive) value).Value);
+			return Convert.ToInt32 (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator long (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToInt64 (((JsonPrimitive) value).Value);
+			return Convert.ToInt64 (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator sbyte (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToSByte (((JsonPrimitive) value).Value);
+			return Convert.ToSByte (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator short (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToInt16 (((JsonPrimitive) value).Value);
+			return Convert.ToInt16 (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator string (JsonValue value)
@@ -405,21 +442,21 @@ namespace System.Json
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToUInt16 (((JsonPrimitive) value).Value);
+			return Convert.ToUInt32 (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator ulong (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToUInt64(((JsonPrimitive) value).Value);
+			return Convert.ToUInt64(((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator ushort (JsonValue value)
 		{
 			if (value == null)
 				throw new ArgumentNullException ("value");
-			return Convert.ToUInt16 (((JsonPrimitive) value).Value);
+			return Convert.ToUInt16 (((JsonPrimitive) value).Value, NumberFormatInfo.InvariantInfo);
 		}
 
 		public static implicit operator DateTime (JsonValue value)

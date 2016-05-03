@@ -80,21 +80,20 @@ namespace System.IO.Compression
 			this.leaveOpen = leaveOpen;
 		}
 		
-#if NET_4_5
-		[MonoTODO]
 		public DeflateStream (Stream stream, CompressionLevel compressionLevel)
-			: this (stream, CompressionMode.Compress)
+			: this (stream, compressionLevel, false, false)
 		{
-			throw new NotImplementedException ();
 		}
 		
-		[MonoTODO]
 		public DeflateStream (Stream stream, CompressionLevel compressionLevel, bool leaveOpen)
-			: this (stream, CompressionMode.Compress, leaveOpen)
+			: this (stream, compressionLevel, leaveOpen, false)
 		{
-			throw new NotImplementedException ();
 		}
-#endif
+
+		internal DeflateStream (Stream stream, CompressionLevel compressionLevel, bool leaveOpen, bool gzip)
+			: this (stream, CompressionMode.Compress, leaveOpen, gzip)
+		{
+		}		
 
 		protected override void Dispose (bool disposing)
 		{
@@ -171,6 +170,9 @@ namespace System.IO.Compression
 
 			if (!CanWrite)
 				throw new NotSupportedException ("Stream does not support writing");
+
+			if (src_offset > src.Length - count)
+				throw new ArgumentException ("Buffer too small. count/offset wrong.");
 
 			WriteInternal (src, src_offset, count);
 		}
@@ -395,24 +397,15 @@ namespace System.IO.Compression
 
 		int UnmanagedRead (IntPtr buffer, int length)
 		{
-			int total = 0;
-			int n = 1;
-			while (length > 0 && n > 0) {
-				if (io_buffer == null)
-					io_buffer = new byte [BufferSize];
+			if (io_buffer == null)
+				io_buffer = new byte [BufferSize];
 
-				int count = Math.Min (length, io_buffer.Length);
-				n = base_stream.Read (io_buffer, 0, count);
-				if (n > 0) {
-					Marshal.Copy (io_buffer, 0, buffer, n);
-					unsafe {
-						buffer = new IntPtr ((byte *) buffer.ToPointer () + n);
-					}
-					length -= n;
-					total += n;
-				}
-			}
-			return total;
+			int count = Math.Min (length, io_buffer.Length);
+			int n = base_stream.Read (io_buffer, 0, count);
+			if (n > 0)
+				Marshal.Copy (io_buffer, 0, buffer, n);
+
+			return n;
 		}
 
 #if MONOTOUCH

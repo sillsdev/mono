@@ -323,9 +323,7 @@ namespace Microsoft.Build.BuildEngine {
 				Reevaluate ();
 			}
 
-#if NET_4_0
 			ProcessBeforeAndAfterTargets ();
-#endif
 
 			if (targetNames == null || targetNames.Length == 0) {
 				if (defaultTargets != null && defaultTargets.Length != 0) {
@@ -404,7 +402,6 @@ namespace Microsoft.Build.BuildEngine {
 			return sb.ToString ();
 		}
 
-#if NET_4_0
 		void ProcessBeforeAndAfterTargets ()
 		{
 			var beforeTable = Targets.AsIEnumerable ()
@@ -440,7 +437,6 @@ namespace Microsoft.Build.BuildEngine {
 			expr.Parse (targets, ParseOptions.AllowItemsNoMetadataAndSplit);
 			return (string []) expr.ConvertTo (this, typeof (string []));
 		}
-#endif
 
 		[MonoTODO]
 		public string [] GetConditionedPropertyValues (string propertyName)
@@ -950,8 +946,12 @@ namespace Microsoft.Build.BuildEngine {
 					case  "Choose":
 						AddChoose (xe, ip);
 						break;
+					case "ItemDefinitionGroup":
+						AddItemDefinitionGroup (xe);
+						break;
 					default:
-						throw new InvalidProjectFileException (String.Format ("Invalid element '{0}' in project file '{1}'.", xe.Name, ip.FullFileName));
+						var pf = ip == null ? null : string.Format (" '{0}'", ip.FullFileName);
+						throw new InvalidProjectFileException (String.Format ("Invalid element '{0}' in project file{1}.", xe.Name, pf));
 					}
 				}
 			}
@@ -1119,8 +1119,7 @@ namespace Microsoft.Build.BuildEngine {
 		{
 			// eval all the properties etc till the import
 			if (evaluate_properties) {
-				groupingCollection.Evaluate (EvaluationType.Property);
-				groupingCollection.Evaluate (EvaluationType.Choose);
+				groupingCollection.Evaluate (EvaluationType.Property | EvaluationType.Choose);
 			}
 			try {
 				PushThisFileProperty (importingProject != null ? importingProject.FullFileName : FullFileName);
@@ -1140,8 +1139,7 @@ namespace Microsoft.Build.BuildEngine {
 		{
 			// eval all the properties etc till the import group
 			if (evaluate_properties) {
-				groupingCollection.Evaluate (EvaluationType.Property);
-				groupingCollection.Evaluate (EvaluationType.Choose);
+				groupingCollection.Evaluate (EvaluationType.Property | EvaluationType.Choose);
 			}
 			string condition_attribute = xmlElement.GetAttribute ("Condition");
 			if (!ConditionParser.ParseAndEvaluate (condition_attribute, this))
@@ -1157,6 +1155,17 @@ namespace Microsoft.Build.BuildEngine {
 						throw new InvalidProjectFileException(String.Format("Invalid element '{0}' inside ImportGroup in project file '{1}'.", xe.Name, importedProject.FullFileName));
 					}
 				}
+			}
+		}
+
+		void AddItemDefinitionGroup (XmlElement xmlElement)
+		{
+			string condition_attribute = xmlElement.GetAttribute ("Condition");
+			if (!ConditionParser.ParseAndEvaluate (condition_attribute, this))
+				return;
+
+			foreach (XmlNode xn in xmlElement.ChildNodes) {
+				// TODO: Add all nodes to some internal dictionary?
 			}
 		}
 
@@ -1414,6 +1423,10 @@ namespace Microsoft.Build.BuildEngine {
 				return t;
 
 			return default (T);
+		}
+
+		internal string ThisFileFullPath {
+			get { return this_file_property_stack.Peek (); }
 		}
 
 		// Used for MSBuild*This* set of properties

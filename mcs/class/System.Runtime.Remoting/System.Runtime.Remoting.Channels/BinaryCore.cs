@@ -43,10 +43,11 @@ namespace System.Runtime.Remoting.Channels
 		bool _strictBinding = false;
 		IDictionary _properties;
 		
-		TypeFilterLevel _filterLevel = TypeFilterLevel.Low;
+		TypeFilterLevel _filterLevel;
 		
-		public static BinaryCore DefaultInstance = new BinaryCore ();
-		
+		public static BinaryCore DefaultInstance = new BinaryCore (TypeFilterLevel.Low);
+		public static readonly BinaryCore DefaultClientInstance = new BinaryCore (TypeFilterLevel.Full);
+
 		public BinaryCore (object owner, IDictionary properties, string[] allowedProperties)
 		{
 			_properties = properties;
@@ -87,8 +88,9 @@ namespace System.Runtime.Remoting.Channels
 			Init ();
 		}
 		
-		public BinaryCore ()
+		public BinaryCore (TypeFilterLevel filterLevel)
 		{
+			_filterLevel = filterLevel;
 			_properties = new Hashtable ();
 			Init ();
 		}
@@ -98,13 +100,8 @@ namespace System.Runtime.Remoting.Channels
 			RemotingSurrogateSelector surrogateSelector = new RemotingSurrogateSelector ();
 			StreamingContext context = new StreamingContext (StreamingContextStates.Remoting, null);
 
-#if !TARGET_JVM
 			_serializationFormatter = new BinaryFormatter (surrogateSelector, context);
 			_deserializationFormatter = new BinaryFormatter (null, context);
-#else
-			_serializationFormatter = (BinaryFormatter) vmw.@internal.remoting.BinaryFormatterUtils.CreateBinaryFormatter (surrogateSelector, context, false);
-			_deserializationFormatter = (BinaryFormatter) vmw.@internal.remoting.BinaryFormatterUtils.CreateBinaryFormatter (null, context, false);
-#endif
 			
 			_serializationFormatter.FilterLevel = _filterLevel;
 			_deserializationFormatter.FilterLevel = _filterLevel;

@@ -16,19 +16,6 @@ extern "C" {
 typedef unsigned int arminstr_t;
 typedef unsigned int armword_t;
 
-/* Helper functions */
-arminstr_t* arm_emit_std_prologue(arminstr_t* p, unsigned int local_size);
-arminstr_t* arm_emit_std_epilogue(arminstr_t* p, unsigned int local_size, int pop_regs);
-arminstr_t* arm_emit_lean_prologue(arminstr_t* p, unsigned int local_size, int push_regs);
-int arm_is_power_of_2(armword_t val);
-int calc_arm_mov_const_shift(armword_t val);
-int is_arm_const(armword_t val);
-int arm_bsf(armword_t val);
-arminstr_t* arm_mov_reg_imm32_cond(arminstr_t* p, int reg, armword_t imm32, int cond);
-arminstr_t* arm_mov_reg_imm32(arminstr_t* p, int reg, armword_t imm32);
-
-
-
 #if defined(_MSC_VER) || defined(__CC_NORCROFT)
 	void __inline _arm_emit(arminstr_t** p, arminstr_t i) {**p = i; (*p)++;}
 #	define ARM_EMIT(p, i) _arm_emit((arminstr_t**)&p, (arminstr_t)(i))
@@ -498,19 +485,15 @@ typedef struct {
 	arminstr_t cond   : 4;
 } ARMInstrMul;
 
-#define ARM_MUL_ID 0
-#define ARM_MUL_ID2 9
-#define ARM_MUL_MASK ((0xF << 24) | (0xF << 4))
-#define ARM_MUL_TAG ((ARM_MUL_ID << 24) | (ARM_MUL_ID2 << 4))
-
+#define ARM_MUL_ID 9
 #define ARM_DEF_MUL_COND(op, rd, rm, rs, rn, s, cond) \
 	(rm)             | \
+	ARM_MUL_ID << 4  | \
 	((rs) << 8)      | \
 	((rn) << 12)     | \
 	((rd) << 16)     | \
-	((s & 1) << 17)  | \
-	((op & 7) << 18) | \
-	ARM_MUL_TAG      | \
+	((s & 1) << 20)  | \
+	((op & 7) << 21) | \
 	ARM_DEF_COND(cond)
 
 /* Rd := (Rm * Rs)[31:0]; 32 x 32 -> 32 */
@@ -1106,6 +1089,18 @@ typedef union {
 
 #define ARM_UDIV_COND(p, rd, rn, rm, cond) ARM_EMIT (p, (((cond) << 28) | (0xe << 23) | (0x3 << 20) | ((rd) << 16) | (0xf << 12) | ((rm) << 8) | (0x0 << 5) | (0x1 << 4) | ((rn) << 0)))
 #define ARM_UDIV(p, rd, rn, rm) ARM_UDIV_COND ((p), (rd), (rn), (rm), ARMCOND_AL)
+
+/* ARMv7 */
+
+typedef enum {
+	ARM_DMB_SY = 0xf,
+} ArmDmbFlags;
+
+#define ARM_DMB(p, option) ARM_EMIT ((p), ((0xf << 28) | (0x57 << 20) | (0xf << 16) | (0xf << 12) | (0x0 << 8) | (0x5 << 4) | ((option) << 0)))
+
+#define ARM_LDREX_REG(p, rt, rn) ARM_EMIT ((p), ((ARMCOND_AL << 28) | (0xc << 21) | (0x1 << 20) | ((rn) << 16) | ((rt) << 12)) | (0xf << 8) | (0x9 << 4) | 0xf << 0)
+
+#define ARM_STREX_REG(p, rd, rt, rn) ARM_EMIT ((p), ((ARMCOND_AL << 28) | (0xc << 21) | (0x0 << 20) | ((rn) << 16) | ((rd) << 12)) | (0xf << 8) | (0x9 << 4) | ((rt) << 0))
 
 #ifdef __cplusplus
 }

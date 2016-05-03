@@ -123,7 +123,9 @@ namespace Mono.Linker.Steps {
 		{
 			while (!QueueIsEmpty ()) {
 				MethodDefinition method = (MethodDefinition) _methods.Dequeue ();
+				Annotations.Push (method);
 				ProcessMethod (method);
+				Annotations.Pop ();
 			}
 		}
 
@@ -204,18 +206,72 @@ namespace Mono.Linker.Steps {
 			MarkCustomAttributeFields (ca, type);
 		}
 
-		void MarkCustomAttributeProperties (CustomAttribute ca, TypeDefinition attribute)
+		protected void MarkSecurityDeclarations (ISecurityDeclarationProvider provider)
+		{
+			// most security declarations are removed (if linked) but user code might still have some
+			// and if the attribtues references types then they need to be marked too
+			if ((provider == null) || !provider.HasSecurityDeclarations)
+				return;
+
+			foreach (var sd in provider.SecurityDeclarations)
+				MarkSecurityDeclaration (sd);
+		}
+
+		protected virtual void MarkSecurityDeclaration (SecurityDeclaration sd)
+		{
+			if (!sd.HasSecurityAttributes)
+				return;
+			
+			foreach (var sa in sd.SecurityAttributes)
+				MarkSecurityAttribute (sa);
+		}
+
+		protected virtual void MarkSecurityAttribute (SecurityAttribute sa)
+		{
+			TypeReference security_type = sa.AttributeType;
+			TypeDefinition type = security_type.Resolve ();
+			if (type == null)
+				throw new ResolutionException (security_type);
+			
+			MarkType (security_type);
+			MarkSecurityAttributeProperties (sa, type);
+			MarkSecurityAttributeFields (sa, type);
+		}
+
+		protected void MarkSecurityAttributeProperties (SecurityAttribute sa, TypeDefinition attribute)
+		{
+			if (!sa.HasProperties)
+				return;
+
+			foreach (var named_argument in sa.Properties)
+				MarkCustomAttributeProperty (named_argument, attribute);
+		}
+
+		protected void MarkSecurityAttributeFields (SecurityAttribute sa, TypeDefinition attribute)
+		{
+			if (!sa.HasFields)
+				return;
+
+			foreach (var named_argument in sa.Fields)
+				MarkCustomAttributeField (named_argument, attribute);
+		}
+
+		protected void MarkCustomAttributeProperties (CustomAttribute ca, TypeDefinition attribute)
 		{
 			if (!ca.HasProperties)
 				return;
 
-			foreach (var named_argument in ca.Properties) {
-				PropertyDefinition property = GetProperty (attribute, named_argument.Name);
-				if (property != null)
-					MarkMethod (property.SetMethod);
+			foreach (var named_argument in ca.Properties)
+				MarkCustomAttributeProperty (named_argument, attribute);
+		}
 
-				MarkIfType (named_argument.Argument);
-			}
+		protected void MarkCustomAttributeProperty (CustomAttributeNamedArgument namedArgument, TypeDefinition attribute)
+		{
+			PropertyDefinition property = GetProperty (attribute, namedArgument.Name);
+			if (property != null)
+				MarkMethod (property.SetMethod);
+
+			MarkIfType (namedArgument.Argument);
 		}
 
 		PropertyDefinition GetProperty (TypeDefinition type, string propertyname)
@@ -231,18 +287,22 @@ namespace Mono.Linker.Steps {
 			return null;
 		}
 
-		void MarkCustomAttributeFields (CustomAttribute ca, TypeDefinition attribute)
+		protected void MarkCustomAttributeFields (CustomAttribute ca, TypeDefinition attribute)
 		{
 			if (!ca.HasFields)
 				return;
 
-			foreach (var named_argument in ca.Fields) {
-				FieldDefinition field = GetField (attribute, named_argument.Name);
-				if (field != null)
-					MarkField (field);
+			foreach (var named_argument in ca.Fields)
+				MarkCustomAttributeField (named_argument, attribute);
+		}
 
-				MarkIfType (named_argument.Argument);
-			}
+		protected void MarkCustomAttributeField (CustomAttributeNamedArgument namedArgument, TypeDefinition attribute)
+		{
+			FieldDefinition field = GetField (attribute, namedArgument.Name);
+			if (field != null)
+				MarkField (field);
+
+			MarkIfType (namedArgument.Argument);
 		}
 
 		FieldDefinition GetField (TypeDefinition type, string fieldname)
@@ -269,11 +329,50 @@ namespace Mono.Linker.Steps {
 
 		void MarkIfType (CustomAttributeArgument argument)
 		{
-			if (argument.Type.FullName != "System.Type")
+			var at = argument.Type;
+			if (at.IsArray) {
+				var et = at.GetElementType ();
+				if (et.Namespace != "System" || et.Name != "Type")
+					return;
+
+				MarkType (et);
+				if (argument.Value == null)
+					return;
+
+				foreach (var cac in (CustomAttributeArgument[]) argument.Value)
+					MarkWithResolvedScope ((TypeReference) cac.Value);
+			} else if (at.Namespace == "System" && at.Name == "Type") {
+				MarkType (argument.Type);
+				MarkWithResolvedScope ((TypeReference) argument.Value);
+			}
+		}
+
+		// custom attributes encoding means it's possible to have a scope that will point into a PCL facade
+		// even if we (just before saving) will resolve all type references (bug #26752)
+		void MarkWithResolvedScope (TypeReference type)
+		{
+			if (type == null)
 				return;
 
-			MarkType (argument.Type);
-			MarkType ((TypeReference) argument.Value);
+			// a GenericInstanceType can could contains generic arguments with scope that
+			// needs to be updated out of the PCL facade (bug #28823)
+			var git = (type as GenericInstanceType);
+			if ((git != null) && git.HasGenericArguments) {
+				foreach (var ga in git.GenericArguments)
+					MarkWithResolvedScope (ga);
+			}
+			// we cannot set the Scope of a TypeSpecification but it's element type can be set
+			// e.g. System.String[] -> System.String
+			var ts = (type as TypeSpecification);
+			if (ts != null) {
+				MarkWithResolvedScope (ts.GetElementType ());
+				return;
+			}
+
+			var td = type.Resolve ();
+			if (td != null)
+				type.Scope = td.Scope;
+			MarkType (type);
 		}
 
 		protected bool CheckProcessed (IMetadataTokenProvider provider)
@@ -285,15 +384,32 @@ namespace Mono.Linker.Steps {
 			return false;
 		}
 
-		void MarkAssembly (AssemblyDefinition assembly)
+		protected void MarkAssembly (AssemblyDefinition assembly)
 		{
 			if (CheckProcessed (assembly))
 				return;
 
+			ProcessModule (assembly);
+
 			MarkCustomAttributes (assembly);
+			MarkSecurityDeclarations (assembly);
 
 			foreach (ModuleDefinition module in assembly.Modules)
 				MarkCustomAttributes (module);
+		}
+
+		void ProcessModule (AssemblyDefinition assembly)
+		{
+			// Pre-mark <Module> if there is any methods as they need to be executed 
+			// at assembly load time
+			foreach (TypeDefinition type in assembly.MainModule.Types)
+			{
+				if (type.Name == "<Module>" && type.HasMethods)
+				{
+					MarkType (type);
+					break;
+				}
+			}
 		}
 
 		protected void MarkField (FieldReference reference)
@@ -371,10 +487,13 @@ namespace Mono.Linker.Steps {
 			if (CheckProcessed (type))
 				return null;
 
+			Annotations.Push (type);
+
 			MarkScope (type.Scope);
 			MarkType (type.BaseType);
 			MarkType (type.DeclaringType);
 			MarkCustomAttributes (type);
+			MarkSecurityDeclarations (type);
 
 			if (IsMulticastDelegate (type)) {
 				MarkMethodCollection (type.Methods);
@@ -401,11 +520,20 @@ namespace Mono.Linker.Steps {
 				MarkMethodsIf (type.Methods, IsStaticConstructorPredicate);
 			}
 
+			DoAdditionalTypeProcessing (type);
+
+			Annotations.Pop ();
+
 			Annotations.Mark (type);
 
 			ApplyPreserveInfo (type);
 
 			return type;
+		}
+
+		// Allow subclassers to mark additional things when marking a method
+		protected virtual void DoAdditionalTypeProcessing (TypeDefinition method)
+		{
 		}
 
 		void MarkTypeSpecialCustomAttributes (TypeDefinition type)
@@ -457,17 +585,21 @@ namespace Mono.Linker.Steps {
 			return argument != null;
 		}
 
-		protected void MarkNamedMethod (TypeDefinition type, string method_name)
+		protected int MarkNamedMethod (TypeDefinition type, string method_name)
 		{
 			if (!type.HasMethods)
-				return;
+				return 0;
 
+			int count = 0;
 			foreach (MethodDefinition method in type.Methods) {
 				if (method.Name != method_name)
 					continue;
 
 				MarkMethod (method);
+				count++;
 			}
+
+			return count;
 		}
 
 		void MarkSoapHeader (MethodDefinition method, CustomAttribute attribute)
@@ -754,6 +886,7 @@ namespace Mono.Linker.Steps {
 			if (reference.DeclaringType is ArrayType)
 				return null;
 
+			Annotations.Push (reference);
 			if (reference.DeclaringType is GenericInstanceType)
 				MarkType (reference.DeclaringType);
 
@@ -762,13 +895,18 @@ namespace Mono.Linker.Steps {
 
 			MethodDefinition method = ResolveMethodDefinition (reference);
 
-			if (method == null)
+			if (method == null) {
+				Annotations.Pop ();
 				throw new ResolutionException (reference);
+			}
 
 			if (Annotations.GetAction (method) == MethodAction.Nothing)
 				Annotations.SetAction (method, MethodAction.Parse);
 
 			EnqueueMethod (method);
+
+			Annotations.Pop ();
+
 			return method;
 		}
 
@@ -808,6 +946,7 @@ namespace Mono.Linker.Steps {
 
 			MarkType (method.DeclaringType);
 			MarkCustomAttributes (method);
+			MarkSecurityDeclarations (method);
 
 			MarkGenericParameterProvider (method);
 
@@ -843,9 +982,16 @@ namespace Mono.Linker.Steps {
 			if (ShouldParseMethodBody (method))
 				MarkMethodBody (method.Body);
 
+			DoAdditionalMethodProcessing (method);
+
 			Annotations.Mark (method);
 
 			ApplyPreserveMethods (method);
+		}
+
+		// Allow subclassers to mark additional things when marking a method
+		protected virtual void DoAdditionalMethodProcessing (MethodDefinition method)
+		{
 		}
 
 		void MarkBaseMethods (MethodDefinition method)

@@ -23,7 +23,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using System;
 using System.Data;
 using System.Collections;
@@ -31,7 +30,7 @@ using System.IO;
 using System.Xml;
 using NUnit.Framework;
 
-namespace Monotests_System.Data
+namespace MonoTests.System.Data
 {
 	[TestFixture]
 	public class DataTableTest4
@@ -327,8 +326,8 @@ namespace Monotests_System.Data
 			Assert.AreEqual (tableName, table.TableName, "#6");
 			Assert.AreEqual (2, table.Constraints.Count, "#7");
 			Assert.AreEqual (string.Empty, table.Prefix, "#8");
-			Assert.AreEqual ("Constraint1", table.Constraints [0].ToString (), "#9");
-			Assert.AreEqual ("Constraint2", table.Constraints [1].ToString (), "#10");
+			Assert.AreEqual ("Constraint2", table.Constraints [0].ToString (), "#9");
+			Assert.AreEqual ("Constraint1", table.Constraints [1].ToString (), "#10");
 			Assert.AreEqual (typeof (UniqueConstraint), table.Constraints [0].GetType (), "#11");
 			Assert.AreEqual (typeof (UniqueConstraint), table.Constraints [1].GetType (), "#12");
 			Assert.AreEqual (2, table.PrimaryKey.Length, "#13");
@@ -425,8 +424,8 @@ namespace Monotests_System.Data
 			Assert.AreEqual (tableName, table.TableName, "#6");
 			Assert.AreEqual (2, table.Constraints.Count, "#7");
 			Assert.AreEqual (string.Empty, table.Prefix, "#8");
-			Assert.AreEqual ("Constraint1", table.Constraints [0].ToString (), "#9");
-			Assert.AreEqual ("Constraint2", table.Constraints [1].ToString (), "#10");
+			Assert.AreEqual ("Constraint2", table.Constraints [0].ToString (), "#9");
+			Assert.AreEqual ("Constraint1", table.Constraints [1].ToString (), "#10");
 			Assert.AreEqual ("System.Data.UniqueConstraint", table.Constraints [0].GetType ().ToString (), "#11");
 			Assert.AreEqual ("System.Data.UniqueConstraint", table.Constraints [1].GetType ().ToString (), "#12");
 			Assert.AreEqual (2, table.PrimaryKey.Length, "#13");
@@ -701,7 +700,7 @@ namespace Monotests_System.Data
 			VerifyTable_WithChildren (table, parentTable1.TableName, parentTable1.DataSet);
 
 			//Check Properties of First Child Table
-			DataTable firstChildTable = table.ChildRelations [0].ChildTable;
+			DataTable firstChildTable = table.ChildRelations [1].ChildTable;
 			Assert.AreEqual (string.Empty, firstChildTable.Namespace, "#1");
 			Assert.AreEqual ("XmlDataSet", firstChildTable.DataSet.DataSetName, "#2");
 			Assert.AreEqual (3, firstChildTable.Columns.Count, "#3");
@@ -721,7 +720,7 @@ namespace Monotests_System.Data
 			Assert.AreEqual (0, firstChildTable.PrimaryKey.Length, "#17");
 
 			//Check Properties of Second Child Table
-			DataTable secondChildTable = table.ChildRelations [1].ChildTable;
+			DataTable secondChildTable = table.ChildRelations [0].ChildTable;
 			Assert.AreEqual (string.Empty, secondChildTable.Namespace, "#18");
 			Assert.AreEqual ("XmlDataSet", secondChildTable.DataSet.DataSetName, "#19");
 			Assert.AreEqual (4, secondChildTable.Columns.Count, "#20");
@@ -783,7 +782,7 @@ namespace Monotests_System.Data
 			Assert.AreEqual (0, col.AutoIncrementSeed, "#15");
 			Assert.AreEqual (1, col.AutoIncrementStep, "#16");
 			Assert.AreEqual ("Element", col.ColumnMapping.ToString (), "#17");
-			Assert.AreEqual ("ChildID", col.Caption, "#18");
+			Assert.AreEqual ("ID", col.Caption, "#18");
 			Assert.AreEqual ("ChildID", col.ColumnName, "#19");
 			Assert.AreEqual (typeof (int), col.DataType, "#20");
 			Assert.AreEqual (string.Empty, col.DefaultValue.ToString (), "#21");
@@ -1373,7 +1372,7 @@ namespace Monotests_System.Data
 
 			//Check the rows
 			foreach (DataRow row in table.Rows)
-				Assert.IsNull (row [0], "#8");
+				Assert.AreEqual (DBNull.Value, row [0], "#8");
 		}
 
 		[Test]
@@ -1421,19 +1420,19 @@ namespace Monotests_System.Data
 			Assert.AreEqual (1, row ["id"], "#14");
 			Assert.AreEqual ("ParentItem 1", row ["ParentItem"], "#15");
 			Assert.AreEqual (1, row ["DepartmentID"], "#16");
-			Assert.IsNull (row ["DummyColumn"], "#17");
+			Assert.AreEqual (DBNull.Value, row ["DummyColumn"], "#17");
 
 			row = table.Rows [1];
 			Assert.AreEqual (2, row ["id"], "#18");
 			Assert.AreEqual ("ParentItem 2", row ["ParentItem"], "#19");
 			Assert.AreEqual (2, row ["DepartmentID"], "#20");
-			Assert.IsNull (row ["DummyColumn"], "#21");
+			Assert.AreEqual (DBNull.Value, row ["DummyColumn"], "#21");
 
 			row = table.Rows [2];
 			Assert.AreEqual (3, row ["id"], "#22");
 			Assert.AreEqual ("ParentItem 3", row ["ParentItem"], "#23");
 			Assert.AreEqual (3, row ["DepartmentID"], "#24");
-			Assert.IsNull (row ["DummyColumn"], "#25");
+			Assert.AreEqual (DBNull.Value, row ["DummyColumn"], "#25");
 		}
 
 		[Test]
@@ -1600,7 +1599,7 @@ namespace Monotests_System.Data
 			DataSet ds = new DataSet ();
 			DataTable table = new DataTable ("ParentTable");
 			XmlReadMode mode = XmlReadMode.Auto;
-			table.Columns.Add (new DataColumn ("id", System.Type.GetType ("System.Int32")));
+			table.Columns.Add (new DataColumn ("id", Type.GetType ("System.Int32")));
 			ds.Tables.Add (table);
 
 			using (FileStream stream = new FileStream (tempFile, FileMode.Open)) {
@@ -1638,7 +1637,7 @@ namespace Monotests_System.Data
 			using (FileStream stream = new FileStream (tempFile, FileMode.Open)) {
 				DataSet ds = new DataSet ();
 				DataTable table = new DataTable ("Table1");
-				table.Columns.Add (new DataColumn ("id", System.Type.GetType ("System.Int32")));
+				table.Columns.Add (new DataColumn ("id", Type.GetType ("System.Int32")));
 				ds.Tables.Add (table);
 
 				try {
@@ -1852,7 +1851,7 @@ namespace Monotests_System.Data
 			DataTable table = new DataTable ("DummyTable");
 			//define the table schame partially with a column name which does not match with any
 			//table columns in the diffgram
-			table.Columns.Add (new DataColumn ("WrongColumnName", System.Type.GetType ("System.String")));
+			table.Columns.Add (new DataColumn ("WrongColumnName", Type.GetType ("System.String")));
 
 			XmlReadMode mode = XmlReadMode.Auto;
 
@@ -2013,8 +2012,8 @@ namespace Monotests_System.Data
 			Assert.AreEqual ("NewDataSet", table.DataSet.DataSetName, "#2");
 			Assert.AreEqual (2, table.Columns.Count, "#3");
 			Assert.AreEqual (2, table.Rows.Count, "#4");
-			Assert.AreEqual (typeof (System.Int32), table.Columns [0].DataType, "#5");
-			Assert.AreEqual (typeof (System.String), table.Columns [1].DataType, "#6");
+			Assert.AreEqual (typeof (Int32), table.Columns [0].DataType, "#5");
+			Assert.AreEqual (typeof (String), table.Columns [1].DataType, "#6");
 			Assert.AreEqual (1, table.Constraints.Count, "#7");
 			Assert.AreEqual (typeof (UniqueConstraint), table.Constraints [0].GetType (), "#8");
 			Assert.AreEqual (1, table.ChildRelations.Count, "#9");
@@ -2027,9 +2026,9 @@ namespace Monotests_System.Data
 			Assert.AreEqual ("NewDataSet", table1.DataSet.DataSetName, "#14");
 			Assert.AreEqual (3, table1.Columns.Count, "#15");
 			Assert.AreEqual (4, table1.Rows.Count, "#16");
-			Assert.AreEqual (typeof (System.Int32), table1.Columns [0].DataType, "#17");
-			Assert.AreEqual (typeof (System.String), table1.Columns [1].DataType, "#18");
-			Assert.AreEqual (typeof (System.Int32), table1.Columns [2].DataType, "#19");
+			Assert.AreEqual (typeof (Int32), table1.Columns [0].DataType, "#17");
+			Assert.AreEqual (typeof (String), table1.Columns [1].DataType, "#18");
+			Assert.AreEqual (typeof (Int32), table1.Columns [2].DataType, "#19");
 			Assert.AreEqual (2, table1.Constraints.Count, "#20");
 			Assert.AreEqual (typeof (UniqueConstraint), table1.Constraints [0].GetType (), "#21");
 			Assert.AreEqual (typeof (ForeignKeyConstraint), table1.Constraints [1].GetType (), "#22");
@@ -2045,8 +2044,8 @@ namespace Monotests_System.Data
 			Assert.AreEqual ("NewDataSet", table1.DataSet.DataSetName, "#29");
 			Assert.AreEqual (2, table1.Columns.Count, "#30");
 			Assert.AreEqual (8, table1.Rows.Count, "#31");
-			Assert.AreEqual (typeof (System.Int32), table1.Columns [0].DataType, "#32");
-			Assert.AreEqual (typeof (System.String), table1.Columns [1].DataType, "#33");
+			Assert.AreEqual (typeof (Int32), table1.Columns [0].DataType, "#32");
+			Assert.AreEqual (typeof (String), table1.Columns [1].DataType, "#33");
 			Assert.AreEqual (1, table1.Constraints.Count, "#34");
 			Assert.AreEqual (typeof (ForeignKeyConstraint), table1.Constraints [0].GetType (), "#35");
 			Assert.AreEqual (1, table1.ParentRelations.Count, "#36");
@@ -2057,4 +2056,3 @@ namespace Monotests_System.Data
 		}
 	}
 }
-#endif

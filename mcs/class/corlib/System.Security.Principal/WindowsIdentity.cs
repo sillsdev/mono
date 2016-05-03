@@ -33,12 +33,15 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Security.Permissions;
+using System.Security.Claims;
 
 namespace System.Security.Principal {
 
 	[Serializable]
 	[ComVisible (true)]
-	public class WindowsIdentity : IIdentity, IDeserializationCallback, ISerializable, IDisposable {
+	public class WindowsIdentity :
+	System.Security.Claims.ClaimsIdentity,
+	IIdentity, IDeserializationCallback, ISerializable, IDisposable {
 		private IntPtr _token;
 		private string _type;
 		private WindowsAccountType _account;
@@ -47,6 +50,9 @@ namespace System.Security.Principal {
 		private SerializationInfo _info;
 
 		static private IntPtr invalidWindows = IntPtr.Zero;
+
+		[NonSerialized]
+		public new const string DefaultIssuer = "AD AUTHORITY";
 
 		[SecurityPermission (SecurityAction.Demand, ControlPrincipal=true)]
 		public WindowsIdentity (IntPtr userToken) 
@@ -106,6 +112,15 @@ namespace System.Security.Principal {
 		public WindowsIdentity (SerializationInfo info, StreamingContext context)
 		{
 			_info = info;
+		}
+
+		internal WindowsIdentity (ClaimsIdentity claimsIdentity, IntPtr userToken)
+			: base (claimsIdentity)
+		{
+			if (userToken != IntPtr.Zero && userToken.ToInt64() > 0)
+			{
+				SetToken (userToken);
+			}
 		}
 
 		[ComVisible (false)]
@@ -168,7 +183,7 @@ namespace System.Security.Principal {
 		}
 
 		// properties
-
+		sealed override
 		public string AuthenticationType {
 			get { return _type; }
 		}
@@ -178,7 +193,8 @@ namespace System.Security.Principal {
 			get { return (_account == WindowsAccountType.Anonymous); }
 		}
 
-		public virtual bool IsAuthenticated
+		override
+		public bool IsAuthenticated
 		{
 			get { return _authenticated; }
 		}
@@ -193,7 +209,8 @@ namespace System.Security.Principal {
 			get { return (_account == WindowsAccountType.System); }
 		}
 
-		public virtual string Name
+		override
+		public string Name
 		{
 			get {
 				if (_name == null) {
@@ -260,6 +277,16 @@ namespace System.Security.Principal {
 			info.AddValue ("m_type", _type);
 			info.AddValue ("m_acctType", _account);
 			info.AddValue ("m_isAuthenticated", _authenticated);
+		}
+
+		internal ClaimsIdentity CloneAsBase ()
+		{
+			return base.Clone();
+		}
+
+		internal IntPtr GetTokenInternal ()
+		{
+			return _token;
 		}
 
 		private void SetToken (IntPtr token) 

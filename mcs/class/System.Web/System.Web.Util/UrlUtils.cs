@@ -54,7 +54,7 @@ namespace System.Web.Util {
 			if (path.StartsWith (appvpath))
 				path = path.Substring (appvpath.Length);
 
-			if (path [0] == '/')
+			if (path.StartsWith("/"))
 				path = path.Length > 1 ? path.Substring (1) : "";
 
 			return Canonic (appvpath + "(" + id + ")/" + path);
@@ -203,9 +203,7 @@ namespace System.Web.Util {
 				return "/";
 
 			string str = String.Join ("/", parts, 0, dest);
-#if NET_2_0
 			str = RemoveDoubleSlashes (str);
-#endif
 			if (isRooted)
 				str = "/" + str;
 			if (endsWithSlash)
@@ -222,17 +220,12 @@ namespace System.Web.Util {
 			if (last > 0) {
 				if (last < url.Length)
 					last++;
-#if NET_2_0
 				return RemoveDoubleSlashes (url.Substring (0, last));
-#else
-				return url.Substring (0, last);
-#endif
 			}
 
 			return "/";
 		}
 
-#if NET_2_0
 		public static string RemoveDoubleSlashes (string input)
 		{
 			// MS VirtualPathUtility removes duplicate '/'
@@ -264,7 +257,6 @@ namespace System.Web.Util {
 
 			return sb.ToString ();
 		}
-#endif
 
 		public static string GetFile (string url)
 		{

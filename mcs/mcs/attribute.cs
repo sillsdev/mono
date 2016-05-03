@@ -258,25 +258,33 @@ namespace Mono.CSharp {
 			Report.Error (1970, loc, "Do not use `{0}' directly. Use `dynamic' keyword instead", GetSignatureForError ());
 		}
 
-		/// <summary>
-		/// This is rather hack. We report many emit attribute error with same error to be compatible with
-		/// csc. But because csc has to report them this way because error came from ilasm we needn't.
-		/// </summary>
-		public void Error_AttributeEmitError (string inner)
+		void Error_AttributeEmitError (string inner)
 		{
 			Report.Error (647, Location, "Error during emitting `{0}' attribute. The reason is `{1}'",
 				      Type.GetSignatureForError (), inner);
 		}
 
+		public void Error_InvalidArgumentValue (TypeSpec attributeType)
+		{
+			Report.Error (591, Location, "Invalid value for argument to `{0}' attribute", attributeType.GetSignatureForError ());
+		}
+
 		public void Error_InvalidSecurityParent ()
 		{
-			Error_AttributeEmitError ("it is attached to invalid parent");
+			Report.Error (7070, Location,
+				"Security attribute `{0}' is not valid on this declaration type. Security attributes are only valid on assembly, type and method declarations",
+				Type.GetSignatureForError ());
 		}
 
 		Attributable Owner {
 			get {
 				return targets [0];
 			}
+		}
+
+		public void SetOwner (Attributable owner)
+		{
+			targets [0] = owner;
 		}
 
 		/// <summary>
@@ -412,7 +420,7 @@ namespace Mono.CSharp {
 			return ((MethodImplOptions) value | all) == all;
 		}
 
-		static bool IsValidArgumentType (TypeSpec t)
+		public static bool IsValidArgumentType (TypeSpec t)
 		{
 			if (t.IsArray) {
 				var ac = (ArrayContainer) t;
@@ -474,10 +482,7 @@ namespace Mono.CSharp {
 				return null;
 			}
 
-			ObsoleteAttribute obsolete_attr = Type.GetAttributeObsolete ();
-			if (obsolete_attr != null) {
-				AttributeTester.Report_ObsoleteMessage (obsolete_attr, Type.GetSignatureForError (), Location, Report);
-			}
+			Type.CheckObsoleteness (context, expression.StartLocation);
 
 			ResolveContext rc = null;
 
@@ -571,8 +576,6 @@ namespace Mono.CSharp {
 					return false;
 				}
 
-				ObsoleteAttribute obsolete_attr;
-
 				if (member is PropertyExpr) {
 					var pi = ((PropertyExpr) member).PropertyInfo;
 
@@ -588,7 +591,9 @@ namespace Mono.CSharp {
 						return false;
 					}
 
-					obsolete_attr = pi.GetAttributeObsolete ();
+//					if (!context.IsObsolete)
+						pi.CheckObsoleteness (ec, member.StartLocation);
+					
 					pi.MemberDefinition.SetIsAssigned ();
 				} else {
 					var fi = ((FieldExpr) member).Spec;
@@ -604,12 +609,11 @@ namespace Mono.CSharp {
 						return false;
 					}
 
-					obsolete_attr = fi.GetAttributeObsolete ();
+//					if (!context.IsObsolete)
+						fi.CheckObsoleteness (ec, member.StartLocation);
+
 					fi.MemberDefinition.SetIsAssigned ();
 				}
-
-				if (obsolete_attr != null && !context.IsObsolete)
-					AttributeTester.Report_ObsoleteMessage (obsolete_attr, member.GetSignatureForError (), member.Location, Report);
 
 				if (a.Type != member.Type) {
 					a.Expr = Convert.ImplicitConversionRequired (ec, a.Expr, member.Type, a.Expr.Location);
@@ -829,7 +833,8 @@ namespace Mono.CSharp {
 		/// </summary>
 		bool IsSecurityActionValid ()
 		{
-			SecurityAction action = GetSecurityActionValue ();
+			Constant c = null;
+			var action = GetSecurityActionValue (ref c);
 			bool for_assembly = Target == AttributeTargets.Assembly || Target == AttributeTargets.Module;
 
 			switch (action) {
@@ -851,19 +856,50 @@ namespace Mono.CSharp {
 					return true;
 				break;
 #pragma warning restore 618
+			case null:
+				Report.Error (7048, loc, "First argument of a security attribute `{0}' must be a valid SecurityAction",
+					Type.GetSignatureForError ());
+				return false;
 
 			default:
-				Error_AttributeEmitError ("SecurityAction is out of range");
+				Report.Error (7049, c.Location, "Security attribute `{0}' has an invalid SecurityAction value `{1}'",
+					Type.GetSignatureForError (), c.GetValueAsLiteral());
 				return false;
 			}
 
-			Error_AttributeEmitError (String.Concat ("SecurityAction `", action, "' is not valid for this declaration"));
+			switch (Target) {
+			case AttributeTargets.Assembly:
+				Report.Error (7050, c.Location, "SecurityAction value `{0}' is invalid for security attributes applied to an assembly",
+					c.GetSignatureForError ());
+				break;
+			default:
+				Report.Error (7051, c.Location, "SecurityAction value `{0}' is invalid for security attributes applied to a type or a method",
+					c.GetSignatureForError ());
+				break;
+			}
+
 			return false;
 		}
 
-		System.Security.Permissions.SecurityAction GetSecurityActionValue ()
+		SecurityAction? GetSecurityActionValue (ref Constant value)
 		{
-			return (SecurityAction) ((Constant) pos_args[0].Expr).GetValue ();
+			if (pos_args == null) {
+				var predefined = context.Module.PredefinedAttributes;
+
+				//
+				// BCL defines System.Security.Permissions.HostProtectionAttribute with parameterless
+				// contructor which should not be valid but it's already part of the framework
+				//
+				if (Type == predefined.HostProtection.TypeSpec) {
+					value = new IntConstant (context.Module.Compiler.BuiltinTypes, (int)SecurityAction.LinkDemand, loc);
+					return SecurityAction.LinkDemand;
+				}
+
+				return null;
+			}
+
+			value = (Constant) pos_args [0].Expr;
+			return (SecurityAction) value.GetValue ();
 		}
 
 		/// <summary>
@@ -873,9 +909,14 @@ namespace Mono.CSharp {
 		public void ExtractSecurityPermissionSet (MethodSpec ctor, ref SecurityType permissions)
 		{
 #if STATIC
-			object[] values = new object[pos_args.Count];
-			for (int i = 0; i < values.Length; ++i)
-				values[i] = ((Constant) pos_args[i].Expr).GetValue ();
+			object[] values;
+			if (pos_args != null) {
+				values = new object[pos_args.Count];
+				for (int i = 0; i < values.Length; ++i)
+					values[i] = ((Constant) pos_args[i].Expr).GetValue ();
+			} else {
+				values = null;
+			}
 
 			PropertyInfo[] prop;
 			object[] prop_values;
@@ -1026,44 +1067,42 @@ namespace Mono.CSharp {
 									return;
 								}
 							} else if (Type == predefined.Guid) {
+								string v = ((StringConstant) arg_expr).Value;
 								try {
-									string v = ((StringConstant) arg_expr).Value;
 									new Guid (v);
-								} catch (Exception e) {
-									Error_AttributeEmitError (e.Message);
+								} catch {
+									Error_InvalidArgumentValue (Type);
 									return;
 								}
 							} else if (Type == predefined.AttributeUsage) {
 								int v = ((IntConstant) ((EnumConstant) arg_expr).Child).Value;
-								if (v == 0) {
-									context.Module.Compiler.Report.Error (591, Location, "Invalid value for argument to `{0}' attribute",
-										"System.AttributeUsage");
-								}
+								if (v == 0)
+									Error_InvalidArgumentValue (Type);
 							} else if (Type == predefined.MarshalAs) {
 								if (pos_args.Count == 1) {
 									var u_type = (UnmanagedType) System.Enum.Parse (typeof (UnmanagedType), ((Constant) pos_args[0].Expr).GetValue ().ToString ());
 									if (u_type == UnmanagedType.ByValArray && !(Owner is FieldBase)) {
-										Error_AttributeEmitError ("Specified unmanaged type is only valid on fields");
+										Report.Error (7055, pos_args [0].Expr.Location, "Unmanaged type `ByValArray' is only valid for fields");
 									}
 								}
 							} else if (Type == predefined.DllImport) {
 								if (pos_args.Count == 1 && pos_args[0].Expr is Constant) {
 									var value = ((Constant) pos_args[0].Expr).GetValue () as string;
 									if (string.IsNullOrEmpty (value))
-										Error_AttributeEmitError ("DllName cannot be empty or null");
+										Error_InvalidArgumentValue (Type);
 								}
 							} else if (Type == predefined.MethodImpl) {
 								if (pos_args.Count == 1) {
 									var value = (int) ((Constant) arg_expr).GetValueAsLong ();
 
 									if (!IsValidMethodImplOption (value)) {
-										Error_AttributeEmitError ("Incorrect argument value");
+										Error_InvalidArgumentValue (Type);
 									}
 								}
 							}
 						}
 
-						arg_expr.EncodeAttributeValue (context, encoder, pt);
+						arg_expr.EncodeAttributeValue (context, encoder, pt, pt);
 					}
 				}
 
@@ -1077,7 +1116,7 @@ namespace Mono.CSharp {
 
 						encoder.Encode (na.Key.Type);
 						encoder.Encode (na.Value.Name);
-						na.Value.Expr.EncodeAttributeValue (context, encoder, na.Key.Type);
+						na.Value.Expr.EncodeAttributeValue (context, encoder, na.Key.Type, na.Key.Type);
 					}
 				} else {
 					encoder.EncodeEmptyNamedArguments ();
@@ -1183,6 +1222,19 @@ namespace Mono.CSharp {
 		public void AddAttributes (List<Attribute> attrs)
 		{
 			Attrs.AddRange (attrs);
+		}
+
+		public static void AttachFromPartial (Attributable target, Attributable partialSrc)
+		{
+			if (target.OptAttributes == null) {
+				target.OptAttributes = partialSrc.OptAttributes;
+			} else {
+				target.OptAttributes.Attrs.AddRange (partialSrc.OptAttributes.Attrs);
+			}
+
+			foreach (var attr in partialSrc.OptAttributes.Attrs) {
+				attr.SetOwner (target);
+			}
 		}
 
 		public void AttachTo (Attributable attributable, IMemberContext context)
@@ -1527,7 +1579,7 @@ namespace Mono.CSharp {
 			Encode ((byte) 0x54); // property
 			Encode (property.MemberType);
 			Encode (property.Name);
-			value.EncodeAttributeValue (null, this, property.MemberType);
+			value.EncodeAttributeValue (null, this, property.MemberType, property.MemberType);
 		}
 
 		//
@@ -1539,7 +1591,7 @@ namespace Mono.CSharp {
 			Encode ((byte) 0x53); // field
 			Encode (field.MemberType);
 			Encode (field.Name);
-			value.EncodeAttributeValue (null, this, field.MemberType);
+			value.EncodeAttributeValue (null, this, field.MemberType, field.MemberType);
 		}
 
 		public void EncodeNamedArguments<T> (T[] members, Constant[] values) where T : MemberSpec, IInterfaceMemberSpec
@@ -1559,7 +1611,7 @@ namespace Mono.CSharp {
 
 				Encode (member.MemberType);
 				Encode (member.Name);
-				values [i].EncodeAttributeValue (null, this, member.MemberType);
+				values [i].EncodeAttributeValue (null, this, member.MemberType, member.MemberType);
 			}
 		}
 
@@ -1666,6 +1718,7 @@ namespace Mono.CSharp {
 		public readonly PredefinedDebuggerBrowsableAttribute DebuggerBrowsable;
 		public readonly PredefinedAttribute DebuggerStepThrough;
 		public readonly PredefinedDebuggableAttribute Debuggable;
+		public readonly PredefinedAttribute HostProtection;
 
 		// New in .NET 3.5
 		public readonly PredefinedAttribute Extension;
@@ -1685,7 +1738,6 @@ namespace Mono.CSharp {
 		public readonly PredefinedAttribute FieldOffset;
 		public readonly PredefinedAttribute AssemblyProduct;
 		public readonly PredefinedAttribute AssemblyCompany;
-		public readonly PredefinedAttribute AssemblyDescription;
 		public readonly PredefinedAttribute AssemblyCopyright;
 		public readonly PredefinedAttribute AssemblyTrademark;
 		public readonly PredefinedAttribute CallerMemberNameAttribute;
@@ -1721,6 +1773,7 @@ namespace Mono.CSharp {
 			DefaultParameterValue = new PredefinedAttribute (module, "System.Runtime.InteropServices", "DefaultParameterValueAttribute");
 			OptionalParameter = new PredefinedAttribute (module, "System.Runtime.InteropServices", "OptionalAttribute");
 			UnverifiableCode = new PredefinedAttribute (module, "System.Security", "UnverifiableCodeAttribute");
+			HostProtection = new PredefinedAttribute (module, "System.Security.Permissions", "HostProtectionAttribute");
 
 			DefaultCharset = new PredefinedAttribute (module, "System.Runtime.InteropServices", "DefaultCharSetAttribute");
 			TypeForwarder = new PredefinedAttribute (module, "System.Runtime.CompilerServices", "TypeForwardedToAttribute");
@@ -1745,7 +1798,6 @@ namespace Mono.CSharp {
 			FieldOffset = new PredefinedAttribute (module, "System.Runtime.InteropServices", "FieldOffsetAttribute");
 			AssemblyProduct = new PredefinedAttribute (module, "System.Reflection", "AssemblyProductAttribute");
 			AssemblyCompany = new PredefinedAttribute (module, "System.Reflection", "AssemblyCompanyAttribute");
-			AssemblyDescription = new PredefinedAttribute (module, "System.Reflection", "AssemblyDescriptionAttribute");
 			AssemblyCopyright = new PredefinedAttribute (module, "System.Reflection", "AssemblyCopyrightAttribute");
 			AssemblyTrademark = new PredefinedAttribute (module, "System.Reflection", "AssemblyTrademarkAttribute");
 
@@ -1961,8 +2013,8 @@ namespace Mono.CSharp {
 
 			int[] bits = decimal.GetBits (value);
 			AttributeEncoder encoder = new AttributeEncoder ();
-			encoder.Encode ((byte) (bits[3] >> 16));
-			encoder.Encode ((byte) (bits[3] >> 31));
+			encoder.Encode ((byte) ((bits[3] & 0xFF0000) >> 16)); // Scale
+			encoder.Encode ((byte) ((bits[3] >> 31) << 7)); // Sign encoded as 0x80 for negative, 0x0 for possitive
 			encoder.Encode ((uint) bits[2]);
 			encoder.Encode ((uint) bits[1]);
 			encoder.Encode ((uint) bits[0]);

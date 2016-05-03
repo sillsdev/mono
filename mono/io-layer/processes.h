@@ -10,6 +10,9 @@
 #ifndef _WAPI_PROCESSES_H_
 #define _WAPI_PROCESSES_H_
 
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 #include <glib.h>
 
 #include <mono/io-layer/handles.h>
@@ -104,13 +107,13 @@ typedef struct _WapiShellExecuteInfo WapiShellExecuteInfo;
 struct _WapiShellExecuteInfo
 {
 	guint32 cbSize;
-	WapiShellExecuteInfoFlags fMask;
+	gulong fMask;
 	gpointer hwnd;
 	const gunichar2 *lpVerb;
 	const gunichar2 *lpFile;
 	const gunichar2 *lpParameters;
 	const gunichar2 *lpDirectory;
-	WapiShellExecuteShowFlags nShow;
+	gulong nShow;
 	gpointer hInstApp;
 	gpointer lpIDList;
 	const gunichar2 *lpClass;
@@ -188,8 +191,6 @@ extern gboolean CreateProcessWithLogonW (const gunichar2 *username,
 
 extern gpointer GetCurrentProcess (void);
 extern guint32 GetProcessId (gpointer handle);
-extern guint32 GetCurrentProcessId (void);
-extern gboolean EnumProcesses (guint32 *pids, guint32 len, guint32 *needed);
 extern gboolean CloseProcess (gpointer handle);
 extern gpointer OpenProcess (guint32 access, gboolean inherit, guint32 pid);
 extern gboolean GetExitCodeProcess (gpointer process, guint32 *code);

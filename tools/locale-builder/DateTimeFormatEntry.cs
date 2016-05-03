@@ -48,34 +48,23 @@ namespace Mono.Tools.LocaleBuilder
 		public string[] DayNames = new string[Constants.NUM_DAYS];
 		public int? FirstDayOfWeek;
 		public string RawFullDateTimePattern;
-		public string LongDatePattern;
-		public string LongTimePattern;
 		public string MonthDayPattern;
 		public string[] MonthGenitiveNames = new string[Constants.NUM_MONTHS];
 		public string[] MonthNames = new string[Constants.NUM_MONTHS];
 		public string PMDesignator;
-		public string ShortDatePattern;
-		public string ShortTimePattern;
 		public string TimeSeparator;
-		public string YearMonthPattern;
 		public string[] ShortDatePatterns = new string[Constants.NUM_SHORT_DATE_PATTERNS];
 		public string[] LongDatePatterns = new string[Constants.NUM_LONG_DATE_PATTERNS];
 		public string[] ShortTimePatterns = new string[Constants.NUM_SHORT_TIME_PATTERNS];
 		public string[] LongTimePatterns = new string[Constants.NUM_LONG_TIME_PATTERNS];
 		public string[] ShortestDayNames = new string[Constants.NUM_DAYS];
+		public string[] YearMonthPatterns = new string[Constants.NUM_YEAR_MONTH_PATTERNS];
 
 		public int Row;
 
 		public void AppendTableRow (StringBuilder builder)
 		{
 			builder.Append ("\t{");
-			builder.Append (EncodeStringIdx (LongDatePattern) + ", ");
-			builder.Append (EncodeStringIdx (ShortDatePattern) + ", ");
-
-			builder.Append (EncodeStringIdx (LongTimePattern) + ", ");
-			builder.Append (EncodeStringIdx (ShortTimePattern) + ", ");
-
-			builder.Append (EncodeStringIdx (YearMonthPattern) + ", ");
 			builder.Append (EncodeStringIdx (MonthDayPattern) + ", ");
 
 			builder.Append (EncodeStringIdx (AMDesignator) + ", ");
@@ -104,6 +93,8 @@ namespace Mono.Tools.LocaleBuilder
 			AppendPatterns (builder, ShortTimePatterns);
 			builder.Append (',');
 			AppendPatterns (builder, LongTimePatterns);
+			builder.Append (',');
+			AppendPatterns (builder, YearMonthPatterns);
 
 			builder.Append ('}');
 		}

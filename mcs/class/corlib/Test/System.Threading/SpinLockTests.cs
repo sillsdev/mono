@@ -1,4 +1,3 @@
-#if NET_4_0
 //
 // SpinLockTests.cs
 //
@@ -85,6 +84,9 @@ namespace MonoTests.System.Threading
 
 			sl.TryEnter (ref taken2);
 			Assert.IsTrue (taken2, "#3");
+
+			sl.Exit ();
+			Assert.IsFalse (sl.IsHeld);
 		}
 
 		[Test, ExpectedException (typeof (ArgumentException))]
@@ -153,4 +155,3 @@ namespace MonoTests.System.Threading
 		}
 	}
 }
-#endif

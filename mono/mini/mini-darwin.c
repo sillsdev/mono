@@ -44,11 +44,11 @@
 #include <mono/metadata/verify-internals.h>
 #include <mono/metadata/mempool-internals.h>
 #include <mono/metadata/attach.h>
-#include <mono/metadata/gc-internal.h>
+#include <mono/metadata/gc-internals.h>
 #include <mono/utils/mono-math.h>
 #include <mono/utils/mono-compiler.h>
 #include <mono/utils/mono-counters.h>
-#include <mono/utils/mono-logger-internal.h>
+#include <mono/utils/mono-logger-internals.h>
 #include <mono/utils/mono-mmap.h>
 #include <mono/utils/dtrace.h>
 
@@ -239,22 +239,30 @@ mono_runtime_install_handlers (void)
 pid_t
 mono_runtime_syscall_fork ()
 {
+#ifdef HAVE_FORK
 	return (pid_t) fork ();
+#else
+	g_assert_not_reached ();
+#endif
 }
 
 void
 mono_gdb_render_native_backtraces (pid_t crashed_pid)
 {
+#ifdef HAVE_EXECV
 	const char *argv [5];
 	char template [] = "/tmp/mono-gdb-commands.XXXXXX";
 	FILE *commands;
 	gboolean using_lldb = FALSE;
 
+	using_lldb = TRUE;
+
 	argv [0] = g_find_program_in_path ("gdb");
-	if (!argv [0]) {
+	if (argv [0])
+		using_lldb = FALSE;
+
+	if (using_lldb)
 		argv [0] = g_find_program_in_path ("lldb");
-		using_lldb = TRUE;
-	}
 
 	if (argv [0] == NULL)
 		return;
@@ -265,8 +273,8 @@ mono_gdb_render_native_backtraces (pid_t crashed_pid)
 	commands = fopen (template, "w");
 	if (using_lldb) {
 		fprintf (commands, "process attach --pid %ld\n", (long) crashed_pid);
-		fprintf (commands, "script lldb.debugger.HandleCommand (\"thread list\")\n");
-		fprintf (commands, "script lldb.debugger.HandleCommand (\"thread backtrace all\")\n");
+		fprintf (commands, "thread list\n");
+		fprintf (commands, "thread backtrace all\n");
 		fprintf (commands, "detach\n");
 		fprintf (commands, "quit\n");
 		argv [1] = "--source";
@@ -276,6 +284,7 @@ mono_gdb_render_native_backtraces (pid_t crashed_pid)
 	} else {
 		fprintf (commands, "attach %ld\n", (long) crashed_pid);
 		fprintf (commands, "info threads\n");
+		fprintf (commands, " t a a info thread\n");
 		fprintf (commands, "thread apply all bt\n");
 		argv [1] = "-batch";
 		argv [2] = "-x";
@@ -285,12 +294,17 @@ mono_gdb_render_native_backtraces (pid_t crashed_pid)
 	fflush (commands);
 	fclose (commands);
 
+	fclose (stdin);
+
 	execv (argv [0], (char**)argv);
 	unlink (template);
+#else
+	fprintf (stderr, "mono_gdb_render_native_backtraces not supported on this platform\n");
+#endif // HAVE_EXECV
 }
 
 gboolean
-mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoNativeThreadId thread_id, MonoNativeThreadHandle thread_handle)
+mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoThreadInfo *info)
 {
 	kern_return_t ret;
 	mach_msg_type_number_t num_state;
@@ -299,9 +313,10 @@ mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoNativeThrea
 	mcontext_t mctx;
 	MonoJitTlsData *jit_tls;
 	void *domain;
-	MonoLMF *lmf;
-	MonoThreadInfo *info;
+	MonoLMF *lmf = NULL;
+	gpointer *addr;
 
+	g_assert (info);
 	/*Zero enough state to make sure the caller doesn't confuse itself*/
 	tctx->valid = FALSE;
 	tctx->unwind_data [MONO_UNWIND_DATA_DOMAIN] = NULL;
@@ -311,7 +326,7 @@ mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoNativeThrea
 	state = (thread_state_t) alloca (mono_mach_arch_get_thread_state_size ());
 	mctx = (mcontext_t) alloca (mono_mach_arch_get_mcontext_size ());
 
-	ret = mono_mach_arch_get_thread_state (thread_handle, state, &num_state);
+	ret = mono_mach_arch_get_thread_state (info->native_handle, state, &num_state);
 	if (ret != KERN_SUCCESS)
 		return FALSE;
 
@@ -320,17 +335,10 @@ mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoNativeThrea
 
 	mono_sigctx_to_monoctx (&ctx, &tctx->ctx);
 
-	info = mono_thread_info_lookup (thread_id);
-
-	if (info) {
-		/* mono_set_jit_tls () sets this */
-		jit_tls = mono_thread_info_tls_get (info, TLS_KEY_JIT_TLS);
-		/* SET_APPDOMAIN () sets this */
-		domain = mono_thread_info_tls_get (info, TLS_KEY_DOMAIN);
-	} else {
-		jit_tls = NULL;
-		domain = NULL;
-	}
+	/* mono_set_jit_tls () sets this */
+	jit_tls = mono_thread_info_tls_get (info, TLS_KEY_JIT_TLS);
+	/* SET_APPDOMAIN () sets this */
+	domain = mono_thread_info_tls_get (info, TLS_KEY_DOMAIN);
 
 	/*Thread already started to cleanup, can no longer capture unwind state*/
 	if (!jit_tls || !domain)
@@ -341,15 +349,11 @@ mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoNativeThrea
 	 * arch-specific code. But the address of the TLS variable is stored in another TLS variable which
 	 * can be accessed through MonoThreadInfo.
 	 */
-	lmf = NULL;
-	if (info) {
-		gpointer *addr;
+	/* mono_set_lmf_addr () sets this */
+	addr = mono_thread_info_tls_get (info, TLS_KEY_LMF_ADDR);
+	if (addr)
+		lmf = *addr;
 
-		/* mono_set_lmf_addr () sets this */
-		addr = mono_thread_info_tls_get (info, TLS_KEY_LMF_ADDR);
-		if (addr)
-			lmf = *addr;
-	}
 
 	tctx->unwind_data [MONO_UNWIND_DATA_DOMAIN] = domain;
 	tctx->unwind_data [MONO_UNWIND_DATA_JIT_TLS] = jit_tls;

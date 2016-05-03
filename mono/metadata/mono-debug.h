@@ -16,6 +16,7 @@ typedef struct _MonoSymbolTable			MonoSymbolTable;
 typedef struct _MonoDebugDataTable		MonoDebugDataTable;
 
 typedef struct _MonoSymbolFile			MonoSymbolFile;
+typedef struct _MonoPPDBFile			MonoPPDBFile;
 
 typedef struct _MonoDebugHandle			MonoDebugHandle;
 
@@ -74,6 +75,7 @@ struct _MonoDebugHandle {
 	MonoImage *image;
 	MonoDebugDataTable *type_table;
 	MonoSymbolFile *symfile;
+	MonoPPDBFile *ppdb;
 };
 
 struct _MonoDebugMethodJitInfo {
@@ -149,9 +151,6 @@ struct _MonoDebugVarInfo {
 #define MONO_DEBUGGER_MINOR_VERSION			6
 #define MONO_DEBUGGER_MAGIC				0x7aff65af4253d427ULL
 
-MONO_API void mono_debug_list_add (MonoDebugList **list, const void* data);
-MONO_API void mono_debug_list_remove (MonoDebugList **list, const void* data);
-
 MONO_API void mono_debug_init (MonoDebugFormat format);
 MONO_API void mono_debug_open_image_from_memory (MonoImage *image, const mono_byte *raw_contents, int size);
 MONO_API void mono_debug_cleanup (void);
@@ -185,6 +184,9 @@ mono_debug_add_delegate_trampoline (void* code, int size);
 
 MONO_API MonoDebugLocalsInfo*
 mono_debug_lookup_locals (MonoMethod *method);
+
+MonoDebugSourceLocation *
+mono_debug_method_lookup_location (MonoDebugMethodInfo *minfo, int il_offset);
 
 /*
  * Line number support.

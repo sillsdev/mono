@@ -7,7 +7,6 @@
 // (C) 2005 John Luke
 //
 
-#if NET_2_0
 
 using NUnit.Framework;
 using System;
@@ -88,7 +87,7 @@ namespace MonoTests.System.Net.Mime
 		}
 
 		[Test]
-		[ExpectedException (typeof (FormatException))]
+		[ExpectedException (typeof (IndexOutOfRangeException))]
 		public void FormatException ()
 		{
 			new ContentDisposition ("");
@@ -116,8 +115,7 @@ namespace MonoTests.System.Net.Mime
 		[Test]
 		public void ToStringTest ()
 		{
-			string rfc822 = "dd MMM yyyy HH':'mm':'ss zz00";
-			string modification_date = DateTime.MaxValue.ToString (rfc822);
+			string modification_date = "Fri, 31 Dec 9999 23:59:59 -0000";
 			string to_string = cd.ToString ();
 			Assert.IsTrue (to_string.StartsWith ("attachment; "), "#1");
 			Assert.IsTrue (to_string.Contains ("modification-date=\"" + modification_date + "\""), "#2");
@@ -149,4 +147,3 @@ namespace MonoTests.System.Net.Mime
 		}
 	}
 }
-#endif

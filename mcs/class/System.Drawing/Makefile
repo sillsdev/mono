@@ -4,21 +4,15 @@ SUBDIRS =
 
 LIBRARY = System.Drawing.dll
 
-LIB_MCS_FLAGS = /unsafe /r:$(corlib) /r:System.dll \
+LIB_REFS = System
+LIB_MCS_FLAGS = /unsafe /r:$(corlib) \
 	-resource:Assembly/Mono.ico,Mono.ico -resource:Assembly/Information.ico,Information.ico \
 	-resource:Assembly/Error.ico,Error.ico -resource:Assembly/Warning.ico,Warning.ico \
 	-resource:Assembly/Question.ico,Question.ico -resource:Assembly/Shield.ico,Shield.ico
 
 TEST_MCS_FLAGS = $(LIB_MCS_FLAGS) -define:TEST -resource:Test/resources/indexed.png,indexed.png \
 	 -r:System.Drawing.dll -r:System.Runtime.Serialization.Formatters.Soap.dll -r:System.Xml.dll \
-	-nowarn:0618 -nowarn:219 -nowarn:169 -nowarn:1595
-
-ifeq (net_1_1_java, $(PROFILE))
-LIB_MCS_FLAGS +=				\
-	-r:System.Xml.dll			\
-	-r:rt.dll				\
-	-r:J2SE.Helpers.dll
-endif
+	-nowarn:0618 -nowarn:219 -nowarn:169
 
 include ../../build/library.make
 

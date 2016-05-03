@@ -254,6 +254,30 @@ namespace MonoTests.System.Web {
 		{
 			HttpContext.Current.Request.MapPath ("Web.config", "something", false);
 		}
+	
+		[Test]
+		[ExpectedException (typeof (PlatformNotSupportedException))]
+		public void ReadOnlyHeadersAdd ()
+		{
+			var r = new HttpRequest ("file", "http://www.gnome.org", "key=value&key2=value%32second");
+			r.Headers.Add ("a","a");
+		}
+
+		[Test]
+		[ExpectedException (typeof (PlatformNotSupportedException))]
+		public void ReadOnlyHeadersSet ()
+		{
+			var r = new HttpRequest ("file", "http://www.gnome.org", "key=value&key2=value%32second");
+			r.Headers.Set ("a","a");
+		}
+
+		[Test]
+		[ExpectedException (typeof (PlatformNotSupportedException))]
+		public void ReadOnlyHeadersRemove ()
+		{
+			var r = new HttpRequest ("file", "http://www.gnome.org", "key=value&key2=value%32second");
+			r.Headers.Remove ("a");
+		}
 	}
 	
 	[TestFixture]
@@ -560,11 +584,7 @@ namespace MonoTests.System.Web {
 		{
 			HttpContext c = Cook (1);
 
-#if NET_2_0
 			Assert.IsNull (c.Request.ApplicationPath, "A1");
-#else
-			Assert.AreEqual ("AppPath", c.Request.ApplicationPath, "A1");
-#endif
 			Assert.AreEqual ("text/plain", c.Request.ContentType, "A2");
 
 			c = Cook (0);
@@ -713,7 +733,6 @@ namespace MonoTests.System.Web {
 			Assert.AreEqual (c.Request.QueryString.ToString (), "Plain&Arg=1", "QTS#2");
 		}
 
-#if NET_2_0
 		[Test]
 		public void QueryString_NullTest ()
 		{
@@ -721,7 +740,6 @@ namespace MonoTests.System.Web {
 			
 			Assert.AreEqual (req.QueryString.ToString (), "", "QSNT#1");
 		}
-#endif
 		
 		[Test]
 		public void Leading_qm_in_QueryString ()

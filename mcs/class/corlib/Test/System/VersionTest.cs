@@ -212,7 +212,6 @@ namespace MonoTests.System
 			Version v2 = new Version (1, 2, 3, 4);
 			Assert.AreEqual (v1.GetHashCode (), v2.GetHashCode (), "HashCode");
 		}
-#if NET_2_0
 		[Test]
 		public void MajorMinorRevisions ()
 		{
@@ -249,9 +248,7 @@ namespace MonoTests.System
 			Version v1235 = new Version (1, 2, 3, 5);
 			Assert.AreEqual (1, v1235.CompareTo (v1234), "1235-1234");
 		}
-#endif
 
-#if NET_4_0
 		[Test]
 		public void Parse ()
 		{
@@ -361,6 +358,5 @@ namespace MonoTests.System
 			Assert.AreEqual (null, result, "#L1");
 			Assert.AreEqual (false, success, "#L2");
 		}
-#endif
 	}
 }

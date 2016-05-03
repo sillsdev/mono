@@ -1,6 +1,7 @@
-// CS0573: `A.a': Structs cannot have instance field initializers
-// Line: 5
+// CS0573: 'S': Structs cannot have instance property or field initializers
+// Line: 6
 
-partial struct A {
-	int a = 1;
+struct S
+{
+	public int Prop { get; set; } = 3;
 }

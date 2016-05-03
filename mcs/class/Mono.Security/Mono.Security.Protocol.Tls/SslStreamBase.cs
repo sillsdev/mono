@@ -31,6 +31,8 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 
+using Mono.Security.Interface;
+
 namespace Mono.Security.Protocol.Tls
 {
 #if INSIDE_SYSTEM
@@ -98,16 +100,9 @@ namespace Mono.Security.Protocol.Tls
 				{
 					this.EndNegotiateHandshake(asyncResult);
 				}
-				catch (TlsException ex)
-				{
-					this.protocol.SendAlert(ex.Alert);
-
-					throw new IOException("The authentication or decryption has failed.", ex);
-				}
 				catch (Exception ex)
 				{
-					this.protocol.SendAlert(AlertDescription.InternalError);
-
+					this.protocol.SendAlert(ref ex);
 					throw new IOException("The authentication or decryption has failed.", ex);
 				}
 
@@ -502,17 +497,10 @@ namespace Mono.Security.Protocol.Tls
 					}
 				}
 			}
-			catch (TlsException ex)
-			{
-				this.negotiationComplete.Set();
-				this.protocol.SendAlert(ex.Alert);
-
-				throw new IOException("The authentication or decryption has failed.", ex);
-			}
 			catch (Exception ex)
 			{
 				this.negotiationComplete.Set();
-				this.protocol.SendAlert(AlertDescription.InternalError);
+				this.protocol.SendAlert(ref ex);
 
 				throw new IOException("The authentication or decryption has failed.", ex);
 			}
@@ -615,6 +603,9 @@ namespace Mono.Security.Protocol.Tls
 				{
 					asyncResult.SetComplete(preReadSize);
 				}
+				else if (recordStream.Position < recordStream.Length) {
+					InternalReadCallback_inner (asyncResult, recbuf, new object[] { recbuf, asyncResult }, false, 0);
+				}
 				else if (!this.context.ReceivedConnectionEnd)
 				{
 					// this will read data from the network until we have (at least) one
@@ -628,15 +619,10 @@ namespace Mono.Security.Protocol.Tls
 					asyncResult.SetComplete(0);
 				}
 			}
-			catch (TlsException ex)
-			{
-				this.protocol.SendAlert(ex.Alert);
-
-				throw new IOException("The authentication or decryption has failed.", ex);
-			}
 			catch (Exception ex)
 			{
-				throw new IOException("IO exception during read.", ex);
+				this.protocol.SendAlert(ref ex);
+				throw new IOException("The authentication or decryption has failed.", ex);
 			}
 		}
 
@@ -647,15 +633,14 @@ namespace Mono.Security.Protocol.Tls
 		// record and return are the records (may be more than one) we have
 		private void InternalReadCallback(IAsyncResult result)
 		{
-			if (this.disposed)
-				return;
-
 			object[] state = (object[])result.AsyncState;
 			byte[] recbuf = (byte[])state[0];
 			InternalAsyncResult internalResult = (InternalAsyncResult)state[1];
 
 			try
 			{
+				this.checkDisposed();
+				
 				int n = innerStream.EndRead(result);
 				if (n > 0)
 				{
@@ -669,6 +654,24 @@ namespace Mono.Security.Protocol.Tls
 					return;
 				}
 
+				InternalReadCallback_inner(internalResult, recbuf, state, true, n);
+			}
+			catch (Exception ex)
+			{
+				internalResult.SetComplete(ex);
+			}
+
+		}
+
+		// read encrypted data until we have enough to decrypt (at least) one
+		// record and return are the records (may be more than one) we have
+		private void InternalReadCallback_inner(InternalAsyncResult internalResult, byte[] recbuf, object[] state, bool didRead, int n)
+		{
+			if (this.disposed)
+				return;
+
+			try
+			{
 				bool dataToReturn = false;
 				long pos = recordStream.Position;
 
@@ -732,7 +735,7 @@ namespace Mono.Security.Protocol.Tls
 						pos = 0;
 				}
 
-				if (!dataToReturn && (n > 0))
+				if (!dataToReturn && (!didRead || (n > 0)))
 				{
 					if (context.ReceivedConnectionEnd) {
 						internalResult.SetComplete (0);
@@ -763,7 +766,6 @@ namespace Mono.Security.Protocol.Tls
 			{
 				internalResult.SetComplete(ex);
 			}
-
 		}
 
 		private void InternalBeginWrite(InternalAsyncResult asyncResult)
@@ -781,28 +783,22 @@ namespace Mono.Security.Protocol.Tls
 						record, 0, record.Length, new AsyncCallback(InternalWriteCallback), asyncResult);
 				}
 			}
-			catch (TlsException ex)
+			catch (Exception ex)
 			{
-				this.protocol.SendAlert(ex.Alert);
+				this.protocol.SendAlert (ref ex);
 				this.Close();
 
 				throw new IOException("The authentication or decryption has failed.", ex);
-			}
-			catch (Exception ex)
-			{
-				throw new IOException("IO exception during Write.", ex);
 			}
 		}
 
 		private void InternalWriteCallback(IAsyncResult ar)
 		{
-			if (this.disposed)
-				return;
-			
 			InternalAsyncResult internalResult = (InternalAsyncResult)ar.AsyncState;
 
 			try
 			{
+				this.checkDisposed();
 				this.innerStream.EndWrite(ar);
 				internalResult.SetComplete();
 			}
@@ -1045,6 +1041,7 @@ namespace Mono.Security.Protocol.Tls
 
 							if (remainder > 0) {
 								recordStream.Write (outofrecord, 0, outofrecord.Length);
+								recordStream.Position = 0;
 							}
 
 							if (dataToReturn) {
@@ -1121,15 +1118,11 @@ namespace Mono.Security.Protocol.Tls
 					byte[] record = this.protocol.EncodeRecord (ContentType.ApplicationData, buffer, offset, count);
 					this.innerStream.Write (record, 0, record.Length);
 				}
-				catch (TlsException ex)
-				{
-					this.protocol.SendAlert(ex.Alert);
-					this.Close();
-					throw new IOException("The authentication or decryption has failed.", ex);
-				}
 				catch (Exception ex)
 				{
-					throw new IOException("IO exception during Write.", ex);
+					this.protocol.SendAlert(ref ex);
+					this.Close();
+					throw new IOException("The authentication or decryption has failed.", ex);
 				}
 			}
 		}

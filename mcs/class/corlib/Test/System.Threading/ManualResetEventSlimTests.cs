@@ -27,7 +27,6 @@
 //
 //
 
-#if NET_4_0
 
 using System;
 using System.Threading;
@@ -54,7 +53,7 @@ namespace MonoTests.System.Threading
 		public void Constructor_Defaults ()
 		{
 			Assert.IsFalse (mre.IsSet, "#1");
-			Assert.AreEqual (10, mre.SpinCount, "#2");
+			Assert.AreEqual (Environment.ProcessorCount == 1 ? 1 : 10, mre.SpinCount, "#2");
 		}
 
 		[Test]
@@ -230,7 +229,7 @@ namespace MonoTests.System.Threading
 				int count = 2;
 				SpinWait wait = new SpinWait ();
 
-				ThreadPool.QueueUserWorkItem (_ => { mre.Set (); Interlocked.Decrement (ref count); });
+				ThreadPool.QueueUserWorkItem (_ => { while (count > 1) wait.SpinOnce (); mre.Set (); Interlocked.Decrement (ref count); });
 				ThreadPool.QueueUserWorkItem (_ => { mre.Reset (); Interlocked.Decrement (ref count); });
 
 				while (count > 0)
@@ -306,4 +305,3 @@ namespace MonoTests.System.Threading
 		}
 	}
 }
-#endif

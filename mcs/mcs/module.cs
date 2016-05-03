@@ -16,6 +16,9 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Mono.CompilerServices.SymbolWriter;
 using System.Linq;
+using System.IO;
+using System.Security.Cryptography;
+using Mono.Security.Cryptography;
 
 #if STATIC
 using IKVM.Reflection;
@@ -39,13 +42,14 @@ namespace Mono.CSharp
 		sealed class StaticDataContainer : CompilerGeneratedContainer
 		{
 			readonly Dictionary<int, Struct> size_types;
-			int fields;
+			readonly Dictionary<string, FieldSpec> data_hashes;
 
 			public StaticDataContainer (ModuleContainer module)
-				: base (module, new MemberName ("<PrivateImplementationDetails>" + module.builder.ModuleVersionId.ToString ("B"), Location.Null),
+				: base (module, new MemberName ("<PrivateImplementationDetails>", Location.Null),
 					Modifiers.STATIC | Modifiers.INTERNAL)
 			{
 				size_types = new Dictionary<int, Struct> ();
+				data_hashes = new Dictionary<string, FieldSpec> (StringComparer.Ordinal);
 			}
 
 			public override void CloseContainer ()
@@ -76,13 +80,27 @@ namespace Mono.CSharp
 					size_type.TypeBuilder.__SetLayout (1, data.Length);
 				}
 
-				var name = "$field-" + fields.ToString ("X");
-				++fields;
-				const Modifiers fmod = Modifiers.STATIC | Modifiers.INTERNAL;
-				var fbuilder = TypeBuilder.DefineField (name, size_type.CurrentType.GetMetaInfo (), ModifiersExtensions.FieldAttr (fmod) | FieldAttributes.HasFieldRVA);
-				fbuilder.__SetDataAndRVA (data);
+				FieldSpec fs;
+				var data_hash = GenerateDataFieldName (data);
+				if (!data_hashes.TryGetValue (data_hash, out fs)) {
+					var name = "$field-" + data_hash;
+					const Modifiers fmod = Modifiers.STATIC | Modifiers.INTERNAL | Modifiers.READONLY;
+					var fbuilder = TypeBuilder.DefineField (name, size_type.CurrentType.GetMetaInfo (), ModifiersExtensions.FieldAttr (fmod) | FieldAttributes.HasFieldRVA);
+					fbuilder.__SetDataAndRVA (data);
 
-				return new FieldSpec (CurrentType, null, size_type.CurrentType, fbuilder, fmod);
+					fs = new FieldSpec (CurrentType, null, size_type.CurrentType, fbuilder, fmod);
+					data_hashes.Add (data_hash, fs);
+				}
+
+				return fs;
+			}
+
+			static string GenerateDataFieldName (byte[] bytes)
+			{
+				using (var hashProvider = new SHA1CryptoServiceProvider ())
+				{
+					return CryptoConvert.ToHex (hashProvider.ComputeHash (bytes));
+				}
 			}
 		}
 
@@ -105,6 +123,141 @@ namespace Mono.CSharp
 		}
 #endif
 
+		public sealed class PatternMatchingHelper : CompilerGeneratedContainer
+		{
+			public PatternMatchingHelper (ModuleContainer module)
+				: base (module, new MemberName ("<PatternMatchingHelper>", Location.Null),
+					Modifiers.STATIC | Modifiers.INTERNAL | Modifiers.DEBUGGER_HIDDEN)
+			{
+			}
+
+			public Method NumberMatcher { get; private set; }
+
+			protected override bool DoDefineMembers ()
+			{
+				if (!base.DoDefineMembers ())
+					return false;
+
+				NumberMatcher = GenerateNumberMatcher ();
+				return true;
+			}
+
+			Method GenerateNumberMatcher ()
+			{
+				var loc = Location;
+				var parameters = ParametersCompiled.CreateFullyResolved (
+					new [] {
+						new Parameter (new TypeExpression (Compiler.BuiltinTypes.Object, loc), "obj", 0, null, loc),
+						new Parameter (new TypeExpression (Compiler.BuiltinTypes.Object, loc), "value", 0, null, loc),
+						new Parameter (new TypeExpression (Compiler.BuiltinTypes.Bool, loc), "enumType", 0, null, loc),
+					},
+					new [] {
+						Compiler.BuiltinTypes.Object,
+						Compiler.BuiltinTypes.Object,
+						Compiler.BuiltinTypes.Bool
+					});
+
+				var m = new Method (this, new TypeExpression (Compiler.BuiltinTypes.Bool, loc),
+					Modifiers.PUBLIC | Modifiers.STATIC | Modifiers.DEBUGGER_HIDDEN, new MemberName ("NumberMatcher", loc),
+					parameters, null);
+
+				parameters [0].Resolve (m, 0);
+				parameters [1].Resolve (m, 1);
+				parameters [2].Resolve (m, 2);
+
+				ToplevelBlock top_block = new ToplevelBlock (Compiler, parameters, loc);
+				m.Block = top_block;
+
+				//
+				// if (enumType)
+				//		return Equals (obj, value);
+				//
+				var equals_args = new Arguments (2);
+				equals_args.Add (new Argument (top_block.GetParameterReference (0, loc)));
+				equals_args.Add (new Argument (top_block.GetParameterReference (1, loc)));
+
+				var if_type = new If (
+					              top_block.GetParameterReference (2, loc),
+					              new Return (new Invocation (new SimpleName ("Equals", loc), equals_args), loc),
+					              loc);
+
+				top_block.AddStatement (if_type);
+
+				//
+				// if (obj is Enum || obj == null)
+				//		return false;
+				//
+
+				var if_enum = new If (
+					              new Binary (Binary.Operator.LogicalOr,
+						              new Is (top_block.GetParameterReference (0, loc), new TypeExpression (Compiler.BuiltinTypes.Enum, loc), loc),
+						              new Binary (Binary.Operator.Equality, top_block.GetParameterReference (0, loc), new NullLiteral (loc))),
+					              new Return (new BoolLiteral (Compiler.BuiltinTypes, false, loc), loc),
+					              loc);
+
+				top_block.AddStatement (if_enum);
+
+
+				var system_convert = new MemberAccess (new QualifiedAliasMember ("global", "System", loc), "Convert", loc);
+				var expl_block = new ExplicitBlock (top_block, loc, loc);
+
+				//
+				// var converted = System.Convert.ChangeType (obj, System.Convert.GetTypeCode (value));
+				//
+				var lv_converted = LocalVariable.CreateCompilerGenerated (Compiler.BuiltinTypes.Object, top_block, loc);
+
+				var arguments_gettypecode = new Arguments (1);
+				arguments_gettypecode.Add (new Argument (top_block.GetParameterReference (1, loc)));
+
+				var gettypecode = new Invocation (new MemberAccess (system_convert, "GetTypeCode", loc), arguments_gettypecode);
+
+				var arguments_changetype = new Arguments (1);
+				arguments_changetype.Add (new Argument (top_block.GetParameterReference (0, loc)));
+				arguments_changetype.Add (new Argument (gettypecode));
+
+				var changetype = new Invocation (new MemberAccess (system_convert, "ChangeType", loc), arguments_changetype);
+
+				expl_block.AddStatement (new StatementExpression (new SimpleAssign (new LocalVariableReference (lv_converted, loc), changetype, loc)));
+
+
+				//
+				// return converted.Equals (value)
+				//
+				var equals_arguments = new Arguments (1);
+				equals_arguments.Add (new Argument (top_block.GetParameterReference (1, loc)));
+				var equals_invocation = new Invocation (new MemberAccess (new LocalVariableReference (lv_converted, loc), "Equals"), equals_arguments);
+				expl_block.AddStatement (new Return (equals_invocation, loc));
+
+				var catch_block = new ExplicitBlock (top_block, loc, loc);
+				catch_block.AddStatement (new Return (new BoolLiteral (Compiler.BuiltinTypes, false, loc), loc));
+				top_block.AddStatement (new TryCatch (expl_block, new List<Catch> () {
+					new Catch (catch_block, loc)
+				}, loc, false));
+
+				m.Define ();
+				m.PrepareEmit ();
+				AddMember (m);
+
+				return m;
+			}
+		}
+
+		PatternMatchingHelper pmh;
+
+		public PatternMatchingHelper CreatePatterMatchingHelper ()
+		{
+			if (pmh == null) {
+				pmh = new PatternMatchingHelper (this);
+
+				pmh.CreateContainer ();
+				pmh.DefineContainer ();
+				pmh.Define ();
+				AddCompilerGeneratedClass (pmh);
+			}
+
+			return pmh;
+		}
+
 		public CharSet? DefaultCharSet;
 		public TypeAttributes DefaultCharSetType = TypeAttributes.AnsiClass;
 
@@ -114,6 +267,7 @@ namespace Mono.CSharp
 		readonly Dictionary<TypeSpec, ReferenceContainer> reference_types;
 		readonly Dictionary<TypeSpec, MethodSpec> attrs_cache;
 		readonly Dictionary<TypeSpec, AwaiterDefinition> awaiters;
+		readonly Dictionary<TypeSpec, TypeInfo> type_info_cache;
 
 		AssemblyDefinition assembly;
 		readonly CompilerContext context;
@@ -149,6 +303,7 @@ namespace Mono.CSharp
 			reference_types = new Dictionary<TypeSpec, ReferenceContainer> ();
 			attrs_cache = new Dictionary<TypeSpec, MethodSpec> ();
 			awaiters = new Dictionary<TypeSpec, AwaiterDefinition> ();
+			type_info_cache = new Dictionary<TypeSpec, TypeInfo> ();
 		}
 
 		#region Properties
@@ -272,11 +427,19 @@ namespace Mono.CSharp
 			}
 		}
 
+		internal Dictionary<TypeSpec, TypeInfo> TypeInfoCache {
+			get {
+				return type_info_cache;
+			}
+		}
+
 		public override string[] ValidAttributeTargets {
 			get {
 				return attribute_targets;
 			}
 		}
+
+		public Dictionary<string, string> GetResourceStrings { get; private set; }
 
 		#endregion
 
@@ -580,6 +743,34 @@ namespace Mono.CSharp
 		{
 			// TODO: This setter is quite ugly but I have not found a way around it yet
 			this.assembly = assembly;
+		}
+
+		public void LoadGetResourceStrings (List<string> fileNames)
+		{
+			foreach (var fileName in fileNames) {
+				if (!File.Exists (fileName)) {
+					Report.Error (1566, "Error reading resource file `{0}'", fileName);
+					return;
+				}
+
+				foreach (var l in File.ReadLines (fileName)) {
+					if (GetResourceStrings == null)
+						GetResourceStrings = new Dictionary<string, string> ();
+
+					var line = l.Trim ();
+					if (line.Length == 0 || line [0] == '#' || line [0] == ';')
+						continue;
+				
+					var epos = line.IndexOf ('=');
+					if (epos < 0)
+						continue;
+
+					var key = line.Substring (0, epos).Trim ();
+					var value = line.Substring (epos + 1).Trim ();
+
+					GetResourceStrings [key] = value;
+				}
+			}
 		}
 	}
 }

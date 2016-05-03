@@ -12,6 +12,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Security.Cryptography;
@@ -19,6 +20,7 @@ using System.Text;
 using System.Configuration.Assemblies;
 
 using Mono.Security.Cryptography;
+using IKR = IKVM.Reflection;
 
 namespace Mono.AssemblyLinker
 {
@@ -538,28 +540,10 @@ namespace Mono.AssemblyLinker
 
 		private void SetKeyPair (AssemblyName aname)
 		{
-#if ONLY_1_1
-			switch (delaysign) {
-			case DelaySign.Yes:
-				AddCattr (typeof (AssemblyDelaySignAttribute),
-					typeof (bool), true);
-				break;
-			case DelaySign.No:
-				AddCattr (typeof (AssemblyDelaySignAttribute),
-					typeof (bool), false);
-				break;
-			}
-#endif
-
 			if (keyfile != null) {
 				if (!File.Exists (keyfile)) {
 					Report (1044, String.Format ("Couldn't open '{0}' key file.", keyfile));
 				}
-
-#if ONLY_1_1
-				AddCattr (typeof (AssemblyKeyFileAttribute),
-					keyfile);
-#endif
 
 				using (FileStream fs = File.OpenRead (keyfile)) {
 					byte[] data = new byte [fs.Length];
@@ -590,10 +574,6 @@ namespace Mono.AssemblyLinker
 					fs.Close ();
 				}
 			} else if (keyname != null) {
-#if ONLY_1_1
-				AddCattr (typeof (AssemblyKeyNameAttribute),
-					keyname);
-#endif
 				// delay-sign doesn't apply to key containers
 				aname.KeyPair = new StrongNameKeyPair (keyname);
 			}
@@ -613,46 +593,8 @@ namespace Mono.AssemblyLinker
 			 * Emit Manifest
 			 * */
 
-			if (isTemplateFile) {
-				// LAMESPEC: according to MSDN, the template assembly must have a
-				// strong name but this is not enforced
-				Assembly assembly = Assembly.LoadFrom (templateFile);
-
-				// inherit signing related settings from template, but do not
-				// override command-line options
-				object [] attrs = assembly.GetCustomAttributes (true);
-				foreach (object o in attrs) {
-					if (o is AssemblyKeyFileAttribute) {
-						if (keyfile != null)
-							// ignore if specified on command line
-							continue;
-						AssemblyKeyFileAttribute keyFileAttr = (AssemblyKeyFileAttribute) o;
-						// ignore null or zero-length keyfile
-						if (keyFileAttr.KeyFile == null || keyFileAttr.KeyFile.Length == 0)
-							continue;
-						keyfile = Path.Combine (Path.GetDirectoryName(templateFile),
-							keyFileAttr.KeyFile);
-					} else if (o is AssemblyDelaySignAttribute) {
-						if (delaysign != DelaySign.NotSet)
-							// ignore if specified on command line
-							continue;
-						AssemblyDelaySignAttribute delaySignAttr = (AssemblyDelaySignAttribute) o;
-						delaysign = delaySignAttr.DelaySign ? DelaySign.Yes :
-							DelaySign.No;
-					} else if (o is AssemblyKeyNameAttribute) {
-						if (keyname != null)
-							// ignore if specified on command line
-							continue;
-						AssemblyKeyNameAttribute keynameAttr = (AssemblyKeyNameAttribute) o;
-						// ignore null or zero-length keyname
-						if (keynameAttr.KeyName == null || keynameAttr.KeyName.Length == 0)
-							continue;
-						keyname = keynameAttr.KeyName;
-					}
-				}
-				aname.Version = assembly.GetName().Version;
-				aname.HashAlgorithm = assembly.GetName().HashAlgorithm;
-			}
+			if (isTemplateFile)
+				aname = ReadCustomAttributesFromTemplateFile (templateFile, aname);
 
 			SetKeyPair (aname);
 
@@ -763,8 +705,18 @@ namespace Mono.AssemblyLinker
 						File.Copy (res.fileName, res.target, true);
 						res.fileName = res.target;
 					}
+					
+					// AddResourceFile must receive a file name and not a path.
+					// Drop directory and give warning if we have a path.
+					var resourceFileName = Path.GetFileName(res.fileName);
+					if (Path.GetDirectoryName (res.fileName) != null || Path.IsPathRooted(res.fileName)) {
+						ReportWarning (99999, 
+							String.Format ("Path '{0}' in the resource name is not supported. Using just file name '{1}'",
+								res.fileName,
+								resourceFileName));
+					}
 
-					ab.AddResourceFile (res.name, res.fileName,
+					ab.AddResourceFile (res.name, resourceFileName,
 							res.isPrivate ? ResourceAttributes.Private : ResourceAttributes.Public);
 				}
 			}
@@ -775,6 +727,85 @@ namespace Mono.AssemblyLinker
 			catch (Exception ex) {
 				Report (1019, "Metadata failure creating assembly -- " + ex);
 			}
+		}
+
+		private AssemblyName ReadCustomAttributesFromTemplateFile (string templateFile, AssemblyName aname)
+		{
+			// LAMESPEC: according to MSDN, the template assembly must have a
+			// strong name but this is not enforced
+			const IKR.UniverseOptions options = IKR.UniverseOptions.MetadataOnly;
+
+			var universe = new IKR.Universe (options);
+			var asm = universe.LoadFile (templateFile);
+
+			// Create missing assemblies, we don't want to load them!
+			// Code taken from ikdasm
+			var names = new HashSet<string> ();
+			IKR.AssemblyName[] assembly_refs = asm.ManifestModule.__GetReferencedAssemblies ();
+
+			var resolved_assemblies = new IKR.Assembly [assembly_refs.Length];
+			for (int i = 0; i < resolved_assemblies.Length; i++) {
+				string name = assembly_refs [i].Name;
+
+				while (names.Contains (name)) {
+					name = name + "_" + i;
+				}
+				names.Add (name);
+				resolved_assemblies [i] = universe.CreateMissingAssembly (assembly_refs [i].FullName);
+			}
+			asm.ManifestModule.__ResolveReferencedAssemblies (resolved_assemblies);
+
+			foreach (var attr_data in asm.__GetCustomAttributes (null, false)) {
+				string asm_name = attr_data.AttributeType.Assembly.GetName ().Name;
+				if (asm_name != "mscorlib")
+					continue;
+
+				switch (attr_data.AttributeType.FullName) {
+					case "System.Reflection.AssemblyKeyFileAttribute": {
+						if (keyfile != null)
+							// ignore if specified on command line
+							continue;
+
+						// / AssemblyKeyFileAttribute .ctor(string keyFile)
+						string key_file_value = (string) attr_data.ConstructorArguments [0].Value;
+
+						if (!String.IsNullOrEmpty (key_file_value))
+							keyfile = Path.Combine (Path.GetDirectoryName (templateFile), key_file_value);
+					}
+					break;
+
+					case "System.Reflection.AssemblyDelaySignAttribute": {
+						if (delaysign != DelaySign.NotSet)
+							// ignore if specified on command line
+							continue;
+
+						// AssemblyDelaySignAttribute .ctor(bool delaySign)
+						bool delay_sign_value = (bool) attr_data.ConstructorArguments [0].Value;
+						delaysign = delay_sign_value ? DelaySign.Yes : DelaySign.No;
+					}
+					break;
+
+					case "System.Reflection.AssemblyKeyNameAttribute": {
+						if (keyname != null)
+							// ignore if specified on command line
+							continue;
+
+						// AssemblyKeyNameAttribute .ctor(string keyName)
+						string key_name_value = (string) attr_data.ConstructorArguments [0].Value;
+
+						// ignore null or zero-length keyname
+						if (!String.IsNullOrEmpty (key_name_value))
+							keyname = key_name_value;
+					}
+					break;
+				}
+			}
+
+			var asm_name_for_template_file = asm.GetName ();
+			aname.Version = asm_name_for_template_file.Version;
+			aname.HashAlgorithm = asm_name_for_template_file.HashAlgorithm;
+
+			return aname;
 		}
 
 		private void LoadArgs (string file, ArrayList args) {

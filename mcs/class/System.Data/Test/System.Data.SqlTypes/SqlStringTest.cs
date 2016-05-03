@@ -33,14 +33,10 @@
 using System;
 using System.Data.SqlTypes;
 using System.Globalization;
-#if NET_2_0
 using System.IO;
-#endif
 using System.Threading;
 using System.Xml;
-#if NET_2_0
 using System.Xml.Serialization;
-#endif
 
 using NUnit.Framework;
 
@@ -191,9 +187,6 @@ namespace MonoTests.System.Data.SqlTypes
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Ignore ("The option CompareOptions.IgnoreWidth is not supported")]
-#endif
 		public void CompareTo()
 		{
 			SqlByte Test = new SqlByte (1);
@@ -271,9 +264,6 @@ namespace MonoTests.System.Data.SqlTypes
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Ignore ("The option CompareOptions.IgnoreWidth is not supported")]
-#endif
 		public void Greaters()
 		{
 			// GreateThan ()
@@ -288,9 +278,6 @@ namespace MonoTests.System.Data.SqlTypes
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Ignore ("The option CompareOptions.IgnoreWidth is not supported")]
-#endif
 		public void Lessers()
 		{
 			// LessThan()
@@ -377,11 +364,7 @@ namespace MonoTests.System.Data.SqlTypes
 				byte test = Test1.GetUnicodeBytes () [105];
 				Assert.Fail ("#N05");
 			} catch (Exception e) {
-#if TARGET_JVM
-				Assert.IsTrue (typeof (IndexOutOfRangeException).IsAssignableFrom(e.GetType()), "#N06");
-#else
 				Assert.AreEqual (typeof (IndexOutOfRangeException), e.GetType(), "#N06");
-#endif
 			}
 		}
 
@@ -545,9 +528,6 @@ namespace MonoTests.System.Data.SqlTypes
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Ignore ("The option CompareOptions.IgnoreWidth is not supported")]
-#endif
 		public void ThanOrEqualOperators()
 		{
 			// == -operator
@@ -715,7 +695,6 @@ namespace MonoTests.System.Data.SqlTypes
 			Assert.AreEqual ("Test String", ((SqlString)TestString).Value, "#AD01");
 		}
 
-#if NET_2_0
 		[Test]
 		public void AddSqlString()
 		{
@@ -770,6 +749,5 @@ namespace MonoTests.System.Data.SqlTypes
 			ReadWriteXmlTestInternal (xml1, strtest1, "BA01");
 			ReadWriteXmlTestInternal (xml2, strtest2.ToString (), "BA02");
 		}
-#endif
 	}
 }

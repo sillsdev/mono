@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.IO;
@@ -80,28 +79,6 @@ namespace MonoTests.System.Configuration {
 			/* only changing PropertyValue does */
 			v.PropertyValue = (object)7;
 			Assert.AreEqual ("<?xml version=\"1.0\" encoding=\"utf-16\"?>\n<int>7</int>", ((string)v.SerializedValue).Replace ("\r\n", "\n"), "A13");
-		}
-
-		[Test]
-		public void Properties_ChangeSerialzeAs ()
-		{
-			SettingsProperty p = new SettingsProperty ("property",
-				typeof (int),
-				null,
-				true,
-				10,
-				SettingsSerializeAs.String,
-				null,
-				true,
-				false);
-
-			SettingsPropertyValue v = new SettingsPropertyValue (p);
-
-			// test that setting SerializeAs after changing v.PropertyValue causes
-			// SerializedValue to be in the new format
-			v.PropertyValue = (object)5;
-			p.SerializeAs = SettingsSerializeAs.Xml;
-			Assert.AreEqual ("<?xml version=\"1.0\" encoding=\"utf-16\"?>\n<int>5</int>", ((string)v.SerializedValue).Replace("\r\n", "\n"), "A99");
 		}
 
 		[Test]
@@ -241,29 +218,6 @@ namespace MonoTests.System.Configuration {
 			p.SerializeAs = SettingsSerializeAs.Xml;
 			
 			Assert.AreEqual ("<?xml version=\"1.0\" encoding=\"utf-16\"?>\n<int>10</int>", ((string)v.SerializedValue).Replace ("\r\n", "\n"), "A3");
-
-		}
-
-		/// <summary>
-		/// This tests the case where we have a SerializedValue but not a PropertyValue.
-		/// </summary>
-		[Test]
-		public void Xml_SerializeNoPropValue ()
-		{
-			SettingsProperty p = new SettingsProperty ("property",
-				typeof (MyData),
-				null,
-				true,
-				10,
-				SettingsSerializeAs.Xml,
-				null,
-				true,
-				false);
-
-			SettingsPropertyValue v = new SettingsPropertyValue (p);
-			v.SerializedValue = "<?xml version=\"1.0\" encoding=\"utf-16\"?>\n<int>10</int>";
-
-			Assert.AreEqual ("<?xml version=\"1.0\" encoding=\"utf-16\"?>\n<int>10</int>", v.SerializedValue);
 
 		}
 
@@ -483,4 +437,3 @@ namespace MonoTests.System.Configuration {
 	}
 }
 
-#endif

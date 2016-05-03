@@ -26,7 +26,6 @@ MPH_C_SOURCE =					\
 # Source code which helps implement POSIX and other related Unix standards,
 # and *may* be portable between Unix platforms.
 MPH_UNIX_SOURCE =				\
-	fakepoll.h				\
 	dirent.c				\
 	fcntl.c					\
 	fstab.c					\
@@ -40,6 +39,7 @@ MPH_UNIX_SOURCE =				\
 	serial.c				\
 	sys-mman.c				\
 	sys-sendfile.c				\
+	sys-socket.c				\
 	sys-stat.c				\
 	sys-statvfs.c				\
 	sys-time.c				\
@@ -136,12 +136,14 @@ refresh:
 	--impl-macro=_GNU_SOURCE --impl-macro=_XOPEN_SOURCE   \
 	--impl-header="<sys/types.h>"                         \
 	--impl-header="<sys/stat.h>"                          \
+	--autoconf-header="<netinet/in.h>"                    \
 	--autoconf-header="<sys/time.h>"                      \
 	--autoconf-header="<sys/poll.h>"                      \
 	--autoconf-header="<sys/wait.h>"                      \
 	--autoconf-header="<sys/statvfs.h>"                   \
 	--autoconf-header="<sys/xattr.h>"                     \
 	--autoconf-header="<sys/mman.h>"                      \
+	--autoconf-header="<sys/socket.h>"                    \
 	--autoconf-header="<sys/uio.h>"                       \
 	--autoconf-header="<unistd.h>"                        \
 	--impl-header="<fcntl.h>"                             \
@@ -159,7 +161,7 @@ refresh:
 	--rename-member=st_mtime=st_mtime_                    \
 	--rename-namespace=Mono.Unix.Native=Mono.Posix        \
 	--library=MonoPosixHelper                             \
-	$(mcs_topdir)/class/lib/net_2_0/Mono.Posix.dll map
+	$(mcs_topdir)/class/lib/net_4_x/Mono.Posix.dll map
 
 # Useful if mono is compiled with --enable-shared=no
 patch-libtool:

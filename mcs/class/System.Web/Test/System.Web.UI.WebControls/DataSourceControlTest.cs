@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#if NET_2_0
 
 using System;
 using System.Web;
@@ -77,11 +76,7 @@ namespace MonoTests.System.Web.UI.WebControls
 		public void DataSourceControl_DefaultProperty ()
 		{
 			PokerDataSource ds = new PokerDataSource ();
-#if NET_4_0
 			Assert.AreEqual (String.Empty, ds.ClientID, "ClientID");
-#else
-			Assert.AreEqual (null, ds.ClientID, "ClientID");
-#endif
 			Assert.IsNotNull (ds.Controls, "Controls#1");
 			Assert.AreEqual ( 0 , ds.Controls.Count , "Controls#2");
 			Assert.AreEqual (false, ds.Visible, "Visible");
@@ -195,4 +190,3 @@ namespace MonoTests.System.Web.UI.WebControls
 		}
 	}
 }
-#endif

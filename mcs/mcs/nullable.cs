@@ -33,7 +33,7 @@ namespace Mono.CSharp.Nullable
 			this.loc = loc;
 		}
 
-		public override TypeSpec ResolveAsType (IMemberContext ec)
+		public override TypeSpec ResolveAsType (IMemberContext ec, bool allowUnboundTypeArguments = false)
 		{
 			eclass = ExprClass.Type;
 
@@ -85,8 +85,14 @@ namespace Mono.CSharp.Nullable
 
 		public static TypeSpec GetEnumUnderlyingType (ModuleContainer module, TypeSpec nullableEnum)
 		{
+			return MakeType (module, EnumSpec.GetUnderlyingType (GetUnderlyingType (nullableEnum)));
+		}
+
+		public static TypeSpec MakeType (ModuleContainer module, TypeSpec underlyingType)
+		{
 			return module.PredefinedTypes.Nullable.TypeSpec.MakeGenericType (module,
-				new[] { EnumSpec.GetUnderlyingType (GetUnderlyingType (nullableEnum)) });
+				new[] { underlyingType });
+
 		}
 	}
 
@@ -185,6 +191,11 @@ namespace Mono.CSharp.Nullable
 			call.InstanceExpression = this;
 
 			call.EmitPredefined (ec, NullableInfo.GetHasValue (expr.Type), null);
+		}
+
+		public override void EmitSideEffect (EmitContext ec)
+		{
+			expr.EmitSideEffect (ec);
 		}
 
 		public override Expression EmitToField (EmitContext ec)
@@ -424,6 +435,12 @@ namespace Mono.CSharp.Nullable
 		{
 		}
 
+		public override bool IsNull {
+			get {
+				return expr.IsNull;
+			}
+		}
+
 		public override bool ContainsEmitWithAwait ()
 		{
 			return unwrap.ContainsEmitWithAwait ();
@@ -529,6 +546,11 @@ namespace Mono.CSharp.Nullable
 				return null;
 
 			Expression res = base.ResolveOperator (ec, unwrap);
+			if (res == null) {
+				Error_OperatorCannotBeApplied (ec, loc, OperName (Oper), Expr.Type);
+				return null;
+			}
+
 			if (res != this) {
 				if (user_operator == null)
 					return res;
@@ -691,7 +713,7 @@ namespace Mono.CSharp.Nullable
 			}
 
 			if (!type.IsNullableType)
-				type = rc.Module.PredefinedTypes.Nullable.TypeSpec.MakeGenericType (rc.Module, new[] { type });
+				type = NullableInfo.MakeType (rc.Module, type);
 
 			return Wrap.Create (expr, type);
 		}
@@ -773,7 +795,7 @@ namespace Mono.CSharp.Nullable
 			//
 			// Both operands are bool? types
 			//
-			if (UnwrapLeft != null && UnwrapRight != null) {
+			if ((UnwrapLeft != null && !Left.IsNull) && (UnwrapRight != null && !Right.IsNull)) {
 				if (ec.HasSet (BuilderContext.Options.AsyncBody) && Binary.Right.ContainsEmitWithAwait ()) {
 					Left = Left.EmitToField (ec);
 					Right = Right.EmitToField (ec);
@@ -839,6 +861,8 @@ namespace Mono.CSharp.Nullable
 					LiftedNull.Create (type, loc).Emit (ec);
 				} else {
 					Left.Emit (ec);
+					UnwrapRight.Store (ec);
+
 					ec.Emit (or ? OpCodes.Brfalse_S : OpCodes.Brtrue_S, load_right);
 
 					ec.EmitInt (or ? 1 : 0);
@@ -847,7 +871,7 @@ namespace Mono.CSharp.Nullable
 					ec.Emit (OpCodes.Br_S, end_label);
 
 					ec.MarkLabel (load_right);
-					UnwrapRight.Original.Emit (ec);
+					UnwrapRight.Load (ec);
 				}
 			} else {
 				//
@@ -873,16 +897,28 @@ namespace Mono.CSharp.Nullable
 
 					ec.MarkLabel (is_null_label);
 					LiftedNull.Create (type, loc).Emit (ec);
+				} else if (Left.IsNull && UnwrapRight != null) {
+					UnwrapRight.Emit (ec);
+
+					ec.Emit (or ? OpCodes.Brtrue_S : OpCodes.Brfalse_S, load_right);
+
+					LiftedNull.Create (type, loc).Emit (ec);
+
+					ec.Emit (OpCodes.Br_S, end_label);
+
+					ec.MarkLabel (load_right);
+
+					UnwrapRight.Load (ec);
 				} else {
 					Right.Emit (ec);
-					ec.Emit (or ? OpCodes.Brfalse_S : OpCodes.Brtrue_S, load_right);
+					ec.Emit (or ? OpCodes.Brfalse_S : OpCodes.Brtrue_S, load_left);
 
 					ec.EmitInt (or ? 1 : 0);
 					ec.Emit (OpCodes.Newobj, NullableInfo.GetConstructor (type));
 
 					ec.Emit (OpCodes.Br_S, end_label);
 
-					ec.MarkLabel (load_right);
+					ec.MarkLabel (load_left);
 
 					UnwrapLeft.Load (ec);
 				}
@@ -1051,6 +1087,7 @@ namespace Mono.CSharp.Nullable
 	{
 		Expression left, right;
 		Unwrap unwrap;
+		bool user_conversion_left;
 
 		public NullCoalescingOperator (Expression left, Expression right)
 		{
@@ -1119,24 +1156,35 @@ namespace Mono.CSharp.Nullable
 				if (right.IsNull)
 					return ReducedExpression.Create (left, this);
 
-				if (Convert.ImplicitConversionExists (ec, right, unwrap.Type)) {
-					left = unwrap;
-					ltype = left.Type;
-
-					//
-					// If right is a dynamic expression, the result type is dynamic
-					//
-					if (right.Type.BuiltinType == BuiltinTypeSpec.Type.Dynamic) {
-						type = right.Type;
-
-						// Need to box underlying value type
-						left = Convert.ImplicitBoxingConversion (left, ltype, type);
+				Expression conv;
+				if (right.Type.IsNullableType) {
+					conv = right.Type == ltype ? right : Convert.ImplicitNulableConversion (ec, right, ltype);
+					if (conv != null) {
+						right = conv;
+						type = ltype;
 						return this;
 					}
+				} else {
+					conv = Convert.ImplicitConversion (ec, right, unwrap.Type, loc);
+					if (conv != null) {
+						left = unwrap;
+						ltype = left.Type;
 
-					right = Convert.ImplicitConversion (ec, right, ltype, loc);
-					type = ltype;
-					return this;
+						//
+						// If right is a dynamic expression, the result type is dynamic
+						//
+						if (right.Type.BuiltinType == BuiltinTypeSpec.Type.Dynamic) {
+							type = right.Type;
+
+							// Need to box underlying value type
+							left = Convert.ImplicitBoxingConversion (left, ltype, type);
+							return this;
+						}
+
+						right = conv;
+						type = ltype;
+						return this;
+					}
 				}
 			} else if (TypeSpec.IsReferenceType (ltype)) {
 				if (Convert.ImplicitConversionExists (ec, right, ltype)) {
@@ -1153,23 +1201,22 @@ namespace Mono.CSharp.Nullable
 					//
 					Constant lc = left as Constant;
 					if (lc != null && !lc.IsDefaultValue)
-						return ReducedExpression.Create (lc, this);
+						return ReducedExpression.Create (lc, this, false);
 
 					//
 					// Reduce (left ?? null) to left OR (null-constant ?? right) to right
 					//
-					if (right.IsNull || lc != null)
-						return ReducedExpression.Create (lc != null ? right : left, this);
+					if (right.IsNull || lc != null) {
+						//
+						// Special case null ?? null
+						//
+						if (right.IsNull && ltype == right.Type)
+							return null;
+
+						return ReducedExpression.Create (lc != null ? right : left, this, false);
+					}
 
 					right = Convert.ImplicitConversion (ec, right, ltype, loc);
-					type = ltype;
-					return this;
-				}
-
-				//
-				// Special case null ?? null
-				//
-				if (ltype == right.Type) {
 					type = ltype;
 					return this;
 				}
@@ -1185,9 +1232,10 @@ namespace Mono.CSharp.Nullable
 			// Reduce (null ?? right) to right
 			//
 			if (left.IsNull)
-				return ReducedExpression.Create (right, this).Resolve (ec);
+				return ReducedExpression.Create (right, this, false).Resolve (ec);
 
 			left = Convert.ImplicitConversion (ec, unwrap ?? left, rtype, loc);
+			user_conversion_left = left is UserCast;
 			type = rtype;
 			return this;
 		}
@@ -1229,7 +1277,15 @@ namespace Mono.CSharp.Nullable
 				unwrap.EmitCheck (ec);
 				ec.Emit (OpCodes.Brfalse, is_null_label);
 
-				left.Emit (ec);
+				//
+				// When both expressions are nullable the unwrap
+				// is needed only for null check not for value uwrap
+				//
+				if (type.IsNullableType && TypeSpecComparer.IsEqual (NullableInfo.GetUnderlyingType (type), unwrap.Type))
+					unwrap.Load (ec);
+				else
+					left.Emit (ec);
+
 				ec.Emit (OpCodes.Br, end_label);
 
 				ec.MarkLabel (is_null_label);
@@ -1239,16 +1295,56 @@ namespace Mono.CSharp.Nullable
 				return;
 			}
 
-			left.Emit (ec);
-			ec.Emit (OpCodes.Dup);
+			//
+			// Null check is done on original expression not after expression is converted to
+			// result type. This is in most cases same but when user conversion is involved
+			// we can end up in situation when user operator does the null handling which is
+			// not what the operator is supposed to do.
+			// There is tricky case where cast of left expression is meant to be cast of
+			// whole source expression (null check is done on it) and cast from right-to-left
+			// conversion needs to do null check on unconverted source expression.
+			//
+			if (user_conversion_left) {
+				var op_expr = (UserCast) left;
 
-			// Only to make verifier happy
-			if (left.Type.IsGenericParameter)
-				ec.Emit (OpCodes.Box, left.Type);
+				op_expr.Source.Emit (ec);
+				LocalTemporary temp;
 
-			ec.Emit (OpCodes.Brtrue, end_label);
+				// TODO: More load kinds can be special cased
+				if (!(op_expr.Source is VariableReference)) {
+					temp = new LocalTemporary (op_expr.Source.Type);
+					temp.Store (ec);
+					temp.Emit (ec);
+					op_expr.Source = temp;
+				} else {
+					temp = null;
+				}
 
-			ec.Emit (OpCodes.Pop);
+				var right_label = ec.DefineLabel ();
+				ec.Emit (OpCodes.Brfalse_S, right_label);
+				left.Emit (ec);
+				ec.Emit (OpCodes.Br, end_label);
+				ec.MarkLabel (right_label);
+
+				if (temp != null)
+					temp.Release (ec);
+			} else {
+				//
+				// Common case where expression is not modified before null check and
+				// we generate better/smaller code
+				//
+				left.Emit (ec);
+				ec.Emit (OpCodes.Dup);
+
+				// Only to make verifier happy
+				if (left.Type.IsGenericParameter)
+					ec.Emit (OpCodes.Box, left.Type);
+
+				ec.Emit (OpCodes.Brtrue, end_label);
+
+				ec.Emit (OpCodes.Pop);
+			}
+
 			right.Emit (ec);
 
 			ec.MarkLabel (end_label);

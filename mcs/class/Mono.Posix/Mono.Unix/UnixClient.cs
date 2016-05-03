@@ -1,5 +1,5 @@
 //
-// UnixListener.cs
+// UnixClient.cs
 //
 // Authors:
 //	Joe Shaw (joeshaw@novell.com)
@@ -72,11 +72,7 @@ namespace Mono.Unix {
 			Client = sock;
 		}
 
-#if NET_2_0
 		public
-#else
-		protected
-#endif
 		Socket Client {
 			get { return client; }
 			set {

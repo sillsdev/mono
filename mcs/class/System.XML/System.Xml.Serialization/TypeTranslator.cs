@@ -45,44 +45,13 @@ namespace System.Xml.Serialization
 		static Hashtable primitiveArrayTypes;
 		static Hashtable nullableTypes;
 
-#if TARGET_JVM
-		static readonly object AppDomain_TypeTranslatorCacheLock = new object ();
-		const string AppDomain_nameCacheName = "System.Xml.Serialization.TypeTranslator.nameCache";
-		const string AppDomain_nullableTypesName = "System.Xml.Serialization.TypeTranslator.nullableTypes";
-		
-		static Hashtable AppDomain_nameCache {
-			get { return GetAppDomainCache (AppDomain_nameCacheName); }
-		}
-
-		static Hashtable AppDomain_nullableTypes {
-			get { return GetAppDomainCache (AppDomain_nullableTypesName); }
-		}
-
-		static Hashtable GetAppDomainCache(string name) {
-			Hashtable res = (Hashtable) AppDomain.CurrentDomain.GetData (name);
-
-			if (res == null) {
-				lock (AppDomain_TypeTranslatorCacheLock) {
-					res = (Hashtable) AppDomain.CurrentDomain.GetData (name);
-					if (res == null) {
-						res = Hashtable.Synchronized (new Hashtable ());
-						AppDomain.CurrentDomain.SetData (name, res);
-					}
-				}
-			}
-
-			return res;
-		}
-#endif
 
 		static TypeTranslator ()
 		{
 			nameCache = new Hashtable ();
 			primitiveArrayTypes = Hashtable.Synchronized (new Hashtable ());
 
-#if !TARGET_JVM
 			nameCache = Hashtable.Synchronized (nameCache);
-#endif
 			// XSD Types with direct map to CLR types
 
 			nameCache.Add (typeof (bool), new TypeData (typeof (bool), "boolean", true));
@@ -147,7 +116,6 @@ namespace System.Xml.Serialization
 			primitiveTypes.Add ("base64", new TypeData (typeof (byte[]), "base64", true));
 			primitiveTypes.Add ("duration", new TypeData (typeof (string), "duration", true));
 
-#if NET_2_0
 			nullableTypes = Hashtable.Synchronized(new Hashtable ());
 			foreach (DictionaryEntry de in primitiveTypes) {
 				TypeData td = (TypeData) de.Value;
@@ -155,7 +123,6 @@ namespace System.Xml.Serialization
 				ntd.IsNullable = true;
 				nullableTypes.Add (de.Key, ntd);
 			}
-#endif
 		}
 
 		public static TypeData GetTypeData (Type type)
@@ -170,7 +137,6 @@ namespace System.Xml.Serialization
 
 			Type type = runtimeType;
 			bool nullableOverride = false;
-#if NET_2_0
 			// Nullable<T> is serialized as T
 			if (type.IsGenericType && type.GetGenericTypeDefinition () == typeof (Nullable<>)) {
 				nullableOverride = true;
@@ -211,39 +177,24 @@ namespace System.Xml.Serialization
 				TypeData pt = GetTypeData (type); // beware this recursive call btw ...
 				if (pt != null) {
 						TypeData tt = (TypeData) nullableTypes [pt.XmlType];
-#if TARGET_JVM
-						if (tt == null)
-							tt = (TypeData) AppDomain_nullableTypes [pt.XmlType];
-#endif
 						if (tt == null) {
 							tt = new TypeData (type, pt.XmlType, false);
 							tt.IsNullable = true;
-#if TARGET_JVM
-							AppDomain_nullableTypes [pt.XmlType] = tt;
-#else
 							nullableTypes [pt.XmlType] = tt;
-#endif
 						}
 						return tt;
 				}
 			}
-#endif
 			
 				TypeData typeData = nameCache[runtimeType] as TypeData;
 				if (typeData != null) return typeData;
 
-#if TARGET_JVM
-				Hashtable dynamicCache = AppDomain_nameCache;
-				typeData = dynamicCache[runtimeType] as TypeData;
-				if (typeData != null) return typeData;
-#endif
 
 				string name;
 				if (type.IsArray) {
 					string sufix = GetTypeData (type.GetElementType ()).XmlType;
 					name = GetArrayName (sufix);
 				}
-#if NET_2_0
 				else if (type.IsGenericType && !type.IsGenericTypeDefinition) {
 					name = XmlConvert.EncodeLocalName (type.Name.Substring (0, type.Name.IndexOf ('`'))) + "Of";
 					foreach (Type garg in type.GetGenericArguments ())
@@ -251,18 +202,13 @@ namespace System.Xml.Serialization
 							GetTypeData (garg).XmlType :
 							CodeIdentifier.MakePascal (XmlConvert.EncodeLocalName (garg.Name));
 				}
-#endif
 				else 
 					name = XmlConvert.EncodeLocalName (type.Name);
 
 				typeData = new TypeData (type, name, false);
 				if (nullableOverride)
 					typeData.IsNullable = true;
-#if TARGET_JVM
-				dynamicCache[runtimeType] = typeData;
-#else
 				nameCache[runtimeType] = typeData;
-#endif
 				return typeData;
 		}
 

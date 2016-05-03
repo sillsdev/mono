@@ -201,30 +201,22 @@ namespace MonoTests.System
 
 			Assert.AreEqual ("00", TestingEnum4.This.ToString ("x"), "#B1");
 			Assert.AreEqual ("00", TestingEnum4.This.ToString ("X"), "#B2");
-#if !TARGET_JVM // This appears not to work under .Net
-			Assert.AreEqual ("ff", TestingEnum4.Test.ToString ("x"), "#B3");
-#endif // TARGET_JVM
+			Assert.AreEqual ("FF", TestingEnum4.Test.ToString ("x"), "#B3");
 			Assert.AreEqual ("FF", TestingEnum4.Test.ToString ("X"), "#B4");
 
 			Assert.AreEqual ("0000", TestingEnum5.This.ToString ("x"), "#C1");
 			Assert.AreEqual ("0000", TestingEnum5.This.ToString ("X"), "#C2");
-#if !TARGET_JVM // This appears not to work under .Net
-			Assert.AreEqual ("7fff", TestingEnum5.Test.ToString ("x"), "#C3");
-#endif // TARGET_JVM
+			Assert.AreEqual ("7FFF", TestingEnum5.Test.ToString ("x"), "#C3");
 			Assert.AreEqual ("7FFF", TestingEnum5.Test.ToString ("X"), "#C4");
 
 			Assert.AreEqual ("00000000", TestingEnum6.This.ToString ("x"), "#D1");
 			Assert.AreEqual ("00000000", TestingEnum6.This.ToString ("X"), "#D2");
-#if !TARGET_JVM // This appears not to work under .Net
-			Assert.AreEqual ("7fffffff", TestingEnum6.Test.ToString ("x"), "#D3");
-#endif // TARGET_JVM
+			Assert.AreEqual ("7FFFFFFF", TestingEnum6.Test.ToString ("x"), "#D3");
 			Assert.AreEqual ("7FFFFFFF", TestingEnum6.Test.ToString ("X"), "#D4");
 
 			Assert.AreEqual ("0000000000000000", TestingEnum3.This.ToString ("x"), "#E1");
 			Assert.AreEqual ("0000000000000000", TestingEnum3.This.ToString ("X"), "#E2");
-#if !TARGET_JVM // This appears not to work under .Net
-			Assert.AreEqual ("ffffffffffffffff", TestingEnum3.Test.ToString ("x"), "#E3");
-#endif // TARGET_JVM
+			Assert.AreEqual ("FFFFFFFFFFFFFFFF", TestingEnum3.Test.ToString ("x"), "#E3");
 			Assert.AreEqual ("FFFFFFFFFFFFFFFF", TestingEnum3.Test.ToString ("X"), "#E4");
 		}
 
@@ -300,6 +292,13 @@ namespace MonoTests.System
 			Assert.AreEqual ("Is", Enum.GetName (b.GetType (), b), "#E2");
 			Assert.AreEqual ("A", Enum.GetName (c.GetType (), c), "#E3");
 			Assert.AreEqual ("Test", Enum.GetName (c.GetType (), d), "#E4");
+		}
+
+		[Test]
+		public void GetNameIdenticalToGetEnumName ()
+		{
+			Assert.AreEqual (typeof (EnumOverlap).GetEnumName (0), Enum.GetName (typeof(EnumOverlap), 0), "#1");
+			Assert.AreEqual ("First", Enum.GetName (typeof(EnumOverlap), 0), "#2");
 		}
 
 		[Test]
@@ -636,11 +635,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#G2");
 				Assert.IsNull (ex.InnerException, "#G3");
 				Assert.IsNotNull (ex.Message, "#G4");
-#if NET_2_0
 				Assert.IsTrue (ex.Message.IndexOf ("'huh?'") != -1, "#G5");
-#else
-				Assert.IsTrue (ex.Message.IndexOf ("huh?") != -1, "#G5");
-#endif
 				Assert.IsNull (ex.ParamName, "#G6");
 			}
 
@@ -654,11 +649,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#H2");
 				Assert.IsNull (ex.InnerException, "#H3");
 				Assert.IsNotNull (ex.Message, "#H4");
-#if NET_2_0
 				Assert.IsTrue (ex.Message.IndexOf ("'test'") != -1, "#H5");
-#else
-				Assert.IsTrue (ex.Message.IndexOf ("test") != -1, "#H5");
-#endif
 				Assert.IsNull (ex.ParamName, "#H6");
 			}
 
@@ -682,7 +673,6 @@ namespace MonoTests.System
 			Assert.AreEqual (TestingEnum3.Test, Enum.Parse (t1.GetType (), "18446744073709551615", false));
 		}
 
-#if NET_4_0
 		[Test]
 		public void TryParseErrors ()
 		{
@@ -740,8 +730,11 @@ namespace MonoTests.System
 			success = Enum.TryParse<TestingEnum> ("is", true, out result);
 			Assert.AreEqual (true, success, "#D1");
 			Assert.AreEqual (TestingEnum.Is, result, "#D2");
+
+			success = Enum.TryParse<TestingEnum> ("  Is  ", out result);
+			Assert.AreEqual (true, success, "#E1");
+			Assert.AreEqual (TestingEnum.Is, result, "#E2");
 		}
-#endif
 
 		[Test]
 		public void ToObject_EnumType_Int32 ()
@@ -753,9 +746,6 @@ namespace MonoTests.System
 		}
 
 		[Test]
-#if ONLY_1_1
-		[Category ("NotDotNet")]
-#endif
 		public void ToObject_EnumType_UInt64 ()
 		{
 			object value = Enum.ToObject (typeof (TestingEnum3), 0);
@@ -782,6 +772,20 @@ namespace MonoTests.System
 			Assert.AreEqual (TestingEnum5.This, value, "#1");
 			value = Enum.ToObject (typeof (TestingEnum5), short.MaxValue);
 			Assert.AreEqual (TestingEnum5.Test, value, "#2");
+		}
+
+		[Test]
+		public void ToObject_EnumType_Bool ()
+		{
+			object value = Enum.ToObject (typeof (TestingEnum5), true);
+			Assert.AreEqual (TestingEnum5.Is, value, "#1");
+		}
+
+		[Test]
+		public void ToObject_EnumType_Char ()
+		{
+			object value = Enum.ToObject (typeof (TestingEnum3), (object) '\0');
+			Assert.AreEqual (TestingEnum3.This, value, "#1");
 		}
 
 		[Test]
@@ -941,28 +945,28 @@ namespace MonoTests.System
 		[Test]
 		public void GetHashCode_ShouldBeEqualToUnderlyingType ()
 		{
-			Assert.AreEqual (EnInt8.A.GetHashCode(), SByte.MinValue, "i8#0");
-			Assert.AreEqual (EnInt8.B.GetHashCode(), 44, "i8#1");
-			Assert.AreEqual (EnInt8.C.GetHashCode(), SByte.MaxValue, "i8#2");
+			Assert.AreEqual (EnInt8.A.GetHashCode(), SByte.MinValue.GetHashCode (), "i8#0");
+			Assert.AreEqual (EnInt8.B.GetHashCode(), ((sbyte)44).GetHashCode (), "i8#1");
+			Assert.AreEqual (EnInt8.C.GetHashCode(), SByte.MaxValue.GetHashCode (), "i8#2");
 	
-			Assert.AreEqual (EnUInt8.A.GetHashCode(), Byte.MinValue, "u8#0");
-			Assert.AreEqual (EnUInt8.B.GetHashCode(), 55, "u8#1");
-			Assert.AreEqual (EnUInt8.C.GetHashCode(), Byte.MaxValue, "u8#2");
+			Assert.AreEqual (EnUInt8.A.GetHashCode(), Byte.MinValue.GetHashCode (), "u8#0");
+			Assert.AreEqual (EnUInt8.B.GetHashCode(), ((byte)55).GetHashCode (), "u8#1");
+			Assert.AreEqual (EnUInt8.C.GetHashCode(), Byte.MaxValue.GetHashCode (), "u8#2");
 	
-			Assert.AreEqual (EnInt16.A.GetHashCode(), Int16.MinValue, "i16#0");
-			Assert.AreEqual (EnInt16.B.GetHashCode(), 66, "i16#1");
-			Assert.AreEqual (EnInt16.C.GetHashCode(), Int16.MaxValue, "i16#2");
+			Assert.AreEqual (EnInt16.A.GetHashCode(), Int16.MinValue.GetHashCode (), "i16#0");
+			Assert.AreEqual (EnInt16.B.GetHashCode(), ((short)66).GetHashCode (), "i16#1");
+			Assert.AreEqual (EnInt16.C.GetHashCode(), Int16.MaxValue.GetHashCode (), "i16#2");
 	
-			Assert.AreEqual (EnUInt16.A.GetHashCode(), UInt16.MinValue, "u16#0");
-			Assert.AreEqual (EnUInt16.B.GetHashCode(), 77, "u16#1");
-			Assert.AreEqual (EnUInt16.C.GetHashCode(), UInt16.MaxValue, "u16#2");
+			Assert.AreEqual (EnUInt16.A.GetHashCode(), UInt16.MinValue.GetHashCode (), "u16#0");
+			Assert.AreEqual (EnUInt16.B.GetHashCode(), ((ushort)77).GetHashCode (), "u16#1");
+			Assert.AreEqual (EnUInt16.C.GetHashCode(), UInt16.MaxValue.GetHashCode (), "u16#2");
 	
-			Assert.AreEqual (EnInt32.A.GetHashCode(), Int32.MinValue, "i32#0");
-			Assert.AreEqual (EnInt32.B.GetHashCode(), 88, "i32#1");
-			Assert.AreEqual (EnInt32.C.GetHashCode(), Int32.MaxValue, "i32#2");
+			Assert.AreEqual (EnInt32.A.GetHashCode(), Int32.MinValue.GetHashCode (), "i32#0");
+			Assert.AreEqual (EnInt32.B.GetHashCode(), ((int)88).GetHashCode (), "i32#1");
+			Assert.AreEqual (EnInt32.C.GetHashCode(), Int32.MaxValue.GetHashCode (), "i32#2");
 	
-			Assert.AreEqual (EnUInt32.A.GetHashCode(), UInt32.MinValue, "u32#0");
-			Assert.AreEqual (EnUInt32.B.GetHashCode(), 99, "u32#1");
+			Assert.AreEqual (EnUInt32.A.GetHashCode(), UInt32.MinValue.GetHashCode (), "u32#0");
+			Assert.AreEqual (EnUInt32.B.GetHashCode(), ((uint)99).GetHashCode (), "u32#1");
 			Assert.AreEqual (EnUInt32.C.GetHashCode(), UInt32.MaxValue.GetHashCode (), "u32#2");
 	
 			Assert.AreEqual (EnInt64.A.GetHashCode(), Int64.MinValue.GetHashCode (), "i64#0");
@@ -970,7 +974,7 @@ namespace MonoTests.System
 			Assert.AreEqual (EnInt64.C.GetHashCode(), Int64.MaxValue.GetHashCode (), "i64#2");
 	
 			Assert.AreEqual (EnUInt64.A.GetHashCode(), UInt64.MinValue.GetHashCode (), "u64#0");
-			Assert.AreEqual (EnUInt64.B.GetHashCode(), 3488924689489L.GetHashCode (), "u64#1");
+			Assert.AreEqual (EnUInt64.B.GetHashCode(), ((ulong)3488924689489L).GetHashCode (), "u64#1");
 			Assert.AreEqual (EnUInt64.C.GetHashCode(), UInt64.MaxValue.GetHashCode (), "u64#2");
 		}
 
@@ -1133,7 +1137,6 @@ namespace MonoTests.System
 			negative = -1
 		}
 
-#if NET_4_0
 		// Our first implementation used to crash
 		[Test]
 		public void HasFlagTest ()
@@ -1141,7 +1144,24 @@ namespace MonoTests.System
 			Foo f = Foo.negative;
 			bool has = f.HasFlag (Foo.negative);
 		}
-#endif
+
+		[Test]
+		[ExpectedException (typeof (ArgumentNullException))]
+		public void HasFlagNull ()
+		{
+			SomeEnum x = SomeEnum.a;
+
+			x.HasFlag (null);
+		}
+
+		[Test]
+		[ExpectedException (typeof (ArgumentException))]
+		public void HasFlagWrongType ()
+		{
+			SomeEnum x = SomeEnum.a;
+
+			x.HasFlag (SomeByteEnum.a);
+		}
 
 		[Flags]
 		enum SomeEnum
@@ -1398,6 +1418,12 @@ namespace MonoTests.System
 		  ulong_Ee = 0x7FFFFFFFffffffff,
 		  ulong_Ff = 100
 		}
-		
+
+		enum EnumOverlap
+		{
+			Unknown = 0,
+			First = 0,
+			System_Math = First,
+		}	
 	}
 }

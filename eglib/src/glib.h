@@ -49,12 +49,6 @@
 
 G_BEGIN_DECLS
 
-#ifdef G_OS_WIN32
-/* MSC and Cross-compilatin will use this */
-int vasprintf (char **strp, const char *fmt, va_list ap);
-#endif
-
-
 /*
  * Basic data types
  */
@@ -182,7 +176,6 @@ typedef struct _GMemChunk GMemChunk;
 /*
  * Misc.
  */
-#define g_atexit(func)	((void) atexit (func))
 
 const gchar *    g_getenv(const gchar *variable);
 gboolean         g_setenv(const gchar *variable, const gchar *value, gboolean overwrite);
@@ -493,6 +486,7 @@ struct _GByteArray {
 GByteArray *g_byte_array_new    (void);
 GByteArray* g_byte_array_append (GByteArray *array, const guint8 *data, guint len);
 guint8*  g_byte_array_free      (GByteArray *array, gboolean free_segment);
+void     g_byte_array_set_size  (GByteArray *array, gint length);
 
 /*
  * Array
@@ -609,10 +603,14 @@ void           g_assertion_message    (const gchar *format, ...) G_GNUC_NORETURN
 #define g_message(...)  g_log (G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, __VA_ARGS__)
 #define g_debug(...)    g_log (G_LOG_DOMAIN, G_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #endif  /* ndef HAVE_C99_SUPPORT */
-#define g_log_set_handler(a,b,c,d)
 
-#define G_GNUC_INTERNAL
+typedef void (*GLogFunc) (const gchar *log_domain, GLogLevelFlags log_level, const gchar *message, gpointer user_data);
+typedef void (*GPrintFunc) (const gchar *string);
 
+void       g_log_default_handler     (const gchar *log_domain, GLogLevelFlags log_level, const gchar *message, gpointer unused_data);
+GLogFunc   g_log_set_default_handler (GLogFunc log_func, gpointer user_data);
+GPrintFunc g_set_print_handler       (GPrintFunc func);
+GPrintFunc g_set_printerr_handler    (GPrintFunc func);
 /*
  * Conversions
  */
@@ -727,8 +725,16 @@ GUnicodeBreakType   g_unichar_break_type (gunichar c);
 #define G_UNLIKELY(x) (x)
 #endif
 
+#if defined(_MSC_VER)
+#define  eg_unreachable() __assume(0)
+#elif defined(__GNUC__) && ((__GNUC__ > 4) || (__GNUC__ == 4 && (__GNUC_MINOR__ >= 5)))
+#define  eg_unreachable() __builtin_unreachable()
+#else
+#define  eg_unreachable()
+#endif
+
 #define  g_assert(x)     G_STMT_START { if (G_UNLIKELY (!(x))) g_assertion_message ("* Assertion at %s:%d, condition `%s' not met\n", __FILE__, __LINE__, #x);  } G_STMT_END
-#define  g_assert_not_reached() G_STMT_START { g_assertion_message ("* Assertion: should not be reached at %s:%d\n", __FILE__, __LINE__); } G_STMT_END
+#define  g_assert_not_reached() G_STMT_START { g_assertion_message ("* Assertion: should not be reached at %s:%d\n", __FILE__, __LINE__); eg_unreachable(); } G_STMT_END
 
 /*
  * Unicode conversion
@@ -809,6 +815,7 @@ gboolean g_spawn_command_line_sync (const gchar *command_line, gchar **standard_
 gboolean g_spawn_async_with_pipes  (const gchar *working_directory, gchar **argv, gchar **envp, GSpawnFlags flags, GSpawnChildSetupFunc child_setup,
 				gpointer user_data, GPid *child_pid, gint *standard_input, gint *standard_output, gint *standard_error, GError **error);
 
+int eg_getdtablesize (void);
 
 /*
  * Timer
@@ -1007,19 +1014,6 @@ glong     g_utf8_pointer_to_offset (const gchar *str, const gchar *pos);
  */
 #define G_PRIORITY_DEFAULT 0
 #define G_PRIORITY_DEFAULT_IDLE 200
-
-/*
- * Empty thread functions, not used by eglib
- */
-#define g_thread_supported()   TRUE
-#define g_thread_init(x)       G_STMT_START { if (x != NULL) { g_error ("No vtable supported in g_thread_init"); } } G_STMT_END
-
-#define G_LOCK_DEFINE(name)        int name;
-#define G_LOCK_DEFINE_STATIC(name) static int name;
-#define G_LOCK_EXTERN(name)
-#define G_LOCK(name)
-#define G_TRYLOCK(name)
-#define G_UNLOCK(name)
 
 #define GUINT16_SWAP_LE_BE_CONSTANT(x) ((((guint16) x) >> 8) | ((((guint16) x) << 8)))
 

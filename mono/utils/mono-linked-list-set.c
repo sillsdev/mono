@@ -56,27 +56,28 @@ get_hazardous_pointer_with_mask (gpointer volatile *pp, MonoThreadHazardPointers
 /*
 Initialize @list and will use @free_node_func to release memory.
 If @free_node_func is null the caller is responsible for releasing node memory.
-@free_node_func must be lock-free.  That implies that it cannot use malloc/free.
+If @free_node_func may lock, @free_node_func_locking must be
+HAZARD_FREE_MAY_LOCK; otherwise, HAZARD_FREE_NO_LOCK. It is ignored if
+@free_node_func is null.
 */
 void
-mono_lls_init (MonoLinkedListSet *list, void (*free_node_func)(void *))
+mono_lls_init (MonoLinkedListSet *list, void (*free_node_func)(void *), HazardFreeLocking free_node_func_locking)
 {
 	list->head = NULL;
 	list->free_node_func = free_node_func;
+	list->locking = free_node_func_locking;
 }
 
 /*
 Search @list for element with key @key.
+@context specifies whether the function is being called from a lock-free (i.e.
+signal handler or world stopped) context. It is only relevant if a node free
+function was given.
 The nodes next, cur and prev are returned in @hp.
 Returns true if a node with key @key was found.
-This function cannot be called from a signal nor within interrupt context*.
-XXX A variant that works within interrupted is possible if needed.
-
-* interrupt context is when the current thread is reposible for another thread
-been suspended at an arbritary point. This is a limitation of our SMR implementation.
 */
 gboolean
-mono_lls_find (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, uintptr_t key)
+mono_lls_find (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, uintptr_t key, HazardFreeContext context)
 {
 	MonoLinkedListSetNode *cur, *next;
 	MonoLinkedListSetNode **prev;
@@ -94,12 +95,12 @@ try_again:
 	 */
 	mono_hazard_pointer_set (hp, 2, prev);
 
-	cur = get_hazardous_pointer_with_mask ((gpointer*)prev, hp, 1);
+	cur = (MonoLinkedListSetNode *) get_hazardous_pointer_with_mask ((gpointer*)prev, hp, 1);
 
 	while (1) {
 		if (cur == NULL)
 			return FALSE;
-		next = get_hazardous_pointer_with_mask ((gpointer*)&cur->next, hp, 0);
+		next = (MonoLinkedListSetNode *) get_hazardous_pointer_with_mask ((gpointer*)&cur->next, hp, 0);
 		cur_key = cur->key;
 
 		/*
@@ -119,30 +120,32 @@ try_again:
 			prev = &cur->next;
 			mono_hazard_pointer_set (hp, 2, cur);
 		} else {
-			next = mono_lls_pointer_unmask (next);
+			next = (MonoLinkedListSetNode *) mono_lls_pointer_unmask (next);
 			if (InterlockedCompareExchangePointer ((volatile gpointer*)prev, next, cur) == cur) {
 				/* The hazard pointer must be cleared after the CAS. */
 				mono_memory_write_barrier ();
 				mono_hazard_pointer_clear (hp, 1);
 				if (list->free_node_func)
-					mono_thread_hazardous_free_or_queue (cur, list->free_node_func, FALSE, TRUE);
+					mono_thread_hazardous_free_or_queue (cur, list->free_node_func, list->locking, context);
 			} else
 				goto try_again;
 		}
-		cur = mono_lls_pointer_unmask (next);
+		cur = (MonoLinkedListSetNode *) mono_lls_pointer_unmask (next);
 		mono_hazard_pointer_set (hp, 1, cur);
 	}
 }
 
 /*
 Insert @value into @list.
+@context specifies whether the function is being called from a lock-free (i.e.
+signal handler or world stopped) context. It is only relevant if a node free
+function was given.
 The nodes value, cur and prev are returned in @hp.
 Return true if @value was inserted by this call. If it returns FALSE, it's the caller
 resposibility to release memory.
-This function cannot be called from a signal nor with the world stopped.
 */
 gboolean
-mono_lls_insert (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, MonoLinkedListSetNode *value)
+mono_lls_insert (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, MonoLinkedListSetNode *value, HazardFreeContext context)
 {
 	MonoLinkedListSetNode *cur, **prev;
 	/*We must do a store barrier before inserting 
@@ -150,10 +153,10 @@ mono_lls_insert (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, MonoLink
 	mono_memory_barrier ();
 
 	while (1) {
-		if (mono_lls_find (list, hp, value->key))
+		if (mono_lls_find (list, hp, value->key, context))
 			return FALSE;
-		cur = mono_hazard_pointer_get_val (hp, 1);
-		prev = mono_hazard_pointer_get_val (hp, 2);
+		cur = (MonoLinkedListSetNode *) mono_hazard_pointer_get_val (hp, 1);
+		prev = (MonoLinkedListSetNode **) mono_hazard_pointer_get_val (hp, 2);
 
 		value->next = cur;
 		mono_hazard_pointer_set (hp, 0, value);
@@ -165,22 +168,24 @@ mono_lls_insert (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, MonoLink
 }
 
 /*
-Search @list for element with key @key.
+Search @list for element with key @key and remove it.
+@context specifies whether the function is being called from a lock-free (i.e.
+signal handler or world stopped) context. It is only relevant if a node free
+function was given.
 The nodes next, cur and prev are returned in @hp
 Returns true if @value was removed by this call.
-This function cannot be called from a signal nor with the world stopped.
 */
 gboolean
-mono_lls_remove (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, MonoLinkedListSetNode *value)
+mono_lls_remove (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, MonoLinkedListSetNode *value, HazardFreeContext context)
 {
 	MonoLinkedListSetNode *cur, **prev, *next;
 	while (1) {
-		if (!mono_lls_find (list, hp, value->key))
+		if (!mono_lls_find (list, hp, value->key, context))
 			return FALSE;
 
-		next = mono_hazard_pointer_get_val (hp, 0);
-		cur = mono_hazard_pointer_get_val (hp, 1);
-		prev = mono_hazard_pointer_get_val (hp, 2);
+		next = (MonoLinkedListSetNode *) mono_hazard_pointer_get_val (hp, 0);
+		cur = (MonoLinkedListSetNode *) mono_hazard_pointer_get_val (hp, 1);
+		prev = (MonoLinkedListSetNode **) mono_hazard_pointer_get_val (hp, 2);
 
 		g_assert (cur == value);
 
@@ -188,14 +193,14 @@ mono_lls_remove (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, MonoLink
 			continue;
 		/* The second CAS must happen before the first. */
 		mono_memory_write_barrier ();
-		if (InterlockedCompareExchangePointer ((volatile gpointer*)prev, next, cur) == cur) {
+		if (InterlockedCompareExchangePointer ((volatile gpointer*)prev, mono_lls_pointer_unmask (next), cur) == cur) {
 			/* The CAS must happen before the hazard pointer clear. */
 			mono_memory_write_barrier ();
 			mono_hazard_pointer_clear (hp, 1);
 			if (list->free_node_func)
-				mono_thread_hazardous_free_or_queue (value, list->free_node_func, FALSE, TRUE);
+				mono_thread_hazardous_free_or_queue (value, list->free_node_func, list->locking, context);
 		} else
-			mono_lls_find (list, hp, value->key);
+			mono_lls_find (list, hp, value->key, context);
 		return TRUE;
 	}
 }

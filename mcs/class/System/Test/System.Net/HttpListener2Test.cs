@@ -45,9 +45,6 @@ using NUnit.Framework;
 namespace MonoTests.System.Net {
 	
 	[TestFixture]
-#if TARGET_JVM	
-	[Ignore ("The class HttpListener is not supported")]
-#endif
 	public class HttpListener2Test {
 		
 		private HttpListener _listener = null;
@@ -144,7 +141,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "GET / HTTP/1.1\r\n\r\n"); // No host
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", response);
 		}
 
 		[Test]
@@ -155,7 +152,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"); // no prefix
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", response);
 		}
 
 		[Test]
@@ -192,7 +189,7 @@ namespace MonoTests.System.Net {
 				string response = Receive (ns, 512);
 				ns.Close ();
 				listener.Close ();
-				Assert.AreEqual (true, response.StartsWith ("HTTP/1.1 400"), String.Format ("Failed on {0}", (int) b));
+				StringAssert.StartsWith ("HTTP/1.1 400", response, String.Format ("Failed on {0}", (int) b));
 			}
 		}
 
@@ -204,7 +201,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "POST /test4/ HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"); // length required
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 411"));
+			StringAssert.StartsWith ("HTTP/1.1 411", response);
 		}
 
 		[Test]
@@ -215,7 +212,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: pepe\r\n\r\n"); // not implemented
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 501"));
+			StringAssert.StartsWith ("HTTP/1.1 501", response);
 		}
 
 		[Test]
@@ -227,7 +224,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "POST /test6/ HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: identity\r\n\r\n");
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 501"));
+			StringAssert.StartsWith ("HTTP/1.1 501", response);
 		}
 
 		[Test]
@@ -241,8 +238,8 @@ namespace MonoTests.System.Net {
 			ctx.Response.Close ();
 			string response = Receive (ns, 1024);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 200"));
-			Assert.IsTrue (-1 != response.IndexOf ("Transfer-Encoding: chunked"));
+			StringAssert.StartsWith ("HTTP/1.1 200", response);
+			StringAssert.Contains ("Transfer-Encoding: chunked", response);
 		}
 
 		[Test]
@@ -257,7 +254,7 @@ namespace MonoTests.System.Net {
 			ctx.Response.Close ();
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 200"));
+			StringAssert.StartsWith ("HTTP/1.1 200", response);
 			Assert.IsTrue (-1 == response.IndexOf ("Transfer-Encoding: chunked"));
 		}
 
@@ -272,7 +269,7 @@ namespace MonoTests.System.Net {
 			string response = ReceiveWithTimeout (ns, 512, 1000, out timeout);
 			ns.Close ();
 			Assert.IsFalse (timeout);
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 411"));
+			StringAssert.StartsWith ("HTTP/1.1 411", response);
 		}
 
 		[Test]
@@ -287,7 +284,7 @@ namespace MonoTests.System.Net {
 			string response = ReceiveWithTimeout (ns, 512, 1000, out timeout);
 			ns.Close ();
 			Assert.IsFalse (timeout);
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 411"));
+			StringAssert.StartsWith ("HTTP/1.1 411", response);
 		}
 
 		[Test]
@@ -300,7 +297,7 @@ namespace MonoTests.System.Net {
 			ns.GetSocket ().Shutdown (SocketShutdown.Send);
 			string input = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (input.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", input);
 		}
 
 		[Test]
@@ -313,7 +310,7 @@ namespace MonoTests.System.Net {
 			ns.GetSocket ().Shutdown (SocketShutdown.Send);
 			string input = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (input.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", input);
 		}
 
 		[Test]
@@ -326,7 +323,7 @@ namespace MonoTests.System.Net {
 			ns.GetSocket ().Shutdown (SocketShutdown.Send);
 			string input = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (input.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", input);
 		}
 
 		HttpListenerRequest test14_request;
@@ -344,7 +341,11 @@ namespace MonoTests.System.Net {
 			Thread thread = new Thread (ReadToEnd);
 			thread.Start ();
 			if (test_evt.WaitOne (3000, false) == false) {
+#if MONO_FEATURE_THREAD_ABORT
 				thread.Abort ();
+#else
+				thread.Interrupt ();
+#endif
 				test_evt.Close ();
 				Assert.IsTrue (false, "Timed out");
 			}
@@ -418,8 +419,8 @@ namespace MonoTests.System.Net {
 			ctx.Response.Close ();
 			string response = Receive (ns, 1024);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 200"));
-			Assert.IsTrue (-1 != response.IndexOf ("Transfer-Encoding: chunked"));
+			StringAssert.StartsWith ("HTTP/1.1 200", response);
+			StringAssert.Contains ("Transfer-Encoding: chunked", response);
 		}
 
 		[Test]
@@ -723,11 +724,11 @@ namespace MonoTests.System.Net {
 		public void ClosePort ()
 		{
 			var h = new HttpListener ();
-			h.Prefixes.Add ("http://127.0.0.1:8080/");
+			h.Prefixes.Add ("http://127.0.0.1:30158/");
 			h.Start ();
 			h.BeginGetContext (null, null);
 			h.Stop ();
-			TcpListener t = new TcpListener (IPAddress.Parse ("127.0.0.1"), 8080);
+			TcpListener t = new TcpListener (IPAddress.Parse ("127.0.0.1"), 30158);
 			t.Start ();
 			t.Stop ();
 		}
@@ -776,6 +777,24 @@ namespace MonoTests.System.Net {
 			h.Start ();
 			var c = new TcpClient ("localhost", port);
 			h.Stop ();
+		}
+
+		// Test case for bug #31209
+		[Test]
+		public void Test_EmptyLineAtStart ()
+		{
+			var listener = HttpListener2Test.CreateAndStartListener ("http://127.0.0.1:9124/");
+			var ns = HttpListener2Test.CreateNS (9124);
+
+			HttpListener2Test.Send (ns, "\r\nGET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+
+			bool timedout;
+			HttpListener2Test.GetContextWithTimeout (listener, 1000, out timedout);
+
+			Assert.IsFalse (timedout, "timed out");
+
+			ns.Close ();
+			listener.Close ();
 		}
 	}
 }

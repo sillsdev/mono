@@ -7,6 +7,7 @@ namespace Mono.Debugger.Soft
 	public class StackFrame : Mirror
 	{
 		ThreadMirror thread;
+		AppDomainMirror domain;
 		MethodMirror method;
 		int il_offset;
 		Location location;
@@ -32,6 +33,24 @@ namespace Mono.Debugger.Soft
 			}
 		}
 
+		public AppDomainMirror Domain {
+			get {
+				if (domain == null) {
+					if (vm.Version.AtLeast (2, 38)) {
+						try {
+							domain = vm.GetDomain (vm.conn.StackFrame_GetDomain (thread.Id, Id));
+						} catch (AbsentInformationException) {
+							domain = Thread.Domain;
+						}
+					} else {
+						domain = Thread.Domain;
+					}
+				}
+
+				return domain;
+			}
+		}
+
 		public MethodMirror Method {
 			get {
 				return method;
@@ -45,13 +64,15 @@ namespace Mono.Debugger.Soft
 					string src_file = null;
 					byte[] hash = null;
 					int column_number = 0;
+					int end_line_number = -1;
+					int end_column_number = -1;
 
 					if (il_offset == -1)
 						line_number = -1;
 					else
-						line_number = method.il_offset_to_line_number (il_offset, out src_file, out hash, out column_number);
+						line_number = method.il_offset_to_line_number (il_offset, out src_file, out hash, out column_number, out end_line_number, out end_column_number);
 
-					location = new Location (vm, Method, 0, il_offset, src_file != null ? src_file : method.SourceFile, line_number, column_number, hash);
+					location = new Location (vm, Method, 0, il_offset, src_file != null ? src_file : method.SourceFile, line_number, column_number, end_line_number, end_column_number, hash);
 				}
 				return location;
 			}

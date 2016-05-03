@@ -18,8 +18,11 @@ namespace MonoTests.System.Runtime.InteropServices
 	[TestFixture]
 	public class GCHandleTest
 	{
+		// Expected warning, the tests that reference this handle are testing for the default values of the object
+		#pragma warning disable 649
 		static GCHandle handle;
-
+		#pragma warning restore 649
+		
 		[Test]
 		public void DefaultZeroValue_Allocated ()
 		{
@@ -127,6 +130,7 @@ namespace MonoTests.System.Runtime.InteropServices
 		}
 #if !MONOTOUCH
 		[Test]
+		[Category("MobileNotWorking")] // SIGSEGV, probably on AppDomain.Unload
 		public void WeakHandleWorksOnNonRootDomain ()
 		{
 			//Console.WriteLine("current app domain: " + AppDomain.CurrentDomain.Id);

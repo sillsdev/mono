@@ -704,10 +704,7 @@ namespace Microsoft.Scripting.Interpreter {
                 _instructions.EmitBranchNull(nullValue);
                 CompileConvertToType (typeFrom, typeTo, isChecked);
                 _instructions.EmitWrap (typeTo);
-                _instructions.EmitBranch (end);                
                 _instructions.MarkLabel(nullValue);
-                _instructions.EmitDup (); // Keep null on the stack
-                _instructions.MarkLabel(end);
                 return;
             }
 
@@ -1281,7 +1278,7 @@ namespace Microsoft.Scripting.Interpreter {
             // also could be a mutable value type, Delegate.CreateDelegate and MethodInfo.Invoke both can't handle this, we
             // need to generate code.
             if (!CollectionUtils.TrueForAll(parameters, (p) => !p.ParameterType.IsByRef) ||
-                (!node.Method.IsStatic && node.Method.DeclaringType.IsValueType() && !node.Method.DeclaringType.IsPrimitive())) {
+                (!node.Method.IsStatic && node.Method.DeclaringType.IsValueType && node.Method.DeclaringType.Assembly != typeof (object).Assembly)) {
 #if MONO_INTERPRETER
                 throw new NotImplementedException ("Interpreter of ref types");
 #else

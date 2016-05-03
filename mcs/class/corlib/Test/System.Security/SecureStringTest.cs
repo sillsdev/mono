@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Security;
@@ -65,7 +64,6 @@ namespace MonoTests.System.Security {
 				Assert.Ignore (NotSupported);
 			}
 		}
-#if !TARGET_JVM
 		[Test]
 		public unsafe void UnsafeConstructor ()
 		{
@@ -143,7 +141,6 @@ namespace MonoTests.System.Security {
 			SecureString ss = GetMaxLength ();
 			ss.AppendChar ('a');
 		}
-#endif
 		[Test]
 		public void Copy_Empty ()
 		{
@@ -253,7 +250,6 @@ namespace MonoTests.System.Security {
 			SecureString ss = new SecureString ();
 			ss.RemoveAt (1);
 		}
-#if !TARGET_JVM
 		[Test]
 		[ExpectedException (typeof (ArgumentOutOfRangeException))]
 		public void InsertAt_BiggerThanMax ()
@@ -261,7 +257,6 @@ namespace MonoTests.System.Security {
 			SecureString ss = GetMaxLength ();
 			ss.InsertAt (ss.Length, 'a');
 		}
-#endif
 		private SecureString GetReadOnly ()
 		{
 			SecureString ss = new SecureString ();
@@ -409,4 +404,3 @@ namespace MonoTests.System.Security {
 	}
 }
 
-#endif

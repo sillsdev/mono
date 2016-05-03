@@ -42,13 +42,9 @@ using MonoTests.SystemWeb.Framework;
 using MonoTests.stand_alone.WebHarness;
 using MonoTests.Common;
 
-#if NET_2_0
 using System.Web.UI.Adapters;
-#endif
 
-#if NET_4_0
 using System.Web.Routing;
-#endif
 
 namespace MonoTests.System.Web.UI
 {
@@ -232,7 +228,6 @@ namespace MonoTests.System.Web.UI
 			string uid1_3 = c1.UniqueID;
 			Assert.IsFalse (uid1_3 == uid1_2, "id was not reset");
 
-#if NET_2_0
 			EnsureIDControl c3 = new EnsureIDControl ();
 			nc.Controls.Add (c3);
 			string uid3_1 = c3.UniqueID;
@@ -243,7 +238,6 @@ namespace MonoTests.System.Web.UI
 			string uid3_2 = c3.UniqueID;
 			Assert.IsNull (c3.ID);
 			Assert.IsFalse (uid3_1 == uid3_2, "id was not reset");
-#endif
 		}
 
 		[Test]
@@ -258,11 +252,7 @@ namespace MonoTests.System.Web.UI
 			nc3.Controls.Add (nc2);
 			nc2.Controls.Add (nc);
 			nc.Controls.Add (control);
-#if NET_2_0
 			string expected = "ctl00_ctl00_ctl00";
-#else
-			string expected = "_ctl0__ctl0__ctl0";
-#endif
 			Assert.AreEqual (expected, control.ClientID, "ClientID");
 		}
 
@@ -292,7 +282,6 @@ namespace MonoTests.System.Web.UI
 			Assert.AreEqual (-1, html.IndexOf ("<span>label</span><span>label</span>"), "#A1");
 		}
 		
-#if NET_2_0
 		[Test]
 		[Category("NunitWeb")]
 		public void AppRelativeTemplateSourceDirectory ()
@@ -816,11 +805,7 @@ namespace MonoTests.System.Web.UI
 
 		public static void ResolveUrl_Load (Page p)
 		{
-#if TARGET_JVM
-			string appPath = "/MainsoftWebApp20";
-#else
 			string appPath = "/NunitWeb";
-#endif
 			Control ctrl = new Control ();
 			p.Controls.Add (ctrl);
 			Assert.AreEqual (appPath + "/MyPage.aspx", ctrl.ResolveUrl ("~/MyPage.aspx"), "ResolveClientUrl Failed");
@@ -866,11 +851,7 @@ namespace MonoTests.System.Web.UI
 
 		public static void ResolveUrl2_Load (Page p)
 		{
-#if TARGET_JVM
-			string appPath = "/MainsoftWebApp20";
-#else
 			string appPath = "/NunitWeb";
-#endif
 			Control uc = p.FindControl ("WebUserControl1");
 			Control ctrl = uc.FindControl ("Label");
 
@@ -924,7 +905,6 @@ namespace MonoTests.System.Web.UI
 			Assert.AreEqual (false, ctrl.EnableTheming, "EnableTheming#2");
 		}
 
-#endif
 		[Test]
 		public void BindingContainer ()
 		{
@@ -951,7 +931,6 @@ namespace MonoTests.System.Web.UI
 			Assert.IsTrue (Object.ReferenceEquals (child2.NamingContainer, nc), "NamingContainer #2");
 			Assert.IsTrue (Object.ReferenceEquals (child2.BindingContainer, nc), "BindingContainer #2");
 
-#if NET_2_0
 			// DetailsViewPagerRow marked to be not BindingContainer 
 			DetailsViewPagerRow row = new DetailsViewPagerRow (0, DataControlRowType.Pager, DataControlRowState.Normal);
 			TableCell cell = new TableCell ();
@@ -962,16 +941,13 @@ namespace MonoTests.System.Web.UI
 
 			Assert.IsTrue (Object.ReferenceEquals (child3.NamingContainer, row), "NamingContainer #3");
 			Assert.IsTrue (Object.ReferenceEquals (child3.BindingContainer, control), "BindingContainer #3");
-#endif
 		}
-#if NET_2_0
 		[Test]
 		public void Control_Adapter ()
 		{
 			MyNC ctr = new MyNC ();
 			Assert.AreEqual (null, ctr.Adapter (), "Adapter");
 		}
-#endif
 		[Test]
 		public void ChildControlsCreated () {
 			ChildControlsCreatedControl ctr = new ChildControlsCreatedControl ();
@@ -983,7 +959,6 @@ namespace MonoTests.System.Web.UI
 			Assert.AreEqual (1, ctr.Controls.Count, "ChildControlsCreated#2");
 		}
 
-#if NET_2_0
 		[Test (Description="Bug #594238")]
 		public void OverridenControlsPropertyAndPostBack_Bug594238 ()
 		{
@@ -996,11 +971,7 @@ namespace MonoTests.System.Web.UI
 			fr.Controls ["__EVENTTARGET"].Value = "container$children$lb";
 			fr.Controls ["__EVENTARGUMENT"].Value = String.Empty;
 			t.Request = fr;
-#if NET_4_0
 			string originalHtml = "<span id=\"container\"><a id=\"container_children_lb\" href=\"javascript:__doPostBack(&#39;container$children$lb&#39;,&#39;&#39;)\">Woot! I got clicked!</a></span><hr/>";
-#else
-			string originalHtml = @"<span id=""container""><a href=""javascript:__doPostBack('container$children$lb','')"" id=""container_children_lb"">Woot! I got clicked!</a></span><hr/>";
-#endif
 			string pageHtml = t.Run ();
 			string renderedHtml = HtmlDiff.GetControlFromPageHtml (pageHtml);
 
@@ -1021,8 +992,6 @@ namespace MonoTests.System.Web.UI
 			WebTest.CopyResource (GetType (), "OverridenControlsPropertyAndPostBack_Bug594238.aspx", "OverridenControlsPropertyAndPostBack_Bug594238.aspx");
 		}
 
-#endif
-#if NET_4_0
 		[Test]
 		public void GetRouteUrl_Object ()
 		{
@@ -1140,9 +1109,7 @@ namespace MonoTests.System.Web.UI
 			path = ctl.GetRouteUrl (String.Empty, (RouteValueDictionary) null);
 			Assert.IsNull (path, "#A3-3");
 		}
-#endif
 		#region helpcalsses
-#if NET_2_0
 		class ControlWithState : Control
 		{
 			string _state;
@@ -1195,10 +1162,8 @@ namespace MonoTests.System.Web.UI
 			}
 		}
 
-#endif
 		class MyNC : Control, INamingContainer
 		{
-			#if NET_2_0
 			public ControlAdapter Adapter ()
 			{
 				return base.Adapter;
@@ -1223,7 +1188,6 @@ namespace MonoTests.System.Web.UI
 			{
 				return base.HasEvents ();
 			}
-			#endif
 		}
 
 		class DerivedControl : Control
@@ -1240,7 +1204,6 @@ namespace MonoTests.System.Web.UI
 				get { return coll; }
 			}
 
-#if NET_2_0
 			public bool DoIsViewStateEnabled
 			{
 				get { return IsViewStateEnabled; }
@@ -1265,7 +1228,6 @@ namespace MonoTests.System.Web.UI
 			{
 				return base.ResolveAdapter ();
 			}
-#endif
 		}
 
 		class NamingContainer : Control, INamingContainer
@@ -1301,7 +1263,6 @@ namespace MonoTests.System.Web.UI
 		#endregion
 	}
 
-#if NET_2_0
 	public class Customadaptercontrol : Control
 	{
 		public new ControlAdapter Adapter {
@@ -1323,7 +1284,6 @@ namespace MonoTests.System.Web.UI
 			EnsureID ();
 		}
 	}
-#endif
 
 	public class ChildControlsCreatedControl : Control
 	{

@@ -30,6 +30,7 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 
@@ -42,6 +43,8 @@ namespace System.IO {
 		public bool Enabled;
 		public bool NoWildcards;
 		public DateTime DisabledTime;
+
+		public object FilesLock = new object ();
 		public Hashtable Files;
 	}
 
@@ -210,6 +213,13 @@ namespace System.IO {
 					files = NoStringsArray;
 			}
 
+			lock (data.FilesLock) {
+				IterateAndModifyFilesData (data, directory, dispatch, files);
+			}
+		}
+
+		void IterateAndModifyFilesData (DefaultWatcherData data, string directory, bool dispatch, string[] files)
+		{
 			/* Set all as untested */
 			foreach (string filename in data.Files.Keys) {
 				FileData fd = (FileData) data.Files [filename];
@@ -240,12 +250,12 @@ namespace System.IO {
 				return;
 
 			/* Removed files */
-			ArrayList removed = null;
+			List<string> removed = null;
 			foreach (string filename in data.Files.Keys) {
 				FileData fd = (FileData) data.Files [filename];
 				if (fd.NotExists) {
 					if (removed == null)
-						removed = new ArrayList ();
+						removed = new List<string> ();
 
 					removed.Add (filename);
 					DispatchEvents (data.FSW, FileAction.Removed, filename);
@@ -269,7 +279,7 @@ namespace System.IO {
 				} catch {
 					/* Deleted */
 					if (removed == null)
-						removed = new ArrayList ();
+						removed = new List<string> ();
 
 					removed.Add (filename);
 					DispatchEvents (data.FSW, FileAction.Removed, filename);

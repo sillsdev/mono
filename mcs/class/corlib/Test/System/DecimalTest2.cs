@@ -136,25 +136,10 @@ namespace MonoTests.System
             }
         }
 
-#if TARGET_JVM
-        // Under TARGET_JVm we have a slightly better precision (becuase of
-        // using Java BigDecimal).
-        private bool AreNotEqual(Decimal v1, Decimal v2)
-        {
-            Decimal delta = v1 - v2;
-            if (delta < 0m)
-                delta = -delta;
-	    Decimal absV1 = v1 < 0m ? -v1 : v1;
-            if (absV1 < 1m)
-                return delta > 1E-27m;
-            return delta / absV1 > 1E-27m;
-        }
-#else
         private bool AreNotEqual(Decimal v1, Decimal v2)
         {
             return v1 != v2;
         }
-#endif
 
 	[Test]
 	     
@@ -353,16 +338,8 @@ namespace MonoTests.System
 				    // very small difference 0.00000000000000001 between Mono and MS
 				    if ((i == 21) && (j == 3))
 					    continue;
-#if NET_2_0
 				    ReportOpError ("Div: result mismatch", i, j, d1, d2, d3, tr.val);
 				    errOp++;
-#else
-				    // Mono is more precise than MS 1.x - but match 2.0 results!
-				    if ((n != 184) && (n != 214)) {
-					    ReportOpError ("Div: result mismatch", i, j, d1, d2, d3, tr.val);
-					    errOp++;
-				    }
-#endif
 			    }
                         }
                     }
@@ -2446,11 +2423,7 @@ namespace MonoTests.System
 	    new TestResult(0, 79228162514264337593543950335m), // 6 / 1
 	    new TestResult(0, -79228162514264337593543950335m), // 6 / 2
 	    new TestResult(4, 39614081257132168796771975168m), // 6 / 3
-#if NET_2_0
 	    new TestResult(4, 7922816251426433759354395033.5m), // 6 / 4
-#else
-	    new TestResult(4, 7922816251426433759354395034m), // 6 / 4
-#endif
 	    new TestResult(1, 0m), // 6 / 5
 	    new TestResult(0, 1m), // 6 / 6
 	    new TestResult(0, -1m), // 6 / 7
@@ -2480,11 +2453,7 @@ namespace MonoTests.System
 	    new TestResult(0, -79228162514264337593543950335m), // 7 / 1
 	    new TestResult(0, 79228162514264337593543950335m), // 7 / 2
 	    new TestResult(4, -39614081257132168796771975168m), // 7 / 3
-#if NET_2_0
 	    new TestResult(4, -7922816251426433759354395033.5m), // 7 / 4
-#else
-	    new TestResult(4, -7922816251426433759354395034m), // 7 / 4
-#endif
 	    new TestResult(1, 0m), // 7 / 5
 	    new TestResult(0, -1m), // 7 / 6
 	    new TestResult(0, 1m), // 7 / 7

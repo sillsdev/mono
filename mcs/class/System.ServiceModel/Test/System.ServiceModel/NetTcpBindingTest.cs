@@ -35,6 +35,8 @@ using System.ServiceModel.Security;
 using System.Threading;
 using NUnit.Framework;
 
+using MonoTests.Helpers;
+
 namespace MonoTests.System.ServiceModel
 {
 	[TestFixture]
@@ -167,17 +169,18 @@ namespace MonoTests.System.ServiceModel
 		{
 			var host = new ServiceHost (typeof (Foo));
 			var bindingsvc = new CustomBinding (new BinaryMessageEncodingBindingElement (), new TcpTransportBindingElement ());
-			host.AddServiceEndpoint (typeof (IFoo), bindingsvc, "net.tcp://localhost:37564/");
+			int port = NetworkHelpers.FindFreePort ();
+			host.AddServiceEndpoint (typeof (IFoo), bindingsvc, "net.tcp://localhost:" + port + "/");
 			host.Open (TimeSpan.FromSeconds (5));
 			try {
 				var bindingcli = new NetTcpBinding () { TransactionFlow = false };
 				bindingcli.Security.Mode = SecurityMode.None;
-				var cli = new ChannelFactory<IFooClient> (bindingcli, new EndpointAddress ("net.tcp://localhost:37564/")).CreateChannel ();
+				var cli = new ChannelFactory<IFooClient> (bindingcli, new EndpointAddress ("net.tcp://localhost:" + port + "/")).CreateChannel ();
 				Assert.AreEqual (5, cli.Add (1, 4));
 				Assert.AreEqual ("monkey science", cli.Join ("monkey", "science"));
 			} finally {
 				host.Close (TimeSpan.FromSeconds (5));
-				var t = new TcpListener (37564);
+				var t = new TcpListener (port);
 				t.Start ();
 				t.Stop ();
 			}
@@ -190,23 +193,31 @@ namespace MonoTests.System.ServiceModel
 		{
 			var host = new ServiceHost (typeof (Foo));
 			var bindingsvc = new CustomBinding (new BinaryMessageEncodingBindingElement (), new TcpTransportBindingElement () { TransferMode = TransferMode.Streamed });
-			host.AddServiceEndpoint (typeof (IFoo), bindingsvc, "net.tcp://localhost:37564/");
+			int port = NetworkHelpers.FindFreePort ();
+			host.AddServiceEndpoint (typeof (IFoo), bindingsvc, "net.tcp://localhost:" + port + "/");
 			host.Open (TimeSpan.FromSeconds (5));
 			try {
 				var bindingcli = new NetTcpBinding () { TransactionFlow = false };
 				bindingcli.TransferMode = TransferMode.Streamed;
 				bindingcli.Security.Mode = SecurityMode.None;
-				var cli = new ChannelFactory<IFooClient> (bindingcli, new EndpointAddress ("net.tcp://localhost:37564/")).CreateChannel ();
+				var cli = new ChannelFactory<IFooClient> (bindingcli, new EndpointAddress ("net.tcp://localhost:" + port + "/")).CreateChannel ();
 				Assert.AreEqual (5, cli.Add (1, 4));
 				Assert.AreEqual ("monkey science", cli.Join ("monkey", "science"));
 			} finally {
 				host.Close (TimeSpan.FromSeconds (5));
-				var t = new TcpListener (37564);
+				var t = new TcpListener (port);
 				t.Start ();
 				t.Stop ();
 			}
 			Assert.IsTrue (Foo.AddCalled, "#1");
 			Assert.IsTrue (Foo.JoinCalled, "#2");
+		}
+
+		[Test]
+		public void ReaderQuotasDefault_Bug15153 ()
+		{
+			NetTcpBinding binding = new NetTcpBinding(SecurityMode.None);
+			binding.ReaderQuotas.MaxStringContentLength = 8192;
 		}
 
 		[ServiceContract]

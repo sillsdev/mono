@@ -32,6 +32,9 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Security.Principal;
 using System.Text;
+using System.Threading.Tasks;
+using System.Net.WebSockets;
+
 namespace System.Net {
 	public sealed class HttpListenerContext {
 		HttpListenerRequest request;
@@ -132,6 +135,21 @@ namespace System.Net {
 				// Invalid auth data is swallowed silently
 				return null;
 			} 
+		}
+
+		public Task<HttpListenerWebSocketContext> AcceptWebSocketAsync (string subProtocol)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public Task<HttpListenerWebSocketContext> AcceptWebSocketAsync (string subProtocol, int receiveBufferSize, TimeSpan keepAliveInterval)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public Task<HttpListenerWebSocketContext> AcceptWebSocketAsync (string subProtocol, int receiveBufferSize, TimeSpan keepAliveInterval, ArraySegment<byte> internalBuffer)
+		{
+			throw new NotImplementedException ();
 		}
 	}
 }

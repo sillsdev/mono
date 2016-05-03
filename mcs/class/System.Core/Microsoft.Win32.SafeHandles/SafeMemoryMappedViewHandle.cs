@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0
 
 using System;
 using System.IO;
@@ -37,21 +36,19 @@ using Microsoft.Win32.SafeHandles;
 namespace Microsoft.Win32.SafeHandles
 {
 	public sealed class SafeMemoryMappedViewHandle : SafeBuffer {
-		private readonly IntPtr mmap_addr;
-		private readonly ulong mmap_size;
-		internal SafeMemoryMappedViewHandle (IntPtr handle, long size, IntPtr mmap_addr, long mmap_size) : base (true) {
-			this.handle = handle;
-			this.mmap_addr = mmap_addr;
-			this.mmap_size = (ulong)mmap_size;
+		IntPtr mmap_handle;
+
+		internal SafeMemoryMappedViewHandle (IntPtr mmap_handle, IntPtr base_address, long size) : base (true) {
+			this.mmap_handle = mmap_handle;
+			this.handle = base_address;
 			Initialize ((ulong)size);
 		}
 
 		protected override bool ReleaseHandle () {
-			if (this.mmap_addr != (IntPtr) (-1))
-				return MemoryMapImpl.Unmap (this.mmap_addr, mmap_size);
+			if (this.handle != (IntPtr) (-1))
+				return MemoryMapImpl.Unmap (this.mmap_handle);
 			throw new NotImplementedException ();
 		}
 	}
 }
 
-#endif

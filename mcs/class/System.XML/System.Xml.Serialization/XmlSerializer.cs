@@ -37,7 +37,7 @@ using System.Reflection;
 using System.Xml;
 using System.Xml.Schema;
 using System.Text;
-#if !TARGET_JVM && !NET_2_1
+#if !NET_2_1
 using System.CodeDom;
 using System.CodeDom.Compiler;
 using Microsoft.CSharp;
@@ -68,6 +68,7 @@ namespace System.Xml.Serialization
 		internal class SerializerData
 		{
 			public int UsageCount;
+			public bool Generated;
 			public Type ReaderType;
 			public MethodInfo ReaderMethod;
 			public Type WriterType;
@@ -120,7 +121,7 @@ namespace System.Xml.Serialization
 			//       debugging pourposes by adding the "nofallback" option.
 			//       For example: MONO_XMLSERIALIZER_THS=0,nofallback
 			
-#if TARGET_JVM || NET_2_1
+#if NET_2_1
 			string db = null;
 			string th = null;
 			generationThreshold = -1;
@@ -145,20 +146,26 @@ namespace System.Xml.Serialization
 				else {
 					generationThreshold = int.Parse (th, CultureInfo.InvariantCulture);
 					backgroundGeneration = (generationThreshold != 0);
-					if (generationThreshold < 1) generationThreshold = 1;
 				}
 			}
 #endif
 			deleteTempFiles = (db == null || db == "no");
-#if !NET_2_1
-			IDictionary table = (IDictionary) ConfigurationSettings.GetConfig("system.diagnostics");
+#if !NET_2_1 && CONFIGURATION_DEP
+			// DiagnosticsSection
+			ConfigurationSection table = (ConfigurationSection) ConfigurationSettings.GetConfig("system.diagnostics");
+			var bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 			if (table != null) 
 			{
-				table = (IDictionary) table["switches"];
-				if (table != null) 
-				{
-					string val = (string) table ["XmlSerialization.Compilation"];
-					if (val == "1") deleteTempFiles = false;
+				// SwitchElementsCollection
+				var pi = table.GetType ().GetProperty ("Switches", bf);
+				var switchesElement = (ConfigurationElementCollection) pi.GetValue (table, null);
+				foreach (ConfigurationElement e in switchesElement) {
+					// SwitchElement
+					if (e.GetType ().GetProperty ("Name", bf).GetValue (e, null) as string == "XmlSerialization.Compilation") {
+						if (e.GetType ().GetProperty ("Value", bf).GetValue (e, null) as string == "1")
+							deleteTempFiles = false;
+						break;
+					}
 				}
 			}
 #endif
@@ -232,7 +239,6 @@ namespace System.Xml.Serialization
 			get { return typeMapping; }
 		}
 
-#if NET_2_0
 
 		[MonoTODO]
 		public XmlSerializer (Type type,
@@ -244,7 +250,6 @@ namespace System.Xml.Serialization
 			Evidence evidence)
 		{
 		}
-#endif
 
 #endregion // Constructors
 
@@ -467,13 +472,8 @@ namespace System.Xml.Serialization
 
 				if (namespaces == null || namespaces.Count == 0) {
 					namespaces = new XmlSerializerNamespaces ();
-#if NET_2_0
 					namespaces.Add ("xsi", XmlSchema.InstanceNamespace);
 					namespaces.Add ("xsd", XmlSchema.Namespace);
-#else
-					namespaces.Add ("xsd", XmlSchema.Namespace);
-					namespaces.Add ("xsi", XmlSchema.InstanceNamespace);
-#endif
 				}
 
 				xsWriter.Initialize (xmlWriter, namespaces);
@@ -521,7 +521,7 @@ namespace System.Xml.Serialization
 			throw new NotImplementedException ();
 		}
 
-#if !TARGET_JVM && !MOBILE
+#if !MOBILE
 		public static Assembly GenerateSerializer (Type[] types, XmlMapping[] mappings)
 		{
 			return GenerateSerializer (types, mappings, null);
@@ -630,7 +630,7 @@ namespace System.Xml.Serialization
 			return new XmlSerializationReaderInterpreter (typeMapping);
 		}
 		
-#if TARGET_JVM || NET_2_1
+#if NET_2_1
  		void CheckGeneratedTypes (XmlMapping typeMapping)
  		{
 			throw new NotImplementedException();
@@ -664,7 +664,10 @@ namespace System.Xml.Serialization
 			bool generate = false;
 			lock (serializerData)
 			{
-				generate = (++serializerData.UsageCount == generationThreshold);
+				if (serializerData.UsageCount >= generationThreshold && !serializerData.Generated)
+					serializerData.Generated = generate = true;
+
+				serializerData.UsageCount++;
 			}
 			
 			if (generate)
@@ -766,6 +769,8 @@ namespace System.Xml.Serialization
 				cp.ReferencedAssemblies.Add ("System.Xml");
 			if (!cp.ReferencedAssemblies.Contains ("System.Data"))
 				cp.ReferencedAssemblies.Add ("System.Data");
+			if (!cp.ReferencedAssemblies.Contains ("System.Web.Services"))
+				cp.ReferencedAssemblies.Add ("System.Web.Services");
 			
 			CompilerResults res = comp.CompileAssemblyFromFile (cp, file);
 			if (res.Errors.HasErrors || res.CompiledAssembly == null) {
@@ -801,17 +806,10 @@ namespace System.Xml.Serialization
 		}
 #endif
 		
-#if NET_2_0
 		GenerationBatch LoadFromSatelliteAssembly (GenerationBatch batch)
 		{
 			return batch;
 		}
-#else
-		GenerationBatch LoadFromSatelliteAssembly (GenerationBatch batch)
-		{
-			return batch;
-		}
-#endif
 		
 #endregion // Methods
 	}

@@ -77,7 +77,7 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 				block.Post (1);
 
 				var ae =
-					AssertEx.Throws<AggregateException> (() => block.Completion.Wait (100));
+					AssertEx.Throws<AggregateException> (() => block.Completion.Wait (1000));
 				Assert.AreEqual (1, ae.InnerExceptions.Count);
 				Assert.AreSame (exception, ae.InnerException);
 			}
@@ -92,7 +92,7 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 
 			var blocks = GetExecutionBlocksWithAction (() =>
 			{
-				if (Thread.VolatileRead (ref shouldRun) == 0) {
+				if (Volatile.Read (ref shouldRun) == 0) {
 					ranAfterFault++;
 					return;
 				}
@@ -118,11 +118,11 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 				shouldRun = 0;
 				evt.Set ();
 
-				AssertEx.Throws<AggregateException> (() => block.Completion.Wait (100));
+				AssertEx.Throws<AggregateException> (() => block.Completion.Wait (1000));
 
 				Thread.Sleep (100);
 
-				Assert.AreEqual (0, Thread.VolatileRead (ref ranAfterFault));
+				Assert.AreEqual (0, Volatile.Read (ref ranAfterFault));
 			}
 		}
 
@@ -136,7 +136,7 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 
 			var blocks = GetExecutionBlocksWithAsyncAction (
 				i =>
-				tcs.Task.ContinueWith (t => Thread.VolatileWrite (ref result, i + t.Result)),
+				tcs.Task.ContinueWith (t => Volatile.Write (ref result, i + t.Result)),
 				new ExecutionDataflowBlockOptions { TaskScheduler = scheduler });
 
 			foreach (var block in blocks) {
@@ -160,7 +160,7 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 				Assert.AreEqual (11, result);
 
 				tcs = new TaskCompletionSource<int> ();
-				Thread.VolatileWrite (ref result, 0);
+				Volatile.Write (ref result, 0);
 			}
 		}
 
@@ -188,7 +188,7 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 				scheduler.ExecuteAll ();
 
 				var ae =
-					AssertEx.Throws<AggregateException> (() => block.Completion.Wait (100)).
+					AssertEx.Throws<AggregateException> (() => block.Completion.Wait (1000)).
 						Flatten ();
 
 				Assert.AreEqual (1, ae.InnerExceptions.Count);

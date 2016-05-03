@@ -17,10 +17,10 @@ namespace Mono.Unix.Native {
 		//
 		// Non-generated exports
 		//
-
+#if !MONODROID
 		[DllImport (LIB, EntryPoint="Mono_Posix_FromRealTimeSignum")]
 		private static extern int FromRealTimeSignum (Int32 offset, out Int32 rval);
-
+#endif
 		// convert a realtime signal to os signal
 		public static int FromRealTimeSignum (RealTimeSignum sig)
 		{
@@ -193,6 +193,11 @@ namespace Mono.Unix.Native {
 		public static DateTime ToDateTime (long time)
 		{
 			return FromTimeT (time);
+		}
+
+		public static DateTime ToDateTime (long time, long nanoTime)
+		{
+			return FromTimeT (time).AddMilliseconds (nanoTime / 1000);
 		}
 
 		public static long FromDateTime (DateTime time)

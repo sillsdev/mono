@@ -33,6 +33,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.Serialization;
 using System.Runtime.InteropServices;
 
@@ -43,8 +44,7 @@ namespace System
 	[StructLayout (LayoutKind.Sequential)]
 	public abstract class MulticastDelegate : Delegate
 	{
-		MulticastDelegate prev;
-		MulticastDelegate kpm_next;
+		Delegate[] delegates;
 
 		protected MulticastDelegate (object target, string method)
 			: base (target, method)
@@ -61,13 +61,31 @@ namespace System
 			base.GetObjectData  (info, context);
 		}
 
-
 		protected sealed override object DynamicInvokeImpl (object[] args)
 		{
-			if (prev != null)
-				prev.DynamicInvokeImpl (args);
+			if (delegates == null) {
+				return base.DynamicInvokeImpl (args);
+			} else {
+				object r;
+				int i = 0, len = delegates.Length;
+				do {
+					r = delegates [i].DynamicInvoke (args);
+				} while (++i < len);
+				return r;
+			}
+		}
 
-			return base.DynamicInvokeImpl (args);
+		// Some high-performance applications use this internal property
+		// to avoid using a slow path to determine if there is more than one handler
+		// This brings an API that we removed in f410e545e2db0e0dc338673a6b10a5cfd2d3340f
+		// which some users depeneded on
+		//
+		// This is an example of code that used this:
+		// https://gist.github.com/migueldeicaza/cd99938c2a4372e7e5d5
+		//
+		// Do not remove this API
+		internal bool HasSingleTarget {
+			get { return delegates == null; }
 		}
 
 		// <remarks>
@@ -83,19 +101,21 @@ namespace System
 			if (d == null)
 				return false;
 
-			MulticastDelegate this_prev = this.prev;
-			MulticastDelegate obj_prev = d.prev;
-
-			do {
-				if (this_prev == null)
-					return obj_prev == null;
-
-				if (!this_prev.Compare (obj_prev))
+			if (delegates == null && d.delegates == null) {
+				return true;
+			} else if (delegates == null ^ d.delegates == null) {
+				return false;
+			} else {
+				if (delegates.Length != d.delegates.Length)
 					return false;
-				
-				this_prev = this_prev.prev;
-				obj_prev = obj_prev.prev;
-			} while (true);
+
+				for (int i = 0; i < delegates.Length; ++i) {
+					if (!delegates [i].Equals (d.delegates [i]))
+						return false;
+				}
+
+				return true;
+			}
 		}
 
 		//
@@ -106,33 +126,24 @@ namespace System
 			return base.GetHashCode ();
 		}
 
+		protected override MethodInfo GetMethodImpl ()
+		{
+			if (delegates != null)
+				return delegates [delegates.Length - 1].Method;
+
+			return base.GetMethodImpl ();
+		}
+
 		// <summary>
 		//   Return, in order of invocation, the invocation list
 		//   of a MulticastDelegate
 		// </summary>
 		public sealed override Delegate[] GetInvocationList ()
 		{
-			MulticastDelegate d;
-			d = (MulticastDelegate) this.Clone ();
-			for (d.kpm_next = null; d.prev != null; d = d.prev)
-				d.prev.kpm_next = d;
-
-			if (d.kpm_next == null) {
-				MulticastDelegate other = (MulticastDelegate) d.Clone ();
-				other.prev = null;
-				other.kpm_next = null;				
-				return new Delegate [1] { other };
-			}
-
-			var list = new List<Delegate> ();
-			for (; d != null; d = d.kpm_next) {
-				MulticastDelegate other = (MulticastDelegate) d.Clone ();
-				other.prev = null;
-				other.kpm_next = null;
-				list.Add (other);
-			}
-
-			return list.ToArray ();
+			if (delegates != null)
+				return (Delegate[]) delegates.Clone ();
+			else
+				return new Delegate[1] { this };
 		}
 
 		// <summary>
@@ -143,91 +154,59 @@ namespace System
 		// </summary>
 		protected sealed override Delegate CombineImpl (Delegate follow)
 		{
-			MulticastDelegate combined, orig, clone;
+			if (follow == null)
+				return this;
 
-			if (this.GetType() != follow.GetType ())
-				throw new ArgumentException (Locale.GetText ("Incompatible Delegate Types. First is {0} second is {1}.", this.GetType ().FullName, follow.GetType ().FullName));
+			MulticastDelegate other = (MulticastDelegate) follow;
 
-			combined = (MulticastDelegate)follow.Clone ();
-			combined.SetMulticastInvoke ();
+			MulticastDelegate ret = AllocDelegateLike_internal (this);
 
-			for (clone = combined, orig = ((MulticastDelegate)follow).prev; orig != null; orig = orig.prev) {
-				
-				clone.prev = (MulticastDelegate)orig.Clone ();
-				clone = clone.prev;
+			if (delegates == null && other.delegates == null) {
+				ret.delegates = new Delegate [2] { this, other };
+			} else if (delegates == null) {
+				ret.delegates = new Delegate [1 + other.delegates.Length];
+
+				ret.delegates [0] = this;
+				Array.Copy (other.delegates, 0, ret.delegates, 1, other.delegates.Length);
+			} else if (other.delegates == null) {
+				ret.delegates = new Delegate [delegates.Length + 1];
+
+				Array.Copy (delegates, 0, ret.delegates, 0, delegates.Length);
+				ret.delegates [ret.delegates.Length - 1] = other;
+			} else {
+				ret.delegates = new Delegate [delegates.Length + other.delegates.Length];
+
+				Array.Copy (delegates, 0, ret.delegates, 0, delegates.Length);
+				Array.Copy (other.delegates, 0, ret.delegates, delegates.Length, other.delegates.Length);
 			}
 
-			clone.SetMulticastInvoke ();
-			clone.prev = (MulticastDelegate)this.Clone ();
+			return ret;
+		}
 
-			for (clone = clone.prev, orig = this.prev; orig != null; orig = orig.prev) {
+		/* Based on the Boyer–Moore string search algorithm */
+		int LastIndexOf (Delegate[] haystack, Delegate[] needle)
+		{
+			if (haystack.Length < needle.Length)
+				return -1;
 
-				clone.prev = (MulticastDelegate)orig.Clone ();
-				clone = clone.prev;
+			if (haystack.Length == needle.Length) {
+				for (int i = 0; i < haystack.Length; ++i)
+					if (!haystack [i].Equals (needle [i]))
+						return -1;
+
+				return 0;
 			}
 
-			return combined;
-		}
-
-		private bool BaseEquals (MulticastDelegate value)
-		{
-			return base.Equals (value);
-		}
-
-		/* 
-		 * Perform a slightly crippled version of
-		 * Knuth-Pratt-Morris over MulticastDelegate chains.
-		 * Border values are set as pointers in kpm_next;
-		 * Generally, KPM border arrays are length n+1 for
-		 * strings of n. This one works with length n at the
-		 * expense of a few additional comparisions.
-		 */
-		private static MulticastDelegate KPM (MulticastDelegate needle, MulticastDelegate haystack,
-		                                      out MulticastDelegate tail)
-		{
-			MulticastDelegate nx, hx;
-
-			// preprocess
-			hx = needle;
-			nx = needle.kpm_next = null;
-			do {
-				while ((nx != null) && (!nx.BaseEquals (hx)))
-					nx = nx.kpm_next;
-
-				hx = hx.prev;
-				if (hx == null)
-					break;
-					
-				nx = nx == null ? needle : nx.prev;
-				if (hx.BaseEquals (nx))
-					hx.kpm_next = nx.kpm_next;
-				else
-					hx.kpm_next = nx;
-
-			} while (true);
-
-			// match
-			MulticastDelegate match = haystack;
-			nx = needle;
-			hx = haystack;
-			do {
-				while (nx != null && !nx.BaseEquals (hx)) {
-					nx = nx.kpm_next;
-					match = match.prev;
+			for (int i = haystack.Length - needle.Length, j; i >= 0;) {
+				for (j = 0; needle [j].Equals (haystack [i]); ++i, ++j) {
+					if (j == needle.Length - 1)
+						return i - j;
 				}
 
-				nx = nx == null ? needle : nx.prev;
-				if (nx == null) {
-					// bingo
-					tail = hx.prev;
-					return match;
-				}
+				i -= j + 1;
+			}
 
-				hx = hx.prev;
-			} while (hx != null);
-
-			tail = null;
-			return null;
+			return -1;
 		}
 
 		protected sealed override Delegate RemoveImpl (Delegate value)
@@ -235,41 +214,68 @@ namespace System
 			if (value == null)
 				return this;
 
-			// match this with value
-			MulticastDelegate head, tail;
-			head = KPM ((MulticastDelegate)value, this, out tail);
-			if (head == null)
+			MulticastDelegate other = (MulticastDelegate) value;
+
+			if (delegates == null && other.delegates == null) {
+				/* if they are not equal and the current one is not
+				 * a multicastdelegate then we cannot delete it */
+				return this.Equals (other) ? null : this;
+			} else if (delegates == null) {
+				foreach (var d in other.delegates) {
+					if (this.Equals (d))
+						return null;
+				}
 				return this;
+			} else if (other.delegates == null) {
+				int idx = Array.LastIndexOf (delegates, other);
+				if (idx == -1)
+					return this;
 
-			// duplicate chain without head..tail
-			MulticastDelegate prev = null, retval = null, orig;
-			for (orig = this; (object)orig != (object)head; orig = orig.prev) {
-				MulticastDelegate clone = (MulticastDelegate)orig.Clone ();
-				if (prev != null)
-					prev.prev = clone;
-				else
-					retval = clone;
-				prev = clone;
-			}
-			for (orig = tail; (object)orig != null; orig = orig.prev) {
-				MulticastDelegate clone = (MulticastDelegate)orig.Clone ();
-				if (prev != null)
-					prev.prev = clone;
-				else
-					retval = clone;
-				prev = clone;
-			}
-			if (prev != null)
-				prev.prev = null;
+				if (delegates.Length <= 1) {
+					/* delegates.Length should never be equal or
+					 * lower than 1, it should be 2 or greater */
+					throw new InvalidOperationException ();
+				}
 
-			return retval;
+				if (delegates.Length == 2)
+					return delegates [idx == 0 ? 1 : 0];
+
+				MulticastDelegate ret = AllocDelegateLike_internal (this);
+				ret.delegates = new Delegate [delegates.Length - 1];
+
+				Array.Copy (delegates, ret.delegates, idx);
+				Array.Copy (delegates, idx + 1, ret.delegates, idx, delegates.Length - idx - 1);
+
+				return ret;
+			} else {
+				/* wild case : remove MulticastDelegate from MulticastDelegate
+				 * complexity is O(m + n), with n the number of elements in
+				 * this.delegates and m the number of elements in other.delegates */
+
+				if (delegates.Equals (other.delegates))
+					return null;
+
+				/* we need to remove elements from the end to the beginning, as
+				 * the addition and removal of delegates behaves like a stack */
+				int idx = LastIndexOf (delegates, other.delegates);
+				if (idx == -1)
+					return this;
+
+				MulticastDelegate ret = AllocDelegateLike_internal (this);
+				ret.delegates = new Delegate [delegates.Length - other.delegates.Length];
+
+				Array.Copy (delegates, ret.delegates, idx);
+				Array.Copy (delegates, idx + other.delegates.Length, ret.delegates, idx, delegates.Length - idx - other.delegates.Length);
+
+				return ret;
+			}
 		}
 
 		public static bool operator == (MulticastDelegate d1, MulticastDelegate d2)
 		{
 			if (d1 == null)
-		    		return d2 == null;
-		    		
+				return d2 == null;
+
 			return d1.Equals (d2);
 		}
 		
@@ -277,7 +283,7 @@ namespace System
 		{
 			if (d1 == null)
 				return d2 != null;
-		    	
+
 			return !d1.Equals (d2);
 		}
 	}

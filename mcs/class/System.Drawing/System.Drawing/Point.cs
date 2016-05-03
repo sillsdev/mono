@@ -40,7 +40,9 @@ namespace System.Drawing
 {
 	[Serializable]	
 	[ComVisible (true)]
+#if !MONOTOUCH && !MONOMAC
 	[TypeConverter (typeof (PointConverter))]
+#endif
 	public struct Point
 	{
 		// Private x and y coordinate fields.
@@ -226,7 +228,7 @@ namespace System.Drawing
 		public Point (int dw)
 		{
 			y = dw >> 16;
-			x = dw & 0xffff;
+			x = unchecked ((short) (dw & 0xffff));
 		}
 
 		/// <summary>
@@ -366,7 +368,6 @@ namespace System.Drawing
 			return string.Format ("{{X={0},Y={1}}}", x.ToString (CultureInfo.InvariantCulture), 
 				y.ToString (CultureInfo.InvariantCulture));
 		}
-#if NET_2_0
 		public static Point Add (Point pt, Size sz)
 		{
 			return new Point (pt.X + sz.Width, pt.Y + sz.Height);
@@ -381,7 +382,6 @@ namespace System.Drawing
 		{
 			return new Point (pt.X - sz.Width, pt.Y - sz.Height);
 		}
-#endif
 
 	}
 }

@@ -15,11 +15,11 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include <mono/metadata/gc-internal.h>
+#include <mono/metadata/gc-internals.h>
 
 #include <mono/utils/atomic.h>
 #include <mono/utils/mono-compiler.h>
-#include <mono/utils/mono-logger-internal.h>
+#include <mono/utils/mono-logger-internals.h>
 #include <mono/utils/mono-membar.h>
 #include <mono/utils/mono-counters.h>
 #include <mono/utils/hazard-pointer.h>
@@ -33,7 +33,7 @@
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/exception.h>
 #include <mono/metadata/metadata-internals.h>
-#include <mono/metadata/gc-internal.h>
+#include <mono/metadata/gc-internals.h>
 #include <mono/metadata/appdomain.h>
 #include <mono/metadata/mono-debug-debugger.h>
 #include <mono/metadata/mono-config.h>
@@ -89,12 +89,13 @@ static guint16 appdomain_list_size = 0;
 static guint16 appdomain_next = 0;
 static MonoDomain **appdomains_list = NULL;
 static MonoImage *exe_image;
+static gboolean debug_domain_unload;
 
 gboolean mono_dont_free_domains;
 
-#define mono_appdomains_lock() EnterCriticalSection (&appdomains_mutex)
-#define mono_appdomains_unlock() LeaveCriticalSection (&appdomains_mutex)
-static CRITICAL_SECTION appdomains_mutex;
+#define mono_appdomains_lock() mono_coop_mutex_lock (&appdomains_mutex)
+#define mono_appdomains_unlock() mono_coop_mutex_unlock (&appdomains_mutex)
+static MonoCoopMutex appdomains_mutex;
 
 static MonoDomain *mono_root_domain = NULL;
 
@@ -115,30 +116,24 @@ typedef struct {
 
 static const MonoRuntimeInfo *current_runtime = NULL;
 
-static MonoJitInfoFindInAot jit_info_find_in_aot_func = NULL;
-
 /* This is the list of runtime versions supported by this JIT.
  */
 static const MonoRuntimeInfo supported_runtimes[] = {
-	{"v2.0.50215","2.0", { {2,0,0,0}, { 8,0,0,0}, {3,5,0,0}, {3,0,0,0} } },
-	{"v2.0.50727","2.0", { {2,0,0,0}, { 8,0,0,0}, {3,5,0,0}, {3,0,0,0} } },
 	{"v4.0.30319","4.5", { {4,0,0,0}, {10,0,0,0}, {4,0,0,0}, {4,0,0,0} } },
-	{"v4.0.30128","4.0", { {4,0,0,0}, {10,0,0,0}, {4,0,0,0}, {4,0,0,0} } },
-	{"v4.0.20506","4.0", { {4,0,0,0}, {10,0,0,0}, {4,0,0,0}, {4,0,0,0} } },
 	{"mobile",    "2.1", { {2,0,5,0}, {10,0,0,0}, {2,0,5,0}, {2,0,5,0} } },
 	{"moonlight", "2.1", { {2,0,5,0}, { 9,0,0,0}, {3,5,0,0}, {3,0,0,0} } },
 };
 
 
 /* The stable runtime version */
-#define DEFAULT_RUNTIME_VERSION "v2.0.50727"
+#define DEFAULT_RUNTIME_VERSION "v4.0.30319"
 
 /* Callbacks installed by the JIT */
 static MonoCreateDomainFunc create_domain_hook;
 static MonoFreeDomainFunc free_domain_hook;
 
-/* This is intentionally not in the header file, so people don't misuse it. */
-extern void _mono_debug_init_corlib (MonoDomain *domain);
+/* AOT cache configuration */
+static MonoAotCacheConfig aot_cache_config;
 
 static void
 get_runtimes_from_exe (const char *exe_file, MonoImage **exe_image, const MonoRuntimeInfo** runtimes);
@@ -156,864 +151,14 @@ gint32
 mono_domain_get_tls_offset (void)
 {
 	int offset = -1;
+
+#ifdef HOST_WIN32
+	if (appdomain_thread_id)
+		offset = appdomain_thread_id;
+#else
 	MONO_THREAD_VAR_OFFSET (tls_appdomain, offset);
-/*	__asm ("jmp 1f; .section writetext, \"awx\"; 1: movl $tls_appdomain@ntpoff, %0; jmp 2f; .previous; 2:" 
-		: "=r" (offset));*/
+#endif
 	return offset;
-}
-
-#define JIT_INFO_TABLE_FILL_RATIO_NOM		3
-#define JIT_INFO_TABLE_FILL_RATIO_DENOM		4
-#define JIT_INFO_TABLE_FILLED_NUM_ELEMENTS	(MONO_JIT_INFO_TABLE_CHUNK_SIZE * JIT_INFO_TABLE_FILL_RATIO_NOM / JIT_INFO_TABLE_FILL_RATIO_DENOM)
-
-#define JIT_INFO_TABLE_LOW_WATERMARK(n)		((n) / 2)
-#define JIT_INFO_TABLE_HIGH_WATERMARK(n)	((n) * 5 / 6)
-
-#define JIT_INFO_TOMBSTONE_MARKER	((MonoMethod*)NULL)
-#define IS_JIT_INFO_TOMBSTONE(ji)	((ji)->d.method == JIT_INFO_TOMBSTONE_MARKER)
-
-#define JIT_INFO_TABLE_HAZARD_INDEX		0
-#define JIT_INFO_HAZARD_INDEX			1
-
-static int
-jit_info_table_num_elements (MonoJitInfoTable *table)
-{
-	int i;
-	int num_elements = 0;
-
-	for (i = 0; i < table->num_chunks; ++i) {
-		MonoJitInfoTableChunk *chunk = table->chunks [i];
-		int chunk_num_elements = chunk->num_elements;
-		int j;
-
-		for (j = 0; j < chunk_num_elements; ++j) {
-			if (!IS_JIT_INFO_TOMBSTONE (chunk->data [j]))
-				++num_elements;
-		}
-	}
-
-	return num_elements;
-}
-
-static MonoJitInfoTableChunk*
-jit_info_table_new_chunk (void)
-{
-	MonoJitInfoTableChunk *chunk = g_new0 (MonoJitInfoTableChunk, 1);
-	chunk->refcount = 1;
-
-	return chunk;
-}
-
-static MonoJitInfoTable *
-jit_info_table_new (MonoDomain *domain)
-{
-	MonoJitInfoTable *table = g_malloc0 (MONO_SIZEOF_JIT_INFO_TABLE + sizeof (MonoJitInfoTableChunk*));
-
-	table->domain = domain;
-	table->num_chunks = 1;
-	table->chunks [0] = jit_info_table_new_chunk ();
-
-	return table;
-}
-
-static void
-jit_info_table_free (MonoJitInfoTable *table)
-{
-	int i;
-	int num_chunks = table->num_chunks;
-	MonoDomain *domain = table->domain;
-
-	mono_domain_lock (domain);
-
-	table->domain->num_jit_info_tables--;
-	if (table->domain->num_jit_info_tables <= 1) {
-		GSList *list;
-
-		for (list = table->domain->jit_info_free_queue; list; list = list->next)
-			g_free (list->data);
-
-		g_slist_free (table->domain->jit_info_free_queue);
-		table->domain->jit_info_free_queue = NULL;
-	}
-
-	/* At this point we assume that there are no other threads
-	   still accessing the table, so we don't have to worry about
-	   hazardous pointers. */
-
-	for (i = 0; i < num_chunks; ++i) {
-		MonoJitInfoTableChunk *chunk = table->chunks [i];
-		int num_elements;
-		int j;
-
-		if (--chunk->refcount > 0)
-			continue;
-
-		num_elements = chunk->num_elements;
-		for (j = 0; j < num_elements; ++j) {
-			MonoJitInfo *ji = chunk->data [j];
-
-			if (IS_JIT_INFO_TOMBSTONE (ji))
-				g_free (ji);
-		}
-
-		g_free (chunk);
-	}
-
-	mono_domain_unlock (domain);
-
-	g_free (table);
-}
-
-/* The jit_info_table is sorted in ascending order by the end
- * addresses of the compiled methods.  The reason why we have to do
- * this is that once we introduce tombstones, it becomes possible for
- * code ranges to overlap, and if we sort by code start and insert at
- * the back of the table, we cannot guarantee that we won't overlook
- * an entry.
- *
- * There are actually two possible ways to do the sorting and
- * inserting which work with our lock-free mechanism:
- *
- * 1. Sort by start address and insert at the front.  When looking for
- * an entry, find the last one with a start address lower than the one
- * you're looking for, then work your way to the front of the table.
- *
- * 2. Sort by end address and insert at the back.  When looking for an
- * entry, find the first one with an end address higher than the one
- * you're looking for, then work your way to the end of the table.
- *
- * We chose the latter out of convenience.
- */
-static int
-jit_info_table_index (MonoJitInfoTable *table, gint8 *addr)
-{
-	int left = 0, right = table->num_chunks;
-
-	g_assert (left < right);
-
-	do {
-		int pos = (left + right) / 2;
-		MonoJitInfoTableChunk *chunk = table->chunks [pos];
-
-		if (addr < chunk->last_code_end)
-			right = pos;
-		else
-			left = pos + 1;
-	} while (left < right);
-	g_assert (left == right);
-
-	if (left >= table->num_chunks)
-		return table->num_chunks - 1;
-	return left;
-}
-
-static int
-jit_info_table_chunk_index (MonoJitInfoTableChunk *chunk, MonoThreadHazardPointers *hp, gint8 *addr)
-{
-	int left = 0, right = chunk->num_elements;
-
-	while (left < right) {
-		int pos = (left + right) / 2;
-		MonoJitInfo *ji = get_hazardous_pointer((gpointer volatile*)&chunk->data [pos], hp, JIT_INFO_HAZARD_INDEX);
-		gint8 *code_end = (gint8*)ji->code_start + ji->code_size;
-
-		if (addr < code_end)
-			right = pos;
-		else
-			left = pos + 1;
-	}
-	g_assert (left == right);
-
-	return left;
-}
-
-static MonoJitInfo*
-jit_info_table_find (MonoJitInfoTable *table, MonoThreadHazardPointers *hp, gint8 *addr)
-{
-	MonoJitInfo *ji;
-	int chunk_pos, pos;
-
-	chunk_pos = jit_info_table_index (table, (gint8*)addr);
-	g_assert (chunk_pos < table->num_chunks);
-
-	pos = jit_info_table_chunk_index (table->chunks [chunk_pos], hp, (gint8*)addr);
-
-	/* We now have a position that's very close to that of the
-	   first element whose end address is higher than the one
-	   we're looking for.  If we don't have the exact position,
-	   then we have a position below that one, so we'll just
-	   search upward until we find our element. */
-	do {
-		MonoJitInfoTableChunk *chunk = table->chunks [chunk_pos];
-
-		while (pos < chunk->num_elements) {
-			ji = get_hazardous_pointer ((gpointer volatile*)&chunk->data [pos], hp, JIT_INFO_HAZARD_INDEX);
-
-			++pos;
-
-			if (IS_JIT_INFO_TOMBSTONE (ji)) {
-				mono_hazard_pointer_clear (hp, JIT_INFO_HAZARD_INDEX);
-				continue;
-			}
-			if ((gint8*)addr >= (gint8*)ji->code_start
-					&& (gint8*)addr < (gint8*)ji->code_start + ji->code_size) {
-				mono_hazard_pointer_clear (hp, JIT_INFO_HAZARD_INDEX);
-				return ji;
-			}
-
-			/* If we find a non-tombstone element which is already
-			   beyond what we're looking for, we have to end the
-			   search. */
-			if ((gint8*)addr < (gint8*)ji->code_start)
-				goto not_found;
-		}
-
-		++chunk_pos;
-		pos = 0;
-	} while (chunk_pos < table->num_chunks);
-
- not_found:
-	if (hp)
-		mono_hazard_pointer_clear (hp, JIT_INFO_HAZARD_INDEX);
-	return NULL;
-}
-
-/*
- * mono_jit_info_table_find_internal:
- *
- * If TRY_AOT is FALSE, avoid loading information for missing methods from AOT images, which is currently not async safe.
- * In this case, only those AOT methods will be found whose jit info is already loaded.
- * ASYNC SAFETY: When called in an async context (mono_thread_info_is_async_context ()), this is async safe.
- * In this case, the returned MonoJitInfo might not have metadata information, in particular,
- * mono_jit_info_get_method () could fail.
- */
-MonoJitInfo*
-mono_jit_info_table_find_internal (MonoDomain *domain, char *addr, gboolean try_aot)
-{
-	MonoJitInfoTable *table;
-	MonoJitInfo *ji, *module_ji;
-	MonoThreadHazardPointers *hp = mono_hazard_pointer_get ();
-
-	++mono_stats.jit_info_table_lookup_count;
-
-	/* First we have to get the domain's jit_info_table.  This is
-	   complicated by the fact that a writer might substitute a
-	   new table and free the old one.  What the writer guarantees
-	   us is that it looks at the hazard pointers after it has
-	   changed the jit_info_table pointer.  So, if we guard the
-	   table by a hazard pointer and make sure that the pointer is
-	   still there after we've made it hazardous, we don't have to
-	   worry about the writer freeing the table. */
-	table = get_hazardous_pointer ((gpointer volatile*)&domain->jit_info_table, hp, JIT_INFO_TABLE_HAZARD_INDEX);
-
-	ji = jit_info_table_find (table, hp, (gint8*)addr);
-	if (hp)
-		mono_hazard_pointer_clear (hp, JIT_INFO_TABLE_HAZARD_INDEX);
-	if (ji)
-		return ji;
-
-	/* Maybe its an AOT module */
-	if (try_aot && mono_root_domain && mono_root_domain->aot_modules) {
-		table = get_hazardous_pointer ((gpointer volatile*)&mono_root_domain->aot_modules, hp, JIT_INFO_TABLE_HAZARD_INDEX);
-		module_ji = jit_info_table_find (table, hp, (gint8*)addr);
-		if (module_ji)
-			ji = jit_info_find_in_aot_func (domain, module_ji->d.image, addr);
-		if (hp)
-			mono_hazard_pointer_clear (hp, JIT_INFO_TABLE_HAZARD_INDEX);
-	}
-	
-	return ji;
-}
-
-MonoJitInfo*
-mono_jit_info_table_find (MonoDomain *domain, char *addr)
-{
-	return mono_jit_info_table_find_internal (domain, addr, TRUE);
-}
-
-static G_GNUC_UNUSED void
-jit_info_table_check (MonoJitInfoTable *table)
-{
-	int i;
-
-	for (i = 0; i < table->num_chunks; ++i) {
-		MonoJitInfoTableChunk *chunk = table->chunks [i];
-		int j;
-
-		g_assert (chunk->refcount > 0 /* && chunk->refcount <= 8 */);
-		if (chunk->refcount > 10)
-			printf("warning: chunk refcount is %d\n", chunk->refcount);
-		g_assert (chunk->num_elements <= MONO_JIT_INFO_TABLE_CHUNK_SIZE);
-
-		for (j = 0; j < chunk->num_elements; ++j) {
-			MonoJitInfo *this = chunk->data [j];
-			MonoJitInfo *next;
-
-			g_assert ((gint8*)this->code_start + this->code_size <= chunk->last_code_end);
-
-			if (j < chunk->num_elements - 1)
-				next = chunk->data [j + 1];
-			else if (i < table->num_chunks - 1) {
-				int k;
-
-				for (k = i + 1; k < table->num_chunks; ++k)
-					if (table->chunks [k]->num_elements > 0)
-						break;
-
-				if (k >= table->num_chunks)
-					return;
-
-				g_assert (table->chunks [k]->num_elements > 0);
-				next = table->chunks [k]->data [0];
-			} else
-				return;
-
-			g_assert ((gint8*)this->code_start + this->code_size <= (gint8*)next->code_start + next->code_size);
-		}
-	}
-}
-
-static MonoJitInfoTable*
-jit_info_table_realloc (MonoJitInfoTable *old)
-{
-	int i;
-	int num_elements = jit_info_table_num_elements (old);
-	int required_size;
-	int num_chunks;
-	int new_chunk, new_element;
-	MonoJitInfoTable *new;
-
-	/* number of needed places for elements needed */
-	required_size = (int)((long)num_elements * JIT_INFO_TABLE_FILL_RATIO_DENOM / JIT_INFO_TABLE_FILL_RATIO_NOM);
-	num_chunks = (required_size + MONO_JIT_INFO_TABLE_CHUNK_SIZE - 1) / MONO_JIT_INFO_TABLE_CHUNK_SIZE;
-	if (num_chunks == 0) {
-		g_assert (num_elements == 0);
-		return jit_info_table_new (old->domain);
-	}
-	g_assert (num_chunks > 0);
-
-	new = g_malloc (MONO_SIZEOF_JIT_INFO_TABLE + sizeof (MonoJitInfoTableChunk*) * num_chunks);
-	new->domain = old->domain;
-	new->num_chunks = num_chunks;
-
-	for (i = 0; i < num_chunks; ++i)
-		new->chunks [i] = jit_info_table_new_chunk ();
-
-	new_chunk = 0;
-	new_element = 0;
-	for (i = 0; i < old->num_chunks; ++i) {
-		MonoJitInfoTableChunk *chunk = old->chunks [i];
-		int chunk_num_elements = chunk->num_elements;
-		int j;
-
-		for (j = 0; j < chunk_num_elements; ++j) {
-			if (!IS_JIT_INFO_TOMBSTONE (chunk->data [j])) {
-				g_assert (new_chunk < num_chunks);
-				new->chunks [new_chunk]->data [new_element] = chunk->data [j];
-				if (++new_element >= JIT_INFO_TABLE_FILLED_NUM_ELEMENTS) {
-					new->chunks [new_chunk]->num_elements = new_element;
-					++new_chunk;
-					new_element = 0;
-				}
-			}
-		}
-	}
-
-	if (new_chunk < num_chunks) {
-		g_assert (new_chunk == num_chunks - 1);
-		new->chunks [new_chunk]->num_elements = new_element;
-		g_assert (new->chunks [new_chunk]->num_elements > 0);
-	}
-
-	for (i = 0; i < num_chunks; ++i) {
-		MonoJitInfoTableChunk *chunk = new->chunks [i];
-		MonoJitInfo *ji = chunk->data [chunk->num_elements - 1];
-
-		new->chunks [i]->last_code_end = (gint8*)ji->code_start + ji->code_size;
-	}
-
-	return new;
-}
-
-static void
-jit_info_table_split_chunk (MonoJitInfoTableChunk *chunk, MonoJitInfoTableChunk **new1p, MonoJitInfoTableChunk **new2p)
-{
-	MonoJitInfoTableChunk *new1 = jit_info_table_new_chunk ();
-	MonoJitInfoTableChunk *new2 = jit_info_table_new_chunk ();
-
-	g_assert (chunk->num_elements == MONO_JIT_INFO_TABLE_CHUNK_SIZE);
-
-	new1->num_elements = MONO_JIT_INFO_TABLE_CHUNK_SIZE / 2;
-	new2->num_elements = MONO_JIT_INFO_TABLE_CHUNK_SIZE - new1->num_elements;
-
-	memcpy ((void*)new1->data, (void*)chunk->data, sizeof (MonoJitInfo*) * new1->num_elements);
-	memcpy ((void*)new2->data, (void*)(chunk->data + new1->num_elements), sizeof (MonoJitInfo*) * new2->num_elements);
-
-	new1->last_code_end = (gint8*)new1->data [new1->num_elements - 1]->code_start
-		+ new1->data [new1->num_elements - 1]->code_size;
-	new2->last_code_end = (gint8*)new2->data [new2->num_elements - 1]->code_start
-		+ new2->data [new2->num_elements - 1]->code_size;
-
-	*new1p = new1;
-	*new2p = new2;
-}
-
-static MonoJitInfoTable*
-jit_info_table_copy_and_split_chunk (MonoJitInfoTable *table, MonoJitInfoTableChunk *chunk)
-{
-	MonoJitInfoTable *new_table = g_malloc (MONO_SIZEOF_JIT_INFO_TABLE
-		+ sizeof (MonoJitInfoTableChunk*) * (table->num_chunks + 1));
-	int i, j;
-
-	new_table->domain = table->domain;
-	new_table->num_chunks = table->num_chunks + 1;
-
-	j = 0;
-	for (i = 0; i < table->num_chunks; ++i) {
-		if (table->chunks [i] == chunk) {
-			jit_info_table_split_chunk (chunk, &new_table->chunks [j], &new_table->chunks [j + 1]);
-			j += 2;
-		} else {
-			new_table->chunks [j] = table->chunks [i];
-			++new_table->chunks [j]->refcount;
-			++j;
-		}
-	}
-
-	g_assert (j == new_table->num_chunks);
-
-	return new_table;
-}
-
-static MonoJitInfoTableChunk*
-jit_info_table_purify_chunk (MonoJitInfoTableChunk *old)
-{
-	MonoJitInfoTableChunk *new = jit_info_table_new_chunk ();
-	int i, j;
-
-	j = 0;
-	for (i = 0; i < old->num_elements; ++i) {
-		if (!IS_JIT_INFO_TOMBSTONE (old->data [i]))
-			new->data [j++] = old->data [i];
-	}
-
-	new->num_elements = j;
-	if (new->num_elements > 0)
-		new->last_code_end = (gint8*)new->data [j - 1]->code_start + new->data [j - 1]->code_size;
-	else
-		new->last_code_end = old->last_code_end;
-
-	return new;
-}
-
-static MonoJitInfoTable*
-jit_info_table_copy_and_purify_chunk (MonoJitInfoTable *table, MonoJitInfoTableChunk *chunk)
-{
-	MonoJitInfoTable *new_table = g_malloc (MONO_SIZEOF_JIT_INFO_TABLE
-		+ sizeof (MonoJitInfoTableChunk*) * table->num_chunks);
-	int i, j;
-
-	new_table->domain = table->domain;
-	new_table->num_chunks = table->num_chunks;
-
-	j = 0;
-	for (i = 0; i < table->num_chunks; ++i) {
-		if (table->chunks [i] == chunk)
-			new_table->chunks [j++] = jit_info_table_purify_chunk (table->chunks [i]);
-		else {
-			new_table->chunks [j] = table->chunks [i];
-			++new_table->chunks [j]->refcount;
-			++j;
-		}
-	}
-
-	g_assert (j == new_table->num_chunks);
-
-	return new_table;
-}
-
-/* As we add an element to the table the case can arise that the chunk
- * to which we need to add is already full.  In that case we have to
- * allocate a new table and do something about that chunk.  We have
- * several strategies:
- *
- * If the number of elements in the table is below the low watermark
- * or above the high watermark, we reallocate the whole table.
- * Otherwise we only concern ourselves with the overflowing chunk:
- *
- * If there are no tombstones in the chunk then we split the chunk in
- * two, each half full.
- *
- * If the chunk does contain tombstones, we just make a new copy of
- * the chunk without the tombstones, which will have room for at least
- * the one element we have to add.
- */
-static MonoJitInfoTable*
-jit_info_table_chunk_overflow (MonoJitInfoTable *table, MonoJitInfoTableChunk *chunk)
-{
-	int num_elements = jit_info_table_num_elements (table);
-	int i;
-
-	if (num_elements < JIT_INFO_TABLE_LOW_WATERMARK (table->num_chunks * MONO_JIT_INFO_TABLE_CHUNK_SIZE)
-			|| num_elements > JIT_INFO_TABLE_HIGH_WATERMARK (table->num_chunks * MONO_JIT_INFO_TABLE_CHUNK_SIZE)) {
-		//printf ("reallocing table\n");
-		return jit_info_table_realloc (table);
-	}
-
-	/* count the number of non-tombstone elements in the chunk */
-	num_elements = 0;
-	for (i = 0; i < chunk->num_elements; ++i) {
-		if (!IS_JIT_INFO_TOMBSTONE (chunk->data [i]))
-			++num_elements;
-	}
-
-	if (num_elements == MONO_JIT_INFO_TABLE_CHUNK_SIZE) {
-		//printf ("splitting chunk\n");
-		return jit_info_table_copy_and_split_chunk (table, chunk);
-	}
-
-	//printf ("purifying chunk\n");
-	return jit_info_table_copy_and_purify_chunk (table, chunk);
-}
-
-/* We add elements to the table by first making space for them by
- * shifting the elements at the back to the right, one at a time.
- * This results in duplicate entries during the process, but during
- * all the time the table is in a sorted state.  Also, when an element
- * is replaced by another one, the element that replaces it has an end
- * address that is equal to or lower than that of the replaced
- * element.  That property is necessary to guarantee that when
- * searching for an element we end up at a position not higher than
- * the one we're looking for (i.e. we either find the element directly
- * or we end up to the left of it).
- */
-static void
-jit_info_table_add (MonoDomain *domain, MonoJitInfoTable *volatile *table_ptr, MonoJitInfo *ji)
-{
-	MonoJitInfoTable *table;
-	MonoJitInfoTableChunk *chunk;
-	int chunk_pos, pos;
-	int num_elements;
-	int i;
-
-	table = *table_ptr;
-
- restart:
-	chunk_pos = jit_info_table_index (table, (gint8*)ji->code_start + ji->code_size);
-	g_assert (chunk_pos < table->num_chunks);
-	chunk = table->chunks [chunk_pos];
-
-	if (chunk->num_elements >= MONO_JIT_INFO_TABLE_CHUNK_SIZE) {
-		MonoJitInfoTable *new_table = jit_info_table_chunk_overflow (table, chunk);
-
-		/* Debugging code, should be removed. */
-		//jit_info_table_check (new_table);
-
-		*table_ptr = new_table;
-		mono_memory_barrier ();
-		domain->num_jit_info_tables++;
-		mono_thread_hazardous_free_or_queue (table, (MonoHazardousFreeFunc)jit_info_table_free, TRUE, FALSE);
-		table = new_table;
-
-		goto restart;
-	}
-
-	/* Debugging code, should be removed. */
-	//jit_info_table_check (table);
-
-	num_elements = chunk->num_elements;
-
-	pos = jit_info_table_chunk_index (chunk, NULL, (gint8*)ji->code_start + ji->code_size);
-
-	/* First we need to size up the chunk by one, by copying the
-	   last item, or inserting the first one, if the table is
-	   empty. */
-	if (num_elements > 0)
-		chunk->data [num_elements] = chunk->data [num_elements - 1];
-	else
-		chunk->data [0] = ji;
-	mono_memory_write_barrier ();
-	chunk->num_elements = ++num_elements;
-
-	/* Shift the elements up one by one. */
-	for (i = num_elements - 2; i >= pos; --i) {
-		mono_memory_write_barrier ();
-		chunk->data [i + 1] = chunk->data [i];
-	}
-
-	/* Now we have room and can insert the new item. */
-	mono_memory_write_barrier ();
-	chunk->data [pos] = ji;
-
-	/* Set the high code end address chunk entry. */
-	chunk->last_code_end = (gint8*)chunk->data [chunk->num_elements - 1]->code_start
-		+ chunk->data [chunk->num_elements - 1]->code_size;
-
-	/* Debugging code, should be removed. */
-	//jit_info_table_check (table);
-}
-
-void
-mono_jit_info_table_add (MonoDomain *domain, MonoJitInfo *ji)
-{
-	g_assert (ji->d.method != NULL);
-
-	mono_domain_lock (domain);
-
-	++mono_stats.jit_info_table_insert_count;
-
-	jit_info_table_add (domain, &domain->jit_info_table, ji);
-
-	mono_domain_unlock (domain);
-}
-
-static MonoJitInfo*
-mono_jit_info_make_tombstone (MonoJitInfo *ji)
-{
-	MonoJitInfo *tombstone = g_new0 (MonoJitInfo, 1);
-
-	tombstone->code_start = ji->code_start;
-	tombstone->code_size = ji->code_size;
-	tombstone->d.method = JIT_INFO_TOMBSTONE_MARKER;
-
-	return tombstone;
-}
-
-/*
- * LOCKING: domain lock
- */
-static void
-mono_jit_info_free_or_queue (MonoDomain *domain, MonoJitInfo *ji)
-{
-	if (domain->num_jit_info_tables <= 1) {
-		/* Can it actually happen that we only have one table
-		   but ji is still hazardous? */
-		mono_thread_hazardous_free_or_queue (ji, g_free, TRUE, FALSE);
-	} else {
-		domain->jit_info_free_queue = g_slist_prepend (domain->jit_info_free_queue, ji);
-	}
-}
-
-static void
-jit_info_table_remove (MonoJitInfoTable *table, MonoJitInfo *ji)
-{
-	MonoJitInfoTableChunk *chunk;
-	gpointer start = ji->code_start;
-	int chunk_pos, pos;
-
-	chunk_pos = jit_info_table_index (table, start);
-	g_assert (chunk_pos < table->num_chunks);
-
-	pos = jit_info_table_chunk_index (table->chunks [chunk_pos], NULL, start);
-
-	do {
-		chunk = table->chunks [chunk_pos];
-
-		while (pos < chunk->num_elements) {
-			if (chunk->data [pos] == ji)
-				goto found;
-
-			g_assert (IS_JIT_INFO_TOMBSTONE (chunk->data [pos]));
-			g_assert ((guint8*)chunk->data [pos]->code_start + chunk->data [pos]->code_size
-				<= (guint8*)ji->code_start + ji->code_size);
-
-			++pos;
-		}
-
-		++chunk_pos;
-		pos = 0;
-	} while (chunk_pos < table->num_chunks);
-
- found:
-	g_assert (chunk->data [pos] == ji);
-
-	chunk->data [pos] = mono_jit_info_make_tombstone (ji);
-
-	/* Debugging code, should be removed. */
-	//jit_info_table_check (table);
-}
-
-void
-mono_jit_info_table_remove (MonoDomain *domain, MonoJitInfo *ji)
-{
-	MonoJitInfoTable *table;
-
-	mono_domain_lock (domain);
-	table = domain->jit_info_table;
-
-	++mono_stats.jit_info_table_remove_count;
-
-	jit_info_table_remove (table, ji);
-
-	mono_jit_info_free_or_queue (domain, ji);
-
-	mono_domain_unlock (domain);
-}
-
-void
-mono_jit_info_add_aot_module (MonoImage *image, gpointer start, gpointer end)
-{
-	MonoJitInfo *ji;
-
-	mono_appdomains_lock ();
-
-	/*
-	 * We reuse MonoJitInfoTable to store AOT module info,
-	 * this gives us async-safe lookup.
-	 */
-	g_assert (mono_root_domain);
-	if (!mono_root_domain->aot_modules) {
-		mono_root_domain->num_jit_info_tables ++;
-		mono_root_domain->aot_modules = jit_info_table_new (mono_root_domain);
-	}
-
-	ji = g_new0 (MonoJitInfo, 1);
-	ji->d.image = image;
-	ji->code_start = start;
-	ji->code_size = (guint8*)end - (guint8*)start;
-	jit_info_table_add (mono_root_domain, &mono_root_domain->aot_modules, ji);
-
-	mono_appdomains_unlock ();
-}
-
-void
-mono_install_jit_info_find_in_aot (MonoJitInfoFindInAot func)
-{
-	jit_info_find_in_aot_func = func;
-}
-
-gpointer
-mono_jit_info_get_code_start (MonoJitInfo* ji)
-{
-	return ji->code_start;
-}
-
-int
-mono_jit_info_get_code_size (MonoJitInfo* ji)
-{
-	return ji->code_size;
-}
-
-MonoMethod*
-mono_jit_info_get_method (MonoJitInfo* ji)
-{
-	g_assert (!ji->async);
-	return ji->d.method;
-}
-
-static gpointer
-jit_info_key_extract (gpointer value)
-{
-	MonoJitInfo *info = (MonoJitInfo*)value;
-
-	return info->d.method;
-}
-
-static gpointer*
-jit_info_next_value (gpointer value)
-{
-	MonoJitInfo *info = (MonoJitInfo*)value;
-
-	return (gpointer*)&info->next_jit_code_hash;
-}
-
-void
-mono_jit_code_hash_init (MonoInternalHashTable *jit_code_hash)
-{
-	mono_internal_hash_table_init (jit_code_hash,
-				       mono_aligned_addr_hash,
-				       jit_info_key_extract,
-				       jit_info_next_value);
-}
-
-MonoGenericJitInfo*
-mono_jit_info_get_generic_jit_info (MonoJitInfo *ji)
-{
-	if (ji->has_generic_jit_info)
-		return (MonoGenericJitInfo*)&ji->clauses [ji->num_clauses];
-	else
-		return NULL;
-}
-
-/*
- * mono_jit_info_get_generic_sharing_context:
- * @ji: a jit info
- *
- * Returns the jit info's generic sharing context, or NULL if it
- * doesn't have one.
- */
-MonoGenericSharingContext*
-mono_jit_info_get_generic_sharing_context (MonoJitInfo *ji)
-{
-	MonoGenericJitInfo *gi = mono_jit_info_get_generic_jit_info (ji);
-
-	if (gi)
-		return gi->generic_sharing_context;
-	else
-		return NULL;
-}
-
-/*
- * mono_jit_info_set_generic_sharing_context:
- * @ji: a jit info
- * @gsctx: a generic sharing context
- *
- * Sets the jit info's generic sharing context.  The jit info must
- * have memory allocated for the context.
- */
-void
-mono_jit_info_set_generic_sharing_context (MonoJitInfo *ji, MonoGenericSharingContext *gsctx)
-{
-	MonoGenericJitInfo *gi = mono_jit_info_get_generic_jit_info (ji);
-
-	g_assert (gi);
-
-	gi->generic_sharing_context = gsctx;
-}
-
-MonoTryBlockHoleTableJitInfo*
-mono_jit_info_get_try_block_hole_table_info (MonoJitInfo *ji)
-{
-	if (ji->has_try_block_holes) {
-		char *ptr = (char*)&ji->clauses [ji->num_clauses];
-		if (ji->has_generic_jit_info)
-			ptr += sizeof (MonoGenericJitInfo);
-		return (MonoTryBlockHoleTableJitInfo*)ptr;
-	} else {
-		return NULL;
-	}
-}
-
-MonoArchEHJitInfo*
-mono_jit_info_get_arch_eh_info (MonoJitInfo *ji)
-{
-	if (ji->has_arch_eh_info) {
-		char *ptr = (char*)&ji->clauses [ji->num_clauses];
-		if (ji->has_generic_jit_info)
-			ptr += sizeof (MonoGenericJitInfo);
-		if (ji->has_try_block_holes)
-			ptr += sizeof (MonoTryBlockHoleTableJitInfo);
-		return (MonoArchEHJitInfo*)ptr;
-	} else {
-		return NULL;
-	}
-}
-
-MonoMethodCasInfo*
-mono_jit_info_get_cas_info (MonoJitInfo *ji)
-{
-	if (ji->has_cas_info) {
-		char *ptr = (char*)&ji->clauses [ji->num_clauses];
-		if (ji->has_generic_jit_info)
-			ptr += sizeof (MonoGenericJitInfo);
-		if (ji->has_try_block_holes)
-			ptr += sizeof (MonoTryBlockHoleTableJitInfo);
-		if (ji->has_arch_eh_info)
-			ptr += sizeof (MonoArchEHJitInfo);
-		return (MonoMethodCasInfo*)ptr;
-	} else {
-		return NULL;
-	}
 }
 
 #define ALIGN_TO(val,align) ((((guint64)val) + ((align) - 1)) & ~((align) - 1))
@@ -1032,7 +177,7 @@ lock_free_mempool_free (LockFreeMempool *mp)
 
 	chunk = mp->chunks;
 	while (chunk) {
-		next = chunk->prev;
+		next = (LockFreeMempoolChunk *)chunk->prev;
 		mono_vfree (chunk, mono_pagesize ());
 		chunk = next;
 	}
@@ -1051,9 +196,9 @@ lock_free_mempool_chunk_new (LockFreeMempool *mp, int len)
 	size = mono_pagesize ();
 	while (size - sizeof (LockFreeMempoolChunk) < len)
 		size += mono_pagesize ();
-	chunk = mono_valloc (0, size, MONO_MMAP_READ|MONO_MMAP_WRITE);
+	chunk = (LockFreeMempoolChunk *)mono_valloc (0, size, MONO_MMAP_READ|MONO_MMAP_WRITE);
 	g_assert (chunk);
-	chunk->mem = ALIGN_PTR_TO ((char*)chunk + sizeof (LockFreeMempoolChunk), 16);
+	chunk->mem = (guint8 *)ALIGN_PTR_TO ((char*)chunk + sizeof (LockFreeMempoolChunk), 16);
 	chunk->size = ((char*)chunk + size) - (char*)chunk->mem;
 	chunk->pos = 0;
 
@@ -1196,7 +341,7 @@ domain_id_alloc (MonoDomain *domain)
 	int id = -1, i;
 	if (!appdomains_list) {
 		appdomain_list_size = 2;
-		appdomains_list = mono_gc_alloc_fixed (appdomain_list_size * sizeof (void*), NULL);
+		appdomains_list = (MonoDomain **)mono_gc_alloc_fixed (appdomain_list_size * sizeof (void*), MONO_GC_DESCRIPTOR_NULL, MONO_ROOT_SOURCE_DOMAIN, "domains list");
 	}
 	for (i = appdomain_next; i < appdomain_list_size; ++i) {
 		if (!appdomains_list [i]) {
@@ -1218,7 +363,7 @@ domain_id_alloc (MonoDomain *domain)
 		if (new_size >= (1 << 16))
 			g_assert_not_reached ();
 		id = appdomain_list_size;
-		new_list = mono_gc_alloc_fixed (new_size * sizeof (void*), NULL);
+		new_list = (MonoDomain **)mono_gc_alloc_fixed (new_size * sizeof (void*), MONO_GC_DESCRIPTOR_NULL, MONO_ROOT_SOURCE_DOMAIN, "domains list");
 		memcpy (new_list, appdomains_list, appdomain_list_size * sizeof (void*));
 		mono_gc_free_fixed (appdomains_list);
 		appdomains_list = new_list;
@@ -1233,7 +378,7 @@ domain_id_alloc (MonoDomain *domain)
 }
 
 static gsize domain_gc_bitmap [sizeof(MonoDomain)/4/32 + 1];
-static gpointer domain_gc_desc = NULL;
+static MonoGCDescriptor domain_gc_desc = MONO_GC_DESCRIPTOR_NULL;
 static guint32 domain_shadow_serial = 0L;
 
 MonoDomain *
@@ -1262,10 +407,10 @@ mono_domain_create (void)
 	 * running the corlib test suite.
 	 * To solve this, we pass a NULL descriptor, and don't register roots.
 	 */
-	domain = mono_gc_alloc_fixed (sizeof (MonoDomain), NULL);
+	domain = (MonoDomain *)mono_gc_alloc_fixed (sizeof (MonoDomain), NULL, MONO_ROOT_SOURCE_DOMAIN, "domain object");
 #else
-	domain = mono_gc_alloc_fixed (sizeof (MonoDomain), domain_gc_desc);
-	mono_gc_register_root ((char*)&(domain->MONO_DOMAIN_FIRST_GC_TRACKED), G_STRUCT_OFFSET (MonoDomain, MONO_DOMAIN_LAST_GC_TRACKED) - G_STRUCT_OFFSET (MonoDomain, MONO_DOMAIN_FIRST_GC_TRACKED), NULL);
+	domain = (MonoDomain *)mono_gc_alloc_fixed (sizeof (MonoDomain), domain_gc_desc, MONO_ROOT_SOURCE_DOMAIN, "domain object");
+	mono_gc_register_root ((char*)&(domain->MONO_DOMAIN_FIRST_GC_TRACKED), G_STRUCT_OFFSET (MonoDomain, MONO_DOMAIN_LAST_GC_TRACKED) - G_STRUCT_OFFSET (MonoDomain, MONO_DOMAIN_FIRST_GC_TRACKED), MONO_GC_DESCRIPTOR_NULL, MONO_ROOT_SOURCE_DOMAIN, "misc domain fields");
 #endif
 	domain->shadow_serial = shadow_serial;
 	domain->domain = NULL;
@@ -1278,7 +423,7 @@ mono_domain_create (void)
 	domain->mp = mono_mempool_new ();
 	domain->code_mp = mono_code_manager_new ();
 	domain->lock_free_mp = lock_free_mempool_new ();
-	domain->env = mono_g_hash_table_new_type ((GHashFunc)mono_string_hash, (GCompareFunc)mono_string_equal, MONO_HASH_KEY_VALUE_GC);
+	domain->env = mono_g_hash_table_new_type ((GHashFunc)mono_string_hash, (GCompareFunc)mono_string_equal, MONO_HASH_KEY_VALUE_GC, MONO_ROOT_SOURCE_DOMAIN, "domain environment variables table");
 	domain->domain_assemblies = NULL;
 	domain->assembly_bindings = NULL;
 	domain->assembly_bindings_parsed = FALSE;
@@ -1286,17 +431,18 @@ mono_domain_create (void)
 	domain->proxy_vtable_hash = g_hash_table_new ((GHashFunc)mono_ptrarray_hash, (GCompareFunc)mono_ptrarray_equal);
 	domain->static_data_array = NULL;
 	mono_jit_code_hash_init (&domain->jit_code_hash);
-	domain->ldstr_table = mono_g_hash_table_new_type ((GHashFunc)mono_string_hash, (GCompareFunc)mono_string_equal, MONO_HASH_KEY_VALUE_GC);
+	domain->ldstr_table = mono_g_hash_table_new_type ((GHashFunc)mono_string_hash, (GCompareFunc)mono_string_equal, MONO_HASH_KEY_VALUE_GC, MONO_ROOT_SOURCE_DOMAIN, "domain string constants table");
 	domain->num_jit_info_tables = 1;
-	domain->jit_info_table = jit_info_table_new (domain);
+	domain->jit_info_table = mono_jit_info_table_new (domain);
 	domain->jit_info_free_queue = NULL;
 	domain->finalizable_objects_hash = g_hash_table_new (mono_aligned_addr_hash, NULL);
 	domain->ftnptrs_hash = g_hash_table_new (mono_aligned_addr_hash, NULL);
 
-	InitializeCriticalSection (&domain->lock);
-	InitializeCriticalSection (&domain->assemblies_lock);
-	InitializeCriticalSection (&domain->jit_code_hash_lock);
-	InitializeCriticalSection (&domain->finalizable_objects_hash_lock);
+	mono_coop_mutex_init_recursive (&domain->lock);
+
+	mono_os_mutex_init_recursive (&domain->assemblies_lock);
+	mono_os_mutex_init_recursive (&domain->jit_code_hash_lock);
+	mono_os_mutex_init_recursive (&domain->finalizable_objects_hash_lock);
 
 	domain->method_rgctx_hash = NULL;
 
@@ -1339,7 +485,11 @@ mono_init_internal (const char *filename, const char *exe_filename, const char *
 	MonoAssembly *ass = NULL;
 	MonoImageOpenStatus status = MONO_IMAGE_OK;
 	const MonoRuntimeInfo* runtimes [G_N_ELEMENTS (supported_runtimes) + 1];
-	int n;
+	int n, dummy;
+
+#ifdef DEBUG_DOMAIN_UNLOAD
+	debug_domain_unload = TRUE;
+#endif
 
 	if (domain)
 		g_assert_not_reached ();
@@ -1356,17 +506,19 @@ mono_init_internal (const char *filename, const char *exe_filename, const char *
 #ifndef DISABLE_PERFCOUNTERS
 	mono_perfcounters_init ();
 #endif
+	mono_counters_init ();
 
 	mono_counters_register ("Max native code in a domain", MONO_COUNTER_INT|MONO_COUNTER_JIT, &max_domain_code_size);
 	mono_counters_register ("Max code space allocated in a domain", MONO_COUNTER_INT|MONO_COUNTER_JIT, &max_domain_code_alloc);
 	mono_counters_register ("Total code space allocated", MONO_COUNTER_INT|MONO_COUNTER_JIT, &total_domain_code_alloc);
 
 	mono_gc_base_init ();
+	mono_thread_info_attach (&dummy);
 
 	MONO_FAST_TLS_INIT (tls_appdomain);
 	mono_native_tls_alloc (&appdomain_thread_id, NULL);
 
-	InitializeCriticalSection (&appdomains_mutex);
+	mono_coop_mutex_init_recursive (&appdomains_mutex);
 
 	mono_metadata_init ();
 	mono_images_init ();
@@ -1377,7 +529,7 @@ mono_init_internal (const char *filename, const char *exe_filename, const char *
 	mono_runtime_init_tls ();
 
 	/* FIXME: When should we release this memory? */
-	MONO_GC_REGISTER_ROOT_FIXED (appdomains_list);
+	MONO_GC_REGISTER_ROOT_FIXED (appdomains_list, MONO_ROOT_SOURCE_DOMAIN, "domains list");
 
 	domain = mono_domain_create ();
 	mono_root_domain = domain;
@@ -1561,6 +713,10 @@ mono_init_internal (const char *filename, const char *exe_filename, const char *
                 mono_defaults.corlib, "System", "MonoType");
 	g_assert (mono_defaults.monotype_class != 0);
 
+	mono_defaults.runtimetype_class = mono_class_from_name (
+                mono_defaults.corlib, "System", "RuntimeType");
+	g_assert (mono_defaults.runtimetype_class != 0);
+
 	mono_defaults.exception_class = mono_class_from_name (
                 mono_defaults.corlib, "System", "Exception");
 	g_assert (mono_defaults.exception_class != 0);
@@ -1679,8 +835,6 @@ mono_init_internal (const char *filename, const char *exe_filename, const char *
 	mono_defaults.customattribute_data_class = mono_class_from_name (
 		mono_defaults.corlib, "System.Reflection", "CustomAttributeData");
 
-	/* these are initialized lazily when COM features are used */
-
 	mono_class_init (mono_defaults.array_class);
 	mono_defaults.generic_nullable_class = mono_class_from_name (
 		mono_defaults.corlib, "System", "Nullable`1");
@@ -1689,9 +843,21 @@ mono_init_internal (const char *filename, const char *exe_filename, const char *
 	mono_defaults.generic_ireadonlylist_class = mono_class_from_name (
 	        mono_defaults.corlib, "System.Collections.Generic", "IReadOnlyList`1");
 
+	mono_defaults.threadpool_wait_callback_class = mono_class_from_name (
+		mono_defaults.corlib, "System.Threading", "_ThreadPoolWaitCallback");
+	if (!mono_defaults.threadpool_wait_callback_class) {
+		/* This can happen with an old mscorlib */
+		fprintf (stderr, "Corlib too old for this runtime.\n");
+		fprintf (stderr, "Loaded from: %s\n",
+				 mono_defaults.corlib? mono_image_get_filename (mono_defaults.corlib): "unknown");
+		exit (1);
+	}
+	mono_defaults.threadpool_perform_wait_callback_method = mono_class_get_method_from_name (
+		mono_defaults.threadpool_wait_callback_class, "PerformWaitCallback", 0);
+
 	domain->friendly_name = g_path_get_basename (filename);
 
-	_mono_debug_init_corlib (domain);
+	mono_profiler_appdomain_name (domain, domain->friendly_name);
 
 	return domain;
 }
@@ -1769,12 +935,12 @@ mono_cleanup (void)
 	mono_loader_cleanup ();
 	mono_classes_cleanup ();
 	mono_assemblies_cleanup ();
-	mono_images_cleanup ();
 	mono_debug_cleanup ();
+	mono_images_cleanup ();
 	mono_metadata_cleanup ();
 
 	mono_native_tls_free (appdomain_thread_id);
-	DeleteCriticalSection (&appdomains_mutex);
+	mono_coop_mutex_destroy (&appdomains_mutex);
 
 #ifndef HOST_WIN32
 	wapi_cleanup ();
@@ -1869,7 +1035,7 @@ mono_domain_foreach (MonoDomainFunc func, gpointer user_data)
 	 */
 	mono_appdomains_lock ();
 	size = appdomain_list_size;
-	copy = mono_gc_alloc_fixed (appdomain_list_size * sizeof (void*), NULL);
+	copy = (MonoDomain **)mono_gc_alloc_fixed (appdomain_list_size * sizeof (void*), MONO_GC_DESCRIPTOR_NULL, MONO_ROOT_SOURCE_DOMAIN, "temporary domains list");
 	memcpy (copy, appdomains_list, appdomain_list_size * sizeof (void*));
 	mono_appdomains_unlock ();
 
@@ -1897,7 +1063,7 @@ mono_domain_assembly_open (MonoDomain *domain, const char *name)
 
 	mono_domain_assemblies_lock (domain);
 	for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
-		ass = tmp->data;
+		ass = (MonoAssembly *)tmp->data;
 		if (strcmp (name, ass->aname.name) == 0) {
 			mono_domain_assemblies_unlock (domain);
 			return ass;
@@ -1921,7 +1087,7 @@ mono_domain_assembly_open (MonoDomain *domain, const char *name)
 static void
 unregister_vtable_reflection_type (MonoVTable *vtable)
 {
-	MonoObject *type = vtable->type;
+	MonoObject *type = (MonoObject *)vtable->type;
 
 	if (type->vtable->klass != mono_defaults.monotype_class)
 		MONO_GC_UNREGISTER_ROOT_IF_MOVING (vtable->type);
@@ -1970,18 +1136,13 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 	mono_g_hash_table_destroy (domain->env);
 	domain->env = NULL;
 
-	if (domain->tlsrec_list) {
-		mono_thread_destroy_domain_tls (domain);
-		domain->tlsrec_list = NULL;
-	}
-
 	mono_reflection_cleanup_domain (domain);
 
 	/* This must be done before type_hash is freed */
 	if (domain->class_vtable_array) {
 		int i;
 		for (i = 0; i < domain->class_vtable_array->len; ++i)
-			unregister_vtable_reflection_type (g_ptr_array_index (domain->class_vtable_array, i));
+			unregister_vtable_reflection_type ((MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i));
 	}
 
 	if (domain->type_hash) {
@@ -1994,7 +1155,7 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 	}
 
 	for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
-		MonoAssembly *ass = tmp->data;
+		MonoAssembly *ass = (MonoAssembly *)tmp->data;
 		mono_assembly_release_gc_roots (ass);
 	}
 
@@ -2007,8 +1168,8 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 
 	/* Close dynamic assemblies first, since they have no ref count */
 	for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
-		MonoAssembly *ass = tmp->data;
-		if (!ass->image || !ass->image->dynamic)
+		MonoAssembly *ass = (MonoAssembly *)tmp->data;
+		if (!ass->image || !image_is_dynamic (ass->image))
 			continue;
 		mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Unloading domain %s[%p], assembly %s[%p], ref_count=%d", domain->friendly_name, domain, ass->aname.name, ass, ass->ref_count);
 		if (!mono_assembly_close_except_image_pools (ass))
@@ -2016,10 +1177,10 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 	}
 
 	for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
-		MonoAssembly *ass = tmp->data;
+		MonoAssembly *ass = (MonoAssembly *)tmp->data;
 		if (!ass)
 			continue;
-		if (!ass->image || ass->image->dynamic)
+		if (!ass->image || image_is_dynamic (ass->image))
 			continue;
 		mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Unloading domain %s[%p], assembly %s[%p], ref_count=%d", domain->friendly_name, domain, ass->aname.name, ass, ass->ref_count);
 		if (!mono_assembly_close_except_image_pools (ass))
@@ -2027,7 +1188,7 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 	}
 
 	for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
-		MonoAssembly *ass = tmp->data;
+		MonoAssembly *ass = (MonoAssembly *)tmp->data;
 		if (ass)
 			mono_assembly_close_finish (ass);
 	}
@@ -2076,9 +1237,9 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 	 */
 	mono_thread_hazardous_try_free_all ();
 	if (domain->aot_modules)
-		jit_info_table_free (domain->aot_modules);
+		mono_jit_info_table_free (domain->aot_modules);
 	g_assert (domain->num_jit_info_tables == 1);
-	jit_info_table_free (domain->jit_info_table);
+	mono_jit_info_table_free (domain->jit_info_table);
 	domain->jit_info_table = NULL;
 	g_assert (!domain->jit_info_free_queue);
 
@@ -2088,18 +1249,18 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 	max_domain_code_alloc = MAX (max_domain_code_alloc, code_alloc);
 	max_domain_code_size = MAX (max_domain_code_size, code_size);
 
-#ifdef DEBUG_DOMAIN_UNLOAD
-	mono_mempool_invalidate (domain->mp);
-	mono_code_manager_invalidate (domain->code_mp);
-#else
+	if (debug_domain_unload) {
+		mono_mempool_invalidate (domain->mp);
+		mono_code_manager_invalidate (domain->code_mp);
+	} else {
 #ifndef DISABLE_PERFCOUNTERS
-	mono_perfcounters->loader_bytes -= mono_mempool_get_allocated (domain->mp);
+		mono_perfcounters->loader_bytes -= mono_mempool_get_allocated (domain->mp);
 #endif
-	mono_mempool_destroy (domain->mp);
-	domain->mp = NULL;
-	mono_code_manager_destroy (domain->code_mp);
-	domain->code_mp = NULL;
-#endif	
+		mono_mempool_destroy (domain->mp);
+		domain->mp = NULL;
+		mono_code_manager_destroy (domain->code_mp);
+		domain->code_mp = NULL;
+	}
 	lock_free_mempool_free (domain->lock_free_mp);
 	domain->lock_free_mp = NULL;
 
@@ -2121,11 +1282,17 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 		g_hash_table_destroy (domain->ftnptrs_hash);
 		domain->ftnptrs_hash = NULL;
 	}
+	if (domain->method_to_dyn_method) {
+		g_hash_table_destroy (domain->method_to_dyn_method);
+		domain->method_to_dyn_method = NULL;
+	}
 
-	DeleteCriticalSection (&domain->finalizable_objects_hash_lock);
-	DeleteCriticalSection (&domain->assemblies_lock);
-	DeleteCriticalSection (&domain->jit_code_hash_lock);
-	DeleteCriticalSection (&domain->lock);
+	mono_os_mutex_destroy (&domain->finalizable_objects_hash_lock);
+	mono_os_mutex_destroy (&domain->assemblies_lock);
+	mono_os_mutex_destroy (&domain->jit_code_hash_lock);
+
+	mono_coop_mutex_destroy (&domain->lock);
+
 	domain->setup = NULL;
 
 	mono_gc_deregister_root ((char*)&(domain->MONO_DOMAIN_FIRST_GC_TRACKED));
@@ -2143,10 +1310,10 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 }
 
 /**
- * mono_domain_get_id:
+ * mono_domain_get_by_id:
  * @domainid: the ID
  *
- * Returns: the a domain for a specific domain id.
+ * Returns: the domain for a specific domain id.
  */
 MonoDomain * 
 mono_domain_get_by_id (gint32 domainid) 
@@ -2163,10 +1330,33 @@ mono_domain_get_by_id (gint32 domainid)
 	return domain;
 }
 
+/*
+ * mono_domain_get_id:
+ *
+ * A domain ID is guaranteed to be unique for as long as the domain
+ * using it is alive. It may be reused later once the domain has been
+ * unloaded.
+ *
+ * Returns: The unique ID for @domain.
+ */
 gint32
 mono_domain_get_id (MonoDomain *domain)
 {
 	return domain->domain_id;
+}
+
+/*
+ * mono_domain_get_friendly_name:
+ *
+ * The returned string's lifetime is the same as @domain's. Consider
+ * copying it if you need to store it somewhere.
+ *
+ * Returns: The friendly name of @domain. Can be NULL if not yet set.
+ */
+const char *
+mono_domain_get_friendly_name (MonoDomain *domain)
+{
+	return domain->friendly_name;
 }
 
 /*
@@ -2344,6 +1534,31 @@ mono_context_get (void)
 	return GET_APPCONTEXT ();
 }
 
+/*
+ * mono_context_get_id:
+ *
+ * Context IDs are guaranteed to be unique for the duration of a Mono
+ * process; they are never reused.
+ *
+ * Returns: The unique ID for @context.
+ */
+gint32
+mono_context_get_id (MonoAppContext *context)
+{
+	return context->context_id;
+}
+
+/*
+ * mono_context_get_domain_id:
+ *
+ * Returns: The ID of the domain that @context was created in.
+ */
+gint32
+mono_context_get_domain_id (MonoAppContext *context)
+{
+	return context->domain_id;
+}
+
 /* LOCKING: the caller holds the lock for this domain */
 void
 mono_domain_add_class_static_data (MonoDomain *domain, MonoClass *klass, gpointer data, guint32 *bitmap)
@@ -2357,7 +1572,7 @@ mono_domain_add_class_static_data (MonoDomain *domain, MonoClass *klass, gpointe
 		next = GPOINTER_TO_INT (domain->static_data_array [0]);
 		if (next >= size) {
 			/* 'data' is allocated by alloc_fixed */
-			gpointer *new_array = mono_gc_alloc_fixed (sizeof (gpointer) * (size * 2), MONO_GC_ROOT_DESCR_FOR_FIXED (size * 2));
+			gpointer *new_array = (gpointer *)mono_gc_alloc_fixed (sizeof (gpointer) * (size * 2), MONO_GC_ROOT_DESCR_FOR_FIXED (size * 2), MONO_ROOT_SOURCE_DOMAIN, "static field list");
 			mono_gc_memmove_aligned (new_array, domain->static_data_array, sizeof (gpointer) * size);
 			size *= 2;
 			new_array [1] = GINT_TO_POINTER (size);
@@ -2366,7 +1581,7 @@ mono_domain_add_class_static_data (MonoDomain *domain, MonoClass *klass, gpointe
 		}
 	} else {
 		int size = 32;
-		gpointer *new_array = mono_gc_alloc_fixed (sizeof (gpointer) * size, MONO_GC_ROOT_DESCR_FOR_FIXED (size));
+		gpointer *new_array = (gpointer *)mono_gc_alloc_fixed (sizeof (gpointer) * size, MONO_GC_ROOT_DESCR_FOR_FIXED (size), MONO_ROOT_SOURCE_DOMAIN, "static field list");
 		next = 2;
 		new_array [0] = GINT_TO_POINTER (next);
 		new_array [1] = GINT_TO_POINTER (size);
@@ -2600,7 +1815,7 @@ app_config_parse (const char *exe_filename)
 
 	app_config = g_new0 (AppConfigInfo, 1);
 
-	context = g_markup_parse_context_new (&mono_parser, 0, app_config, NULL);
+	context = g_markup_parse_context_new (&mono_parser, (GMarkupParseFlags)0, app_config, NULL);
 	if (g_markup_parse_context_parse (context, text, len, NULL)) {
 		g_markup_parse_context_end_parse (context, NULL);
 	}
@@ -2724,27 +1939,6 @@ mono_get_runtime_info (void)
 	return current_runtime;
 }
 
-gchar *
-mono_debugger_check_runtime_version (const char *filename)
-{
-	const MonoRuntimeInfo* runtimes [G_N_ELEMENTS (supported_runtimes) + 1];
-	const MonoRuntimeInfo *rinfo;
-	MonoImage *image;
-
-	get_runtimes_from_exe (filename, &image, runtimes);
-	rinfo = runtimes [0];
-
-	if (!rinfo)
-		return g_strdup_printf ("Cannot get runtime version from assembly `%s'", filename);
-
-	if (rinfo != current_runtime)
-		return g_strdup_printf ("The Mono Debugger is currently using the `%s' runtime, but "
-					"the assembly `%s' requires version `%s'", current_runtime->runtime_version,
-					filename, rinfo->runtime_version);
-
-	return NULL;
-}
-
 /**
  * mono_framework_version:
  *
@@ -2754,4 +1948,28 @@ int
 mono_framework_version (void)
 {
 	return current_runtime->framework_version [0] - '0';
+}
+
+void
+mono_enable_debug_domain_unload (gboolean enable)
+{
+	debug_domain_unload = enable;
+}
+
+MonoAotCacheConfig *
+mono_get_aot_cache_config (void)
+{
+	return &aot_cache_config;
+}
+
+void
+mono_domain_lock (MonoDomain *domain)
+{
+	mono_locks_coop_acquire (&domain->lock, DomainLock);
+}
+
+void
+mono_domain_unlock (MonoDomain *domain)
+{
+	mono_locks_coop_release (&domain->lock, DomainLock);
 }

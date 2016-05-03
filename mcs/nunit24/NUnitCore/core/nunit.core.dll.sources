@@ -3,6 +3,7 @@ AbstractTestCaseDecoration.cs
 AssemblyInfo.cs
 AssemblyReader.cs
 AssemblyResolver.cs
+BabysitterSupport.cs
 Builders/AbstractFixtureBuilder.cs
 Builders/AbstractTestCaseBuilder.cs
 Builders/LegacySuiteBuilder.cs
@@ -61,4 +62,5 @@ TestRunnerThread.cs
 TestSuite.cs
 TestSuiteBuilder.cs
 TextCapture.cs
+ThreadUtility.cs
 ThreadedTestRunner.cs

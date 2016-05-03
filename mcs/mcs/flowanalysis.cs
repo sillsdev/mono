@@ -59,10 +59,9 @@ namespace Mono.CSharp
 		public TypeInfo[] SubStructInfo;
 
 		readonly StructInfo struct_info;
-		private static Dictionary<TypeSpec, TypeInfo> type_hash;
 
 		static readonly TypeInfo simple_type = new TypeInfo (1);
-		
+
 		static TypeInfo ()
 		{
 			Reset ();
@@ -70,7 +69,6 @@ namespace Mono.CSharp
 		
 		public static void Reset ()
 		{
-			type_hash = new Dictionary<TypeSpec, TypeInfo> ();
 			StructInfo.field_type_hash = new Dictionary<TypeSpec, StructInfo> ();
 		}
 
@@ -105,23 +103,34 @@ namespace Mono.CSharp
 			return struct_info.GetStructField (name);
 		}
 
-		public static TypeInfo GetTypeInfo (TypeSpec type)
+		public static TypeInfo GetTypeInfo (TypeSpec type, IMemberContext context)
 		{
 			if (!type.IsStruct)
 				return simple_type;
 
 			TypeInfo info;
-			if (type_hash.TryGetValue (type, out info))
-				return info;
+			Dictionary<TypeSpec, TypeInfo> type_hash;
+			if (type.BuiltinType > 0) {
+				// Don't cache built-in types, they are null in most cases except for
+				// corlib compilation when we need to distinguish between declaration
+				// and referencing
+				type_hash = null;
+			} else {
+				type_hash = context.Module.TypeInfoCache;
+				if (type_hash.TryGetValue (type, out info))
+					return info;
+			}
 
-			var struct_info = StructInfo.GetStructInfo (type);
+			var struct_info = StructInfo.GetStructInfo (type, context);
 			if (struct_info != null) {
 				info = new TypeInfo (struct_info, 0);
 			} else {
 				info = simple_type;
 			}
 
-			type_hash.Add (type, info);
+			if (type_hash != null)
+				type_hash.Add (type, info);
+
 			return info;
 		}
 
@@ -139,15 +148,22 @@ namespace Mono.CSharp
 				var field = struct_info.Fields[i];
 
 				if (!fc.IsStructFieldDefinitelyAssigned (vi, field.Name)) {
-					if (field.MemberDefinition is Property.BackingField) {
+					var bf = field.MemberDefinition as Property.BackingFieldDeclaration;
+					if (bf != null) {
+						if (bf.Initializer != null)
+							continue;
+
 						fc.Report.Error (843, loc,
 							"An automatically implemented property `{0}' must be fully assigned before control leaves the constructor. Consider calling the default struct contructor from a constructor initializer",
 							field.GetSignatureForError ());
-					} else {
-						fc.Report.Error (171, loc,
-							"Field `{0}' must be fully assigned before control leaves the constructor",
-							field.GetSignatureForError ());
+
+						ok = false;
+						continue;
 					}
+
+					fc.Report.Error (171, loc,
+						"Field `{0}' must be fully assigned before control leaves the constructor",
+						field.GetSignatureForError ());
 					ok = false;
 				}
 			}
@@ -177,11 +193,11 @@ namespace Mono.CSharp
 			//
 			// We only need one instance per type
 			//
-			StructInfo (TypeSpec type)
+			StructInfo (TypeSpec type, IMemberContext context)
 			{
 				field_type_hash.Add (type, this);
 
-				fields = MemberCache.GetAllFieldsForDefiniteAssignment (type);
+				fields = MemberCache.GetAllFieldsForDefiniteAssignment (type, context);
 
 				struct_field_hash = new Dictionary<string, TypeInfo> ();
 				field_hash = new Dictionary<string, int> (fields.Count);
@@ -195,7 +211,7 @@ namespace Mono.CSharp
 					var field = fields [i];
 
 					if (field.MemberType.IsStruct)
-						sinfo [i] = GetStructInfo (field.MemberType);
+						sinfo [i] = GetStructInfo (field.MemberType, context);
 
 					if (sinfo [i] == null)
 						field_hash.Add (field.Name, ++Length);
@@ -253,16 +269,16 @@ namespace Mono.CSharp
 				return null;
 			}
 
-			public static StructInfo GetStructInfo (TypeSpec type)
+			public static StructInfo GetStructInfo (TypeSpec type, IMemberContext context)
 			{
-				if (type.BuiltinType > 0)
+				if (type.BuiltinType > 0 && type != context.CurrentType)
 					return null;
 
 				StructInfo info;
 				if (field_type_hash.TryGetValue (type, out info))
 					return info;
 
-				return new StructInfo (type);
+				return new StructInfo (type, context);
 			}
 		}
 	}
@@ -298,11 +314,11 @@ namespace Mono.CSharp
 
 		VariableInfo[] sub_info;
 
-		VariableInfo (string name, TypeSpec type, int offset)
+		VariableInfo (string name, TypeSpec type, int offset, IMemberContext context)
 		{
 			this.Name = name;
 			this.Offset = offset;
-			this.TypeInfo = TypeInfo.GetTypeInfo (type);
+			this.TypeInfo = TypeInfo.GetTypeInfo (type, context);
 
 			Length = TypeInfo.TotalLength;
 
@@ -336,14 +352,14 @@ namespace Mono.CSharp
 
 		public static VariableInfo Create (BlockContext bc, LocalVariable variable)
 		{
-			var info = new VariableInfo (variable.Name, variable.Type, bc.AssignmentInfoOffset);
+			var info = new VariableInfo (variable.Name, variable.Type, bc.AssignmentInfoOffset, bc);
 			bc.AssignmentInfoOffset += info.Length;
 			return info;
 		}
 
 		public static VariableInfo Create (BlockContext bc, Parameter parameter)
 		{
-			var info = new VariableInfo (parameter.Name, parameter.Type, bc.AssignmentInfoOffset) {
+			var info = new VariableInfo (parameter.Name, parameter.Type, bc.AssignmentInfoOffset, bc) {
 				IsParameter = true
 			};
 
@@ -536,7 +552,7 @@ namespace Mono.CSharp
 
 		public static DefiniteAssignmentBitSet operator & (DefiniteAssignmentBitSet a, DefiniteAssignmentBitSet b)
 		{
-			if (AreEqual (a, b))
+			if (IsEqual (a, b))
 				return a;
 
 			DefiniteAssignmentBitSet res;
@@ -559,7 +575,7 @@ namespace Mono.CSharp
 
 		public static DefiniteAssignmentBitSet operator | (DefiniteAssignmentBitSet a, DefiniteAssignmentBitSet b)
 		{
-			if (AreEqual (a, b))
+			if (IsEqual (a, b))
 				return a;
 
 			DefiniteAssignmentBitSet res;
@@ -662,13 +678,28 @@ namespace Mono.CSharp
 				large_bits[index >> 5] |= (1 << (index & 31));
 		}
 
-		static bool AreEqual (DefiniteAssignmentBitSet a, DefiniteAssignmentBitSet b)
+		static bool IsEqual (DefiniteAssignmentBitSet a, DefiniteAssignmentBitSet b)
 		{
 			if (a.large_bits == null)
 				return (a.bits & ~copy_on_write_flag) == (b.bits & ~copy_on_write_flag);
 
 			for (int i = 0; i < a.large_bits.Length; ++i) {
 				if (a.large_bits[i] != b.large_bits[i])
+					return false;
+			}
+
+			return true;
+		}
+
+		public static bool IsIncluded (DefiniteAssignmentBitSet set, DefiniteAssignmentBitSet test)
+		{
+			var set_bits = set.large_bits;
+			if (set_bits == null)
+				return (set.bits & test.bits & ~copy_on_write_flag) == (set.bits & ~copy_on_write_flag);
+
+			var test_bits = test.large_bits;
+			for (int i = 0; i < set_bits.Length; ++i) {
+				if ((set_bits[i] & test_bits[i]) != set_bits[i])
 					return false;
 			}
 

@@ -45,6 +45,7 @@ static int tls_vector_offset;
 void *
 mono_mach_arch_get_ip (thread_state_t state)
 {
+	/* Can't use unified_thread_state on !ARM64 since this has to compile on armv6 too */
 	arm_thread_state_t *arch_state = (arm_thread_state_t *) state;
 
 	return (void *) arch_state->__pc;
@@ -82,6 +83,20 @@ mono_mach_arch_mcontext_to_thread_state (void *context, thread_state_t state)
 	*arch_state = ctx->__ss;
 }
 
+void
+mono_mach_arch_thread_state_to_mono_context (thread_state_t state, MonoContext *context)
+{
+	int i;
+	arm_thread_state_t *arch_state = (arm_thread_state_t *) state;
+	for (i = 0; i < 13; ++i)
+		context->regs [i] = arch_state->__r [i];
+	context->regs [ARMREG_R13] = arch_state->__sp;
+	context->regs [ARMREG_R14] = arch_state->__lr;
+	context->regs [ARMREG_R15] = arch_state->__pc;
+	context->pc = arch_state->__pc;
+	context->cpsr = arch_state->__cpsr;
+}
+
 int
 mono_mach_arch_get_thread_state_size ()
 {
@@ -91,20 +106,27 @@ mono_mach_arch_get_thread_state_size ()
 kern_return_t
 mono_mach_arch_get_thread_state (thread_port_t thread, thread_state_t state, mach_msg_type_number_t *count)
 {
+#if defined(HOST_WATCHOS)
+	g_error ("thread_get_state() is not supported by this platform");
+#else	
 	arm_thread_state_t *arch_state = (arm_thread_state_t *) state;
 	kern_return_t ret;
 
 	*count = ARM_THREAD_STATE_COUNT;
 
 	ret = thread_get_state (thread, ARM_THREAD_STATE, (thread_state_t) arch_state, count);
-
 	return ret;
+#endif
 }
 
 kern_return_t
 mono_mach_arch_set_thread_state (thread_port_t thread, thread_state_t state, mach_msg_type_number_t count)
 {
-	return thread_set_state (thread, ARM_THREAD_STATE_COUNT, state, count);
+#if defined(HOST_WATCHOS)
+	g_error ("thread_set_state() is not supported by this platform");
+#else
+	return thread_set_state (thread, ARM_THREAD_STATE, state, count);
+#endif
 }
 
 void *
@@ -116,6 +138,7 @@ mono_mach_get_tls_address_from_thread (pthread_t thread, pthread_key_t key)
 	 */
 	intptr_t *p = (intptr_t *) thread;
 	intptr_t **tsd = (intptr_t **) ((char*)p + tls_vector_offset);
+	g_assert (tls_vector_offset != -1);
 
 	return (void *) &tsd [key];
 }
@@ -154,7 +177,8 @@ mono_mach_init (pthread_key_t key)
 		}
 	}
 
-	g_error ("could not discover the mach TLS offset");
+	tls_vector_offset = -1;
+	g_warning ("could not discover the mach TLS offset");
 ok:
 	pthread_setspecific (key, old_value);
 }

@@ -5,19 +5,19 @@ AM_CPPFLAGS = \
 	$(GLIB_CFLAGS)		\
 	$(LIBGC_CPPFLAGS)	\
 	-DMONO_BINDIR=\""$(bindir)"\"	\
-	-I$(top_srcdir)	
+	-I$(top_srcdir) \
+	$(SHARED_CFLAGS)
 
 libwapiincludedir = $(includedir)/mono-$(API_VER)/mono/io-layer
 
 OTHER_H = \
 	access.h	\
-	collection.h	\
 	context.h	\
-	critical-sections.h	\
 	error.h		\
 	events.h	\
 	handles.h	\
 	io.h		\
+	io-trace.h	\
 	io-layer.h	\
 	io-portability.h	\
 	macros.h	\
@@ -28,24 +28,19 @@ OTHER_H = \
 	semaphores.h	\
 	sockets.h	\
 	status.h	\
-	system.h	\
 	threads.h	\
 	timefuncs.h	\
 	types.h		\
 	uglify.h	\
 	versioninfo.h	\
 	wait.h		\
-	wapi.h
+	wapi.h		\
+	wapi-remap.h
 
 OTHER_SRC = \
 	access.h		\
-	collection.c		\
-	collection.h		\
 	context.c		\
 	context.h		\
-	critical-sections.c	\
-	critical-sections.h	\
-	critical-section-private.h	\
 	error.c			\
 	error.h			\
 	events.c		\
@@ -64,8 +59,6 @@ OTHER_SRC = \
 	macros.h		\
 	messages.c		\
 	messages.h		\
-	misc.c			\
-	misc-private.h		\
 	mutexes.c		\
 	mutexes.h		\
 	mutex-private.h		\
@@ -85,8 +78,6 @@ OTHER_SRC = \
 	socket-private.h	\
 	socket-wrappers.h	\
 	status.h		\
-	system.c		\
-	system.h		\
 	threads.h		\
 	thread-private.h	\
 	timefuncs.c		\

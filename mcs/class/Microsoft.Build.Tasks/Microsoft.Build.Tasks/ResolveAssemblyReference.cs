@@ -27,8 +27,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -55,7 +53,6 @@ namespace Microsoft.Build.Tasks {
 		bool		findRelatedFiles;
 		bool		findSatellites;
 		bool		findSerializationAssemblies;
-		string[]	installedAssemblyTables;
 		ITaskItem[]	relatedFiles;
 		ITaskItem[]	resolvedDependencyFiles;
 		ITaskItem[]	resolvedFiles;
@@ -158,6 +155,9 @@ namespace Microsoft.Build.Tasks {
 
 				LogWithPrecedingNewLine (MessageImportance.Low, "Primary Reference {0}", item.ItemSpec);
 				ResolvedReference resolved_ref = ResolveReference (item, searchPaths, true);
+				if (resolved_ref == null)
+					resolved_ref = ResolveWithAlternateName (item, allowedAssemblyExtensions ?? default_assembly_extensions);
+
 				if (resolved_ref == null) {
 					Log.LogWarning ("Reference '{0}' not resolved", item.ItemSpec);
 					assembly_resolver.LogSearchLoggerMessages (MessageImportance.Normal);
@@ -184,6 +184,19 @@ namespace Microsoft.Build.Tasks {
 			}
 		}
 
+
+		ResolvedReference ResolveWithAlternateName (ITaskItem item, string[] extensions)
+		{
+			foreach (string extn in extensions) {
+				if (item.ItemSpec.EndsWith (extn)) {
+					ITaskItem altitem = new TaskItem (item.ItemSpec.Substring (0, item.ItemSpec.Length - extn.Length));
+					item.CopyMetadataTo (altitem);
+					return ResolveReference (altitem, searchPaths, true);
+				}
+			}
+			return null;
+		}
+
 		// Use @search_paths to resolve the reference
 		ResolvedReference ResolveReference (ITaskItem item, IEnumerable<string> search_paths, bool set_copy_local)
 		{
@@ -195,8 +208,35 @@ namespace Microsoft.Build.Tasks {
 			if (!TryGetSpecificVersionValue (item, out specific_version))
 				return null;
 
+			var spath_index  = 0;
 			foreach (string spath in search_paths) {
+				if (string.IsNullOrEmpty (spath))
+					continue;
 				assembly_resolver.LogSearchMessage ("For searchpath {0}", spath);
+
+				// The first value of search_paths can be the parent assembly directory.
+				// In that case the value would be treated as a directory.
+				// This code checks if we should treat the value as a TargetFramework assembly.
+				// Doing so avoids CopyLocal beeing set to true.
+				if (spath_index++ == 0 && targetFrameworkDirectories != null) {
+					foreach (string fpath in targetFrameworkDirectories) {
+						if (string.IsNullOrEmpty (fpath))
+							continue;
+						if (String.Compare (
+								Path.GetFullPath (spath).TrimEnd (Path.DirectorySeparatorChar),
+								Path.GetFullPath (fpath).TrimEnd (Path.DirectorySeparatorChar),
+								StringComparison.InvariantCulture) != 0)
+							continue;
+
+						resolved = assembly_resolver.FindInTargetFramework (item,
+							fpath, specific_version);
+
+						break;
+					}
+
+					if  (resolved != null)
+						break;
+				}
 
 				if (String.Compare (spath, "{HintPathFromItem}") == 0) {
 					resolved = assembly_resolver.ResolveHintPathReference (item, specific_version);
@@ -586,6 +626,13 @@ namespace Microsoft.Build.Tasks {
 		public ITaskItem[] CopyLocalFiles {
 			get { return copyLocalFiles; }
 		}
+
+#if XBUILD_14
+		[Output]
+		public string DependsOnSystemRuntime {
+			get; private set;
+		}
+#endif
 		
 		[Output]
 		public ITaskItem[] FilesWritten {
@@ -612,12 +659,11 @@ namespace Microsoft.Build.Tasks {
 			get { return findSerializationAssemblies; }
 			set { findSerializationAssemblies = value; }
 		}
-		
-		public string[] InstalledAssemblyTables {
-			get { return installedAssemblyTables; }
-			set { installedAssemblyTables = value; }
-		}
-		
+
+		public
+		ITaskItem[]
+		InstalledAssemblyTables { get; set; }
+
 		[Output]
 		public ITaskItem[] RelatedFiles {
 			get { return relatedFiles; }
@@ -669,11 +715,9 @@ namespace Microsoft.Build.Tasks {
 			get { return suggestedRedirects; }
 		}
 
-#if NET_4_0
 		public string TargetFrameworkMoniker { get; set; }
 
 		public string TargetFrameworkMonikerDisplayName { get; set; }
-#endif
 
 		public string TargetFrameworkVersion { get; set; }
 
@@ -728,5 +772,3 @@ namespace Microsoft.Build.Tasks {
 	}
 
 }
-
-#endif

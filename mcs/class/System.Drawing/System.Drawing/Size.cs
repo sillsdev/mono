@@ -40,7 +40,9 @@ namespace System.Drawing
 {
 	[Serializable]
 	[ComVisible (true)]
+#if !MONOTOUCH && !MONOMAC
 	[TypeConverter (typeof (SizeConverter))]
+#endif
 	public struct Size
 	{ 
 		
@@ -337,7 +339,6 @@ namespace System.Drawing
 			return String.Format ("{{Width={0}, Height={1}}}", width, height);
 		}
 
-#if NET_2_0
 		public static Size Add (Size sz1, Size sz2)
 		{
 			return new Size (sz1.Width + sz2.Width, 
@@ -350,7 +351,6 @@ namespace System.Drawing
 			return new Size (sz1.Width - sz2.Width, 
 					 sz1.Height - sz2.Height);
 		}
-#endif
 
 	}
 }

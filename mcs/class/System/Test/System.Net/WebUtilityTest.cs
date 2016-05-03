@@ -29,7 +29,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0 && !MOBILE
+#if !MOBILE
 
 using System;
 using System.Text;
@@ -60,9 +60,6 @@ namespace MonoTests.System.Net {
 
 		[Test]
 		[Category ("NotDotNet")]
-#if TARGET_JVM
-		[Ignore ("TD #6954")]
-#endif
 		public void HtmlEncode_XSS ()
 		{
 			string problem = "\xff1cscript\xff1e";  // unicode looks alike <script>

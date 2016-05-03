@@ -88,7 +88,7 @@ case $host in
 esac
 
 case $target in
-arm*-darwin*)
+arm*-darwin*|aarch64*-*)
     CFLAGS="$CFLAGS -U_FORTIFY_SOURCE"
     ;;
 i*86-*-darwin*)
@@ -135,6 +135,8 @@ AC_CHECK_SIZEOF(void *)
 AC_CHECK_SIZEOF(long)
 AC_CHECK_SIZEOF(long long)
 AC_CHECK_FUNCS(strlcpy stpcpy strtok_r rewinddir vasprintf)
+AC_CHECK_FUNCS(getrlimit)
+AC_CHECK_FUNCS(fork execv execve)
 
 #
 # Mono currently supports 10.6, but strndup is not available prior to 10.7; avoiding
@@ -149,7 +151,7 @@ elif test x$target_ios = xno; then
 AC_CHECK_FUNCS(strndup getpwuid_r)
 fi
 
-AM_CONDITIONAL(NEED_VASPRINTF, test x$have_vasprintf = x )
+AM_CONDITIONAL(NEED_VASPRINTF, test x$ac_cv_func_vasprintf = xno )
 AM_ICONV()
 AC_SEARCH_LIBS(sqrtf, m)
 
@@ -179,7 +181,8 @@ if test "x$have_iso_varargs" = "xyes"; then
 fi
 AC_SUBST(G_HAVE_ISO_VARARGS)
 
-AC_CHECK_HEADERS(getopt.h sys/time.h sys/wait.h pwd.h langinfo.h iconv.h localcharset.h sys/types.h)
+AC_CHECK_HEADERS(getopt.h sys/select.h sys/time.h sys/wait.h pwd.h langinfo.h iconv.h localcharset.h sys/types.h sys/resource.h)
+AC_CHECK_LIB([iconv], [locale_charset],[],[AC_CHECK_LIB([charset], [locale_charset],[LIBS+="-liconv -lcharset"])])
 AC_CHECK_HEADER(alloca.h, [HAVE_ALLOCA_H=1], [HAVE_ALLOCA_H=0])
 AC_SUBST(HAVE_ALLOCA_H)
 
@@ -235,18 +238,11 @@ AC_ARG_WITH(crosspkgdir, [  --with-crosspkgdir=/path/to/pkg-config/dir      Chan
 	fi
 )
 
-dnl
-dnl No, you can not replace the call below with a pkg.m4 macro
-dnl
-have_glib=false
-if test "x$PKG_CONFIG" != "xno"; then
-    if $PKG_CONFIG --atleast-version=$GLIB_REQUIRED_VERSION glib-2.0; then
-        have_glib=true;
-    else
-        have_glib=false;
-    fi
+AC_ARG_ENABLE(werror, [  --enable-werror Pass -Werror to the C compiler], werror_flag=$enableval, werror_flag=no)
+if test x$werror_flag = xyes; then
+	WERROR_CFLAGS="-Werror"
 fi
-AM_CONDITIONAL(HAVE_GLIB, $have_glib)
+AC_SUBST([WERROR_CFLAGS])
 
 AC_SUBST(GPOINTER_TO_INT)
 AC_SUBST(GPOINTER_TO_UINT)

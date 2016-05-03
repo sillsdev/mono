@@ -223,7 +223,9 @@ namespace Mono.CSharp
 			if (MemberType.IsStatic)
 				Error_VariableOfStaticClass (Location, GetSignatureForError (), MemberType, Report);
 
-			CheckBase ();
+			if (!IsCompilerGenerated)
+				CheckBase ();
+
 			IsTypePermitted ();
 		}
 
@@ -392,7 +394,7 @@ namespace Mono.CSharp
 		//
 		// Explicit struct layout set by parent
 		//
-		public CharSet? CharSet {
+		public CharSet? CharSetValue {
 			get; set;
 		}		
 
@@ -423,7 +425,7 @@ namespace Mono.CSharp
 			}
 			
 			// Create nested fixed buffer container
-			string name = String.Format ("<{0}>__FixedBuffer{1}", Name, GlobalCounter++);
+			string name = String.Format ("<{0}>__FixedBuffer{1}", TypeDefinition.FilterNestedName (Name), GlobalCounter++);
 			fixed_buffer_type = Parent.TypeBuilder.DefineNestedType (name,
 				TypeAttributes.NestedPublic | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit,
 				Compiler.BuiltinTypes.ValueType.GetMetaInfo ());
@@ -491,8 +493,32 @@ namespace Mono.CSharp
 			}
 
 			AttributeEncoder encoder;
+			MethodSpec ctor;
 
-			var ctor = Module.PredefinedMembers.StructLayoutAttributeCtor.Resolve (Location);
+			var char_set = CharSetValue ?? Module.DefaultCharSet ?? 0;
+#if STATIC
+			//
+			// Set struct layout without resolving StructLayoutAttribute which is not always available
+			//
+
+			TypeAttributes attribs = TypeAttributes.SequentialLayout;
+			switch (char_set) {
+			case CharSet.None:
+			case CharSet.Ansi:
+				attribs |= TypeAttributes.AnsiClass;
+				break;
+			case CharSet.Auto:
+				attribs |= TypeAttributes.AutoClass;
+				break;
+			case CharSet.Unicode:
+				attribs |= TypeAttributes.UnicodeClass;
+				break;
+			}
+
+			fixed_buffer_type.__SetAttributes (fixed_buffer_type.Attributes | attribs);
+			fixed_buffer_type.__SetLayout (0, buffer_size * type_size);
+#else
+			ctor = Module.PredefinedMembers.StructLayoutAttributeCtor.Resolve (Location);
 			if (ctor == null)
 				return;
 
@@ -500,8 +526,6 @@ namespace Mono.CSharp
 			var field_charset = Module.PredefinedMembers.StructLayoutCharSet.Resolve (Location);
 			if (field_size == null || field_charset == null)
 				return;
-
-			var char_set = CharSet ?? Module.DefaultCharSet ?? 0;
 
 			encoder = new AttributeEncoder ();
 			encoder.Encode ((short)LayoutKind.Sequential);
@@ -514,7 +538,7 @@ namespace Mono.CSharp
 			);
 
 			fixed_buffer_type.SetCustomAttribute ((ConstructorInfo) ctor.GetMetaInfo (), encoder.ToArray ());
-
+#endif
 			//
 			// Don't emit FixedBufferAttribute attribute for private types
 			//
@@ -603,8 +627,22 @@ namespace Mono.CSharp
 			if (TypeSpec.IsReferenceType (MemberType))
 				return true;
 
-			if (MemberType.IsEnum)
+			if (MemberType.IsPointer)
 				return true;
+
+			if (MemberType.IsEnum) {
+				switch (EnumSpec.GetUnderlyingType (MemberType).BuiltinType) {
+				case BuiltinTypeSpec.Type.SByte:
+				case BuiltinTypeSpec.Type.Byte:
+				case BuiltinTypeSpec.Type.Short:
+				case BuiltinTypeSpec.Type.UShort:
+				case BuiltinTypeSpec.Type.Int:
+				case BuiltinTypeSpec.Type.UInt:
+					return true;
+				default:
+					return false;
+				}
+			}
 
 			return false;
 		}
@@ -687,6 +725,41 @@ namespace Mono.CSharp
 			}
 
 			return true;
+		}
+	}
+
+	class PrimaryConstructorField : Field
+	{
+		//
+		// Proxy resolved parameter type expression to avoid type double resolve
+		// and problems with correct resolve context on partial classes
+		//
+		sealed class TypeExpressionFromParameter : TypeExpr
+		{
+			Parameter parameter;
+
+			public TypeExpressionFromParameter (Parameter parameter)
+			{
+				this.parameter = parameter;
+				eclass = ExprClass.Type;
+				loc = parameter.Location;
+			}
+
+			public override TypeSpec ResolveAsType (IMemberContext mc, bool allowUnboundTypeArguments)
+			{
+				return parameter.Type;
+			}
+		}
+
+		public PrimaryConstructorField (TypeDefinition parent, Parameter parameter)
+			: base (parent, new TypeExpressionFromParameter (parameter), Modifiers.PRIVATE, new MemberName (parameter.Name, parameter.Location), null)
+		{
+			caching_flags |= Flags.IsUsed | Flags.IsAssigned;
+		}
+
+		public override string GetSignatureForError ()
+		{
+			return MemberName.Name;
 		}
 	}
 }

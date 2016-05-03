@@ -26,7 +26,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-#if NET_2_0
 using System;
 using System.Net;
 using NUnit.Framework;
@@ -34,11 +33,7 @@ using HLPC=System.Net.HttpListenerPrefixCollection;
 
 namespace MonoTests.System.Net {
 	[TestFixture]
-#if TARGET_JVM
-	[Ignore ("The class System.Net.HttpListenerPrefixCollection - is not supported")]
-#endif
 	public class HttpListenerPrefixCollectionTest {
-#if !TARGET_JVM
 		// NL -> Not listening -> tests when listener.IsListening == false
 		[Test]
 		public void NL_DefaultProperties ()
@@ -250,8 +245,6 @@ namespace MonoTests.System.Net {
 			}
 			Assert.AreEqual (items, 1);
 		}
-#endif
 	}
 }
-#endif
 

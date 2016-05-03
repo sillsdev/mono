@@ -41,23 +41,21 @@
 #include <mono/io-layer/socket-private.h>
 #include <mono/io-layer/handles-private.h>
 #include <mono/io-layer/socket-wrappers.h>
+#include <mono/io-layer/io-trace.h>
 #include <mono/utils/mono-poll.h>
+#include <mono/utils/mono-once.h>
+#include <mono/utils/mono-logger-internals.h>
 
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <netdb.h>
 #include <arpa/inet.h>
 #ifdef HAVE_SYS_SENDFILE_H
 #include <sys/sendfile.h>
 #endif
-
-#if 0
-#define DEBUG(...) g_message(__VA_ARGS__)
-#else
-#define DEBUG(...)
+#ifdef HAVE_NETDB_H
+#include <netdb.h>
 #endif
 
-static guint32 startup_count=0;
 static guint32 in_cleanup = 0;
 
 static void socket_close (gpointer handle, gpointer data);
@@ -83,12 +81,7 @@ static void socket_close (gpointer handle, gpointer data)
 	int ret;
 	struct _WapiHandle_socket *socket_handle = (struct _WapiHandle_socket *)data;
 
-	DEBUG ("%s: closing socket handle %p", __func__, handle);
-
-	if (startup_count == 0 && !in_cleanup) {
-		WSASetLastError (WSANOTINITIALISED);
-		return;
-	}
+	MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: closing socket handle %p", __func__, handle);
 
 	/* Shutdown the socket for reading, to interrupt any potential
 	 * receives that may be blocking for data.  See bug 75705.
@@ -102,7 +95,7 @@ static void socket_close (gpointer handle, gpointer data)
 	
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: close error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: close error: %s", __func__, strerror (errno));
 		errnum = errno_to_WSA (errnum, __func__);
 		if (!in_cleanup)
 			WSASetLastError (errnum);
@@ -112,33 +105,6 @@ static void socket_close (gpointer handle, gpointer data)
 		socket_handle->saved_error = 0;
 }
 
-int WSAStartup(guint32 requested, WapiWSAData *data)
-{
-	if (data == NULL) {
-		return(WSAEFAULT);
-	}
-
-	/* Insist on v2.0+ */
-	if (requested < MAKEWORD(2,0)) {
-		return(WSAVERNOTSUPPORTED);
-	}
-
-	startup_count++;
-
-	/* I've no idea what is the minor version of the spec I read */
-	data->wHighVersion = MAKEWORD(2,2);
-	
-	data->wVersion = requested < data->wHighVersion? requested:
-		data->wHighVersion;
-
-	DEBUG ("%s: high version 0x%x", __func__, data->wHighVersion);
-	
-	strncpy (data->szDescription, "WAPI", WSADESCRIPTION_LEN);
-	strncpy (data->szSystemStatus, "groovy", WSASYS_STATUS_LEN);
-	
-	return(0);
-}
-
 static gboolean
 cleanup_close (gpointer handle, gpointer data)
 {
@@ -146,19 +112,13 @@ cleanup_close (gpointer handle, gpointer data)
 	return TRUE;
 }
 
-int WSACleanup(void)
+void _wapi_cleanup_networking(void)
 {
-	DEBUG ("%s: cleaning up", __func__);
-
-	if (--startup_count) {
-		/* Do nothing */
-		return(0);
-	}
+	MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: cleaning up", __func__);
 
 	in_cleanup = 1;
 	_wapi_handle_foreach (WAPI_HANDLE_SOCKET, cleanup_close, NULL);
 	in_cleanup = 0;
-	return(0);
 }
 
 void WSASetLastError(int error)
@@ -192,11 +152,6 @@ guint32 _wapi_accept(guint32 fd, struct sockaddr *addr, socklen_t *addrlen)
 	struct _WapiHandle_socket new_socket_handle = {0};
 	gboolean ok;
 	int new_fd;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(INVALID_SOCKET);
-	}
 
 	if (addr != NULL && *addrlen < sizeof(struct sockaddr)) {
 		WSASetLastError (WSAEFAULT);
@@ -224,7 +179,7 @@ guint32 _wapi_accept(guint32 fd, struct sockaddr *addr, socklen_t *addrlen)
 
 	if (new_fd == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: accept error: %s", __func__, strerror(errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: accept error: %s", __func__, strerror(errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -233,7 +188,7 @@ guint32 _wapi_accept(guint32 fd, struct sockaddr *addr, socklen_t *addrlen)
 	}
 
 	if (new_fd >= _wapi_fd_reserve) {
-		DEBUG ("%s: File descriptor is too big", __func__);
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: File descriptor is too big", __func__);
 
 		WSASetLastError (WSASYSCALLFAILURE);
 		
@@ -255,7 +210,7 @@ guint32 _wapi_accept(guint32 fd, struct sockaddr *addr, socklen_t *addrlen)
 		return(INVALID_SOCKET);
 	}
 
-	DEBUG ("%s: returning newly accepted socket handle %p with",
+	MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: returning newly accepted socket handle %p with",
 		   __func__, new_handle);
 	
 	return(new_fd);
@@ -266,11 +221,6 @@ int _wapi_bind(guint32 fd, struct sockaddr *my_addr, socklen_t addrlen)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -279,7 +229,7 @@ int _wapi_bind(guint32 fd, struct sockaddr *my_addr, socklen_t addrlen)
 	ret = bind (fd, my_addr, addrlen);
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: bind error: %s", __func__, strerror(errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: bind error: %s", __func__, strerror(errno));
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
 		
@@ -296,11 +246,6 @@ int _wapi_connect(guint32 fd, const struct sockaddr *serv_addr,
 	gboolean ok;
 	gint errnum;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -314,7 +259,7 @@ int _wapi_connect(guint32 fd, const struct sockaddr *serv_addr,
 		errnum = errno;
 		
 		if (errno != EINTR) {
-			DEBUG ("%s: connect error: %s", __func__,
+			MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: connect error: %s", __func__,
 				   strerror (errnum));
 
 			errnum = errno_to_WSA (errnum, __func__);
@@ -346,13 +291,13 @@ int _wapi_connect(guint32 fd, const struct sockaddr *serv_addr,
 		}
 
 		fds.fd = fd;
-		fds.events = POLLOUT;
+		fds.events = MONO_POLLOUT;
 		while (mono_poll (&fds, 1, -1) == -1 &&
 		       !_wapi_thread_cur_apc_pending ()) {
 			if (errno != EINTR) {
 				errnum = errno_to_WSA (errno, __func__);
 
-				DEBUG ("%s: connect poll error: %s",
+				MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: connect poll error: %s",
 					   __func__, strerror (errno));
 
 				WSASetLastError (errnum);
@@ -365,7 +310,7 @@ int _wapi_connect(guint32 fd, const struct sockaddr *serv_addr,
 				&len) == -1) {
 			errnum = errno_to_WSA (errno, __func__);
 
-			DEBUG ("%s: connect getsockopt error: %s",
+			MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: connect getsockopt error: %s",
 				   __func__, strerror (errno));
 
 			WSASetLastError (errnum);
@@ -384,7 +329,7 @@ int _wapi_connect(guint32 fd, const struct sockaddr *serv_addr,
 				socket_handle->saved_error = errnum;
 			}
 			
-			DEBUG ("%s: connect getsockopt returned error: %s",
+			MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: connect getsockopt returned error: %s",
 				   __func__, strerror (so_error));
 
 			WSASetLastError (errnum);
@@ -400,11 +345,6 @@ int _wapi_getpeername(guint32 fd, struct sockaddr *name, socklen_t *namelen)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -413,7 +353,7 @@ int _wapi_getpeername(guint32 fd, struct sockaddr *name, socklen_t *namelen)
 	ret = getpeername (fd, name, namelen);
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: getpeername error: %s", __func__,
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: getpeername error: %s", __func__,
 			   strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
@@ -430,11 +370,6 @@ int _wapi_getsockname(guint32 fd, struct sockaddr *name, socklen_t *namelen)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -443,7 +378,7 @@ int _wapi_getsockname(guint32 fd, struct sockaddr *name, socklen_t *namelen)
 	ret = getsockname (fd, name, namelen);
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: getsockname error: %s", __func__,
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: getsockname error: %s", __func__,
 			   strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
@@ -465,11 +400,6 @@ int _wapi_getsockopt(guint32 fd, int level, int optname, void *optval,
 	struct _WapiHandle_socket *socket_handle;
 	gboolean ok;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -485,7 +415,7 @@ int _wapi_getsockopt(guint32 fd, int level, int optname, void *optval,
 	ret = getsockopt (fd, level, optname, tmp_val, optlen);
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: getsockopt error: %s", __func__,
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: getsockopt error: %s", __func__,
 			   strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
@@ -529,11 +459,6 @@ int _wapi_listen(guint32 fd, int backlog)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -542,7 +467,7 @@ int _wapi_listen(guint32 fd, int backlog)
 	ret = listen (fd, backlog);
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: listen error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: listen error: %s", __func__, strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -565,11 +490,6 @@ int _wapi_recvfrom(guint32 fd, void *buf, size_t len, int recv_flags,
 	struct _WapiHandle_socket *socket_handle;
 	gboolean ok;
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -610,7 +530,7 @@ int _wapi_recvfrom(guint32 fd, void *buf, size_t len, int recv_flags,
 	
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: recv error: %s", __func__, strerror(errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: recv error: %s", __func__, strerror(errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -627,11 +547,6 @@ _wapi_recvmsg(guint32 fd, struct msghdr *msg, int recv_flags)
 	struct _WapiHandle_socket *socket_handle;
 	gboolean ok;
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -655,7 +570,7 @@ _wapi_recvmsg(guint32 fd, struct msghdr *msg, int recv_flags)
 	
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: recvmsg error: %s", __func__, strerror(errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: recvmsg error: %s", __func__, strerror(errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -670,11 +585,6 @@ int _wapi_send(guint32 fd, const void *msg, size_t len, int send_flags)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -687,7 +597,7 @@ int _wapi_send(guint32 fd, const void *msg, size_t len, int send_flags)
 
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: send error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: send error: %s", __func__, strerror (errno));
 
 #ifdef O_NONBLOCK
 		/* At least linux returns EAGAIN/EWOULDBLOCK when the timeout has been set on
@@ -712,11 +622,6 @@ int _wapi_sendto(guint32 fd, const void *msg, size_t len, int send_flags,
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -729,7 +634,7 @@ int _wapi_sendto(guint32 fd, const void *msg, size_t len, int send_flags,
 
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: send error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: send error: %s", __func__, strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -745,11 +650,6 @@ _wapi_sendmsg(guint32 fd,  const struct msghdr *msg, int send_flags)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -762,7 +662,7 @@ _wapi_sendmsg(guint32 fd,  const struct msghdr *msg, int send_flags)
 
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: sendmsg error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: sendmsg error: %s", __func__, strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -784,11 +684,6 @@ int _wapi_setsockopt(guint32 fd, int level, int optname,
 #endif
 	struct timeval tv;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -802,8 +697,9 @@ int _wapi_setsockopt(guint32 fd, int level, int optname,
 		tv.tv_usec = (ms % 1000) * 1000;	// micro from milli
 		tmp_val = &tv;
 		optlen = sizeof (tv);
+	}
 #if defined (__linux__)
-	} else if (level == SOL_SOCKET &&
+	else if (level == SOL_SOCKET &&
 		   (optname == SO_SNDBUF || optname == SO_RCVBUF)) {
 		/* According to socket(7) the Linux kernel doubles the
 		 * buffer sizes "to allow space for bookkeeping
@@ -813,13 +709,13 @@ int _wapi_setsockopt(guint32 fd, int level, int optname,
 
 		bufsize /= 2;
 		tmp_val = &bufsize;
-#endif
 	}
+#endif
 		
 	ret = setsockopt (fd, level, optname, tmp_val, optlen);
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: setsockopt error: %s", __func__,
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: setsockopt error: %s", __func__,
 			   strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
@@ -835,7 +731,7 @@ int _wapi_setsockopt(guint32 fd, int level, int optname,
 		socklen_t type_len = sizeof (type);
 
 		if (!getsockopt (fd, level, SO_TYPE, &type, &type_len)) {
-			if (type == SOCK_DGRAM)
+			if (type == SOCK_DGRAM || type == SOCK_STREAM)
 				setsockopt (fd, level, SO_REUSEPORT, tmp_val, optlen);
 		}
 	}
@@ -850,12 +746,7 @@ int _wapi_shutdown(guint32 fd, int how)
 	gboolean ok;
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
+
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -878,7 +769,7 @@ int _wapi_shutdown(guint32 fd, int how)
 	ret = shutdown (fd, how);
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: shutdown error: %s", __func__,
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: shutdown error: %s", __func__,
 			   strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
@@ -913,7 +804,7 @@ guint32 _wapi_socket(int domain, int type, int protocol, void *unused,
 	
 	if (fd == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: socket error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: socket error: %s", __func__, strerror (errno));
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
 
@@ -921,7 +812,7 @@ guint32 _wapi_socket(int domain, int type, int protocol, void *unused,
 	}
 
 	if (fd >= _wapi_fd_reserve) {
-		DEBUG ("%s: File descriptor is too big (%d >= %d)",
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: File descriptor is too big (%d >= %d)",
 			   __func__, fd, _wapi_fd_reserve);
 
 		WSASetLastError (WSASYSCALLFAILURE);
@@ -946,14 +837,14 @@ guint32 _wapi_socket(int domain, int type, int protocol, void *unused,
 	 * https://bugzilla.novell.com/show_bug.cgi?id=MONO53992
 	 */
 	{
-		int ret, true = 1;
+		int ret, true_ = 1;
 	
-		ret = setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &true,
-				  sizeof (true));
+		ret = setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &true_,
+				  sizeof (true_));
 		if (ret == -1) {
 			int errnum = errno;
 
-			DEBUG ("%s: Error setting SO_REUSEADDR", __func__);
+			MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: Error setting SO_REUSEADDR", __func__);
 			
 			errnum = errno_to_WSA (errnum, __func__);
 			WSASetLastError (errnum);
@@ -975,48 +866,9 @@ guint32 _wapi_socket(int domain, int type, int protocol, void *unused,
 		return(INVALID_SOCKET);
 	}
 
-	DEBUG ("%s: returning socket handle %p", __func__, handle);
+	MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: returning socket handle %p", __func__, handle);
 
 	return(fd);
-}
-
-struct hostent *_wapi_gethostbyname(const char *hostname)
-{
-	struct hostent *he;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(NULL);
-	}
-
-	he = gethostbyname (hostname);
-	if (he == NULL) {
-		DEBUG ("%s: gethostbyname error: %s", __func__,
-			   strerror (h_errno));
-
-		switch(h_errno) {
-		case HOST_NOT_FOUND:
-			WSASetLastError (WSAHOST_NOT_FOUND);
-			break;
-#if NO_ADDRESS != NO_DATA
-		case NO_ADDRESS:
-#endif
-		case NO_DATA:
-			WSASetLastError (WSANO_DATA);
-			break;
-		case NO_RECOVERY:
-			WSASetLastError (WSANO_RECOVERY);
-			break;
-		case TRY_AGAIN:
-			WSASetLastError (WSATRY_AGAIN);
-			break;
-		default:
-			g_warning ("%s: Need to translate %d into winsock error", __func__, h_errno);
-			break;
-		}
-	}
-	
-	return(he);
 }
 
 static gboolean socket_disconnect (guint32 fd)
@@ -1040,7 +892,7 @@ static gboolean socket_disconnect (guint32 fd)
 	if (newsock == -1) {
 		gint errnum = errno;
 
-		DEBUG ("%s: socket error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: socket error: %s", __func__, strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -1060,7 +912,7 @@ static gboolean socket_disconnect (guint32 fd)
 	if (ret == -1) {
 		gint errnum = errno;
 		
-		DEBUG ("%s: dup2 error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: dup2 error: %s", __func__, strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -1076,7 +928,7 @@ static gboolean socket_disconnect (guint32 fd)
 static gboolean wapi_disconnectex (guint32 fd, WapiOverlapped *overlapped,
 				   guint32 flags, guint32 reserved)
 {
-	DEBUG ("%s: called on socket %d!", __func__, fd);
+	MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: called on socket %d!", __func__, fd);
 	
 	if (reserved != 0) {
 		WSASetLastError (WSAEINVAL);
@@ -1164,12 +1016,7 @@ TransmitFile (guint32 socket, gpointer file, guint32 bytes_to_write, guint32 byt
 {
 	gpointer sock = GUINT_TO_POINTER (socket);
 	gint ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return FALSE;
-	}
-	
+
 	if (_wapi_handle_type (sock) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return FALSE;
@@ -1218,11 +1065,6 @@ WSAIoctl (guint32 fd, gint32 command,
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	gchar *buffer = NULL;
-
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -1319,13 +1161,13 @@ WSAIoctl (guint32 fd, gint32 command,
 	}
 
 	if (i_len > 0) {
-		buffer = g_memdup (input, i_len);
+		buffer = (char *)g_memdup (input, i_len);
 	}
 
 	ret = ioctl (fd, command, buffer);
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG("%s: WSAIoctl error: %s", __func__,
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: WSAIoctl error: %s", __func__,
 			  strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
@@ -1357,15 +1199,10 @@ WSAIoctl (guint32 fd, gint32 command,
 }
 
 #ifndef PLATFORM_PORT_PROVIDES_IOCTLSOCKET
-int ioctlsocket(guint32 fd, gint32 command, gpointer arg)
+int ioctlsocket(guint32 fd, unsigned long command, gpointer arg)
 {
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -1423,7 +1260,7 @@ int ioctlsocket(guint32 fd, gint32 command, gpointer arg)
 
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: ioctl error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: ioctl error: %s", __func__, strerror (errno));
 
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
@@ -1439,11 +1276,6 @@ int _wapi_select(int nfds G_GNUC_UNUSED, fd_set *readfds, fd_set *writefds,
 {
 	int ret, maxfd;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-
 	for (maxfd = FD_SETSIZE-1; maxfd >= 0; maxfd--) {
 		if ((readfds && FD_ISSET (maxfd, readfds)) ||
 		    (writefds && FD_ISSET (maxfd, writefds)) ||
@@ -1465,7 +1297,7 @@ int _wapi_select(int nfds G_GNUC_UNUSED, fd_set *readfds, fd_set *writefds,
 
 	if (ret == -1) {
 		gint errnum = errno;
-		DEBUG ("%s: select error: %s", __func__, strerror (errno));
+		MONO_TRACE (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER, "%s: select error: %s", __func__, strerror (errno));
 		errnum = errno_to_WSA (errnum, __func__);
 		WSASetLastError (errnum);
 		

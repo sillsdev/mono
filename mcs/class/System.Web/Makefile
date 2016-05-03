@@ -4,26 +4,6 @@ include ../../build/rules.make
 
 LIBRARY = System.Web.dll
 
-ifneq (1, $(FRAMEWORK_VERSION_MAJOR))
-
-LIBRARY_USE_INTERMEDIATE_FILE = yes
-
-# Because System.Web.dll and System.Web.Services.dll have a cyclic dependency, we need a two-pass build.
-# 1st pass - build System.Web.dll without System.Web.Services.dll reference
-# 2nd pass - build System.Web.dll with System.Web.Services.dll reference
-
-WEBSERVICES_DEP := System.Web.Services.dll
-WEBSERVICES_DEP_FILE := $(wildcard ../lib/$(PROFILE)/$(WEBSERVICES_DEP))
-MONOWEB_DEP := Mono.Web.dll
-MONOWEB_DEP_FILE := $(wildcard ../lib/$(PROFILE)/$(MONOWEB_DEP))
-ifndef NO_SYSTEMCORE_DEP
-SYSTEMCORE_DEP := System.Core.dll
-SYSTEMCORE_DEP_FILE := $(wildcard ../lib/$(PROFILE)/$(SYSTEMCORE_DEP))
-endif
-CYCLIC_DEPS := $(WEBSERVICES_DEP) $(MONOWEB_DEP) 
-CYCLIC_DEP_FILES := $(WEBSERVICES_DEP_FILE) $(MONOWEB_DEP_FILE)
-endif
-
 RESOURCE_FILES_1= \
 	resources/WebUIValidation.js
 
@@ -246,65 +226,43 @@ TEST_RESOURCE_FILES = \
 	Test/mainsoft/NunitWebResources/HtmlTitleCodeRender_Bug662918.aspx
 
 RESX_DIST =  resources/TranslationResources.resx
-ifneq (1, $(FRAMEWORK_VERSION_MAJOR))
 RESX_RES = $(RESX_DIST:.resx=.resources)
-endif
 
 NUNIT_RESOURCE_FILES = $(TEST_RESOURCE_FILES)
 NUNIT_APP_CODE_FILES = $(TEST_APP_CODE_FILES)
 NUNIT_APP_GLOBALRESOURCES_FILES = $(TEST_APP_GLOBALRESOURCES_FILES)
 
-ifneq (1, $(FRAMEWORK_VERSION_MAJOR))
 OTHER_RES += $(RESOURCE_FILES_2)
 OTHER_LIB_MCS_FLAGS = -d:INSIDE_SYSTEM_WEB -nowarn:618 -r:System.Configuration.dll -r:Mono.Data.Sqlite.dll
-endif
 
 ifeq (4, $(FRAMEWORK_VERSION_MAJOR))
 OTHER_LIB_MCS_FLAGS += -r:System.Web.ApplicationServices.dll
 OTHER_RES += $(RESOURCE_FILES_4)
 endif
 
+RESOURCE_STRINGS = ../../../external/referencesource/System.Web/System.Web.txt
+
+LIB_REFS = System System.Core System.Drawing System.Data System.Xml System.EnterpriseServices System.Runtime.Serialization.Formatters.Soap System.ComponentModel.DataAnnotations
 LIB_MCS_FLAGS = \
 	-unsafe \
 	-nowarn:612,618	\
 	-r:$(corlib)	 		\
-	-r:System.dll 			\
-	-r:System.Drawing.dll 		\
-	-r:System.Data.dll		\
-	-r:System.Xml.dll		\
-	-r:System.EnterpriseServices.dll \
-	-r:System.Runtime.Serialization.Formatters.Soap \
 	$(OTHER_LIB_MCS_FLAGS) \
 	$(RESX_RES:%=/resource:%) \
 	$(OTHER_RES:%=/resource:%)
 
-ifneq ($(CYCLIC_DEPS:%=../lib/$(PROFILE)/%), $(CYCLIC_DEP_FILES))
-NO_SIGN_ASSEMBLY = yes
-NO_INSTALL = yes
-all-local: System.Web/UplevelHelper.cs resources/TranslationResources.resources echo-warning echo-warning-systemcore
-.PHONY: echo-warning echo-warning-systemcore
+ifneq (plainweb/,$(intermediate))
+LIB_REFS += System.Web.Services System.Design
+LIB_MCS_FLAGS += -define:WEBSERVICES_DEP -lib:$(the_libdir_base)plaindesign
 
-ifeq   (, $(strip $(CYCLIC_DEP_FILES)))
-echo-warning:
-	@echo "** Warning: System.Web.dll built without parts that depend on: $(CYCLIC_DEPS)"
-endif
-endif
+all-local: System.Web/UplevelHelper.cs resources/TranslationResources.resources 
 
-ifeq (4, $(FRAMEWORK_VERSION_MAJOR))
-ifndef SYSTEMCORE_DEP_FILE
-echo-warning-systemcore:
-	@echo "** Warning: System.Web.dll built without parts that depend on $(SYSTEMCORE_DEP)"
-endif
 endif
 
 TEST_MCS_FLAGS = $(LIB_MCS_FLAGS) -doc:$(test_lib:.dll=.xml) -nowarn:219,169,1591 -r:SystemWebTestShim.dll \
 	$(NUNIT_RESOURCE_FILES:%=/resource:%) \
 	$(foreach file,$(NUNIT_APP_CODE_FILES),$(shell echo $(file) | sed -e 's;\(.*\)/\(.*\);/resource:\1/\2,App_Code/\2 ;g')) \
 	$(foreach file,$(NUNIT_APP_GLOBALRESOURCES_FILES),$(shell echo $(file) | sed -e 's;\(.*\)/\(.*\);/resource:\1/\2,App_GlobalResources/\2 ;g'))
-
-ifeq (net_2_0, $(PROFILE))
-TEST_MCS_FLAGS += -r:System.Web.Extensions.dll -d:TEST
-endif
 
 EXTRA_DISTFILES = \
 	$(RESOURCE_FILES_4) \
@@ -329,20 +287,18 @@ BUILT_SOURCES = System.Web/UplevelHelper.cs
 
 include ../../build/library.make
 
-ifdef WEBSERVICES_DEP_FILE
-LIB_MCS_FLAGS += -define:WEBSERVICES_DEP -r:$(WEBSERVICES_DEP)
-$(build_lib): $(WEBSERVICES_DEP_FILE)
+$(the_libdir_base)System.Web.dll: $(the_libdir_base)System.Web.Services.dll
+
+$(the_libdir_base)System.Web.Services.dll:
+	(cd ../System.Web.Services; $(MAKE) $@)
+
+ifneq (plainweb/,$(intermediate))
+$(the_libdir_base)plainweb/System.Web.dll:
+	$(MAKE) intermediate=plainweb/ $(the_libdir_base)plainweb/System.Web.dll
+
 endif
 
-ifdef MONOWEB_DEP_FILE
-LIB_MCS_FLAGS += -define:MONOWEB_DEP -r:$(MONOWEB_DEP)
-$(build_lib): $(MONOWEB_DEP_FILE)
-endif
-
-ifdef SYSTEMCORE_DEP_FILE
-LIB_MCS_FLAGS += -define:SYSTEMCORE_DEP -r:$(SYSTEMCORE_DEP)
-$(build_lib): $(SYSTEMCORE_DEP_FILE)
-endif
+.NOTPARALLEL: $(the_libdir_base)plainweb/System.Web.dll $(the_libdir_base)System.Web.Services.dll
 
 ifdef DEBUG
 LIB_MCS_FLAGS += -define:DEBUG
@@ -474,5 +430,10 @@ ifdef STANDALONE_TEST_COMPILABLE_TESTS
 		$(MAKE) -C Test/standalone/$$d clean ; \
 	done
 endif
- 
- 
+
+ifndef intermediate
+ifneq ($(PROFILE),basic)
+csproj-local:
+	$(MAKE) csproj-local intermediate=plainweb/
+endif
+endif

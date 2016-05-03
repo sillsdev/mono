@@ -16,9 +16,11 @@
 using System;
 
 #if STATIC
+using SecurityType = System.Collections.Generic.List<IKVM.Reflection.Emit.CustomAttributeBuilder>;
 using IKVM.Reflection;
 using IKVM.Reflection.Emit;
 #else
+using SecurityType = System.Collections.Generic.Dictionary<System.Security.Permissions.SecurityAction, System.Security.PermissionSet>;
 using System.Reflection;
 using System.Reflection.Emit;
 #endif
@@ -44,6 +46,8 @@ namespace Mono.CSharp {
 		
 		Expression instance_expr;
 		ReturnParameter return_attributes;
+
+		SecurityType declarative_security;
 
 		const Modifiers MethodModifiers = Modifiers.PUBLIC | Modifiers.VIRTUAL;
 
@@ -101,6 +105,11 @@ namespace Mono.CSharp {
 					return_attributes = new ReturnParameter (this, InvokeBuilder.MethodBuilder, Location);
 
 				return_attributes.ApplyAttributeBuilder (a, ctor, cdata, pa);
+				return;
+			}
+
+			if (a.IsValidSecurityAttribute ()) {
+				a.ExtractSecurityPermissionSet (ctor, ref declarative_security);
 				return;
 			}
 
@@ -294,12 +303,13 @@ namespace Mono.CSharp {
 
 		public override void PrepareEmit ()
 		{
-			if (!Parameters.IsEmpty) {
-				parameters.ResolveDefaultValues (this);
-			}
+			if ((caching_flags & Flags.CloseTypeCreated) != 0)
+				return;
 
 			InvokeBuilder.PrepareEmit ();
 			if (BeginInvokeBuilder != null) {
+				BeginInvokeBuilder.TypeExpression = null;
+				EndInvokeBuilder.TypeExpression = null;
 				BeginInvokeBuilder.PrepareEmit ();
 				EndInvokeBuilder.PrepareEmit ();
 			}
@@ -308,6 +318,16 @@ namespace Mono.CSharp {
 		public override void Emit ()
 		{
 			base.Emit ();
+
+			if (declarative_security != null) {
+				foreach (var de in declarative_security) {
+#if STATIC
+					TypeBuilder.__AddDeclarativeSecurity (de);
+#else
+					TypeBuilder.AddDeclarativeSecurity (de.Key, de.Value);
+#endif
+				}
+			}
 
 			if (ReturnType.Type != null) {
 				if (ReturnType.Type.BuiltinType == BuiltinTypeSpec.Type.Dynamic) {
@@ -446,7 +466,8 @@ namespace Mono.CSharp {
 
 		public override bool ContainsEmitWithAwait ()
 		{
-			return false;
+			var instance = method_group.InstanceExpression;
+			return instance != null && instance.ContainsEmitWithAwait ();
 		}
 
 		public static Arguments CreateDelegateMethodArguments (ResolveContext rc, AParametersCollection pd, TypeSpec[] types, Location loc)
@@ -500,14 +521,25 @@ namespace Mono.CSharp {
 			return e.CreateExpressionTree (ec);
 		}
 
+		void ResolveConditionalAccessReceiver (ResolveContext rc)
+		{
+			// LAMESPEC: Not sure why this is explicitly disalloed with very odd error message
+			if (!rc.HasSet (ResolveContext.Options.DontSetConditionalAccessReceiver) && method_group.HasConditionalAccess ()) {
+				Error_OperatorCannotBeApplied (rc, loc, "?", method_group.Type);
+			}
+		}
+
 		protected override Expression DoResolve (ResolveContext ec)
 		{
 			constructor_method = Delegate.GetConstructor (type);
 
 			var invoke_method = Delegate.GetInvokeMethod (type);
 
+			ResolveConditionalAccessReceiver (ec);
+
 			Arguments arguments = CreateDelegateMethodArguments (ec, invoke_method.Parameters, invoke_method.Parameters.Types, loc);
 			method_group = method_group.OverloadResolve (ec, ref arguments, this, OverloadResolver.Restrictions.CovariantDelegate);
+
 			if (method_group == null)
 				return null;
 
@@ -563,10 +595,12 @@ namespace Mono.CSharp {
 		
 		public override void Emit (EmitContext ec)
 		{
-			if (method_group.InstanceExpression == null)
+			if (method_group.InstanceExpression == null) {
 				ec.EmitNull ();
-			else
-				method_group.InstanceExpression.Emit (ec);
+			} else {
+				var ie = new InstanceEmitter (method_group.InstanceExpression, false);
+				ie.Emit (ec, method_group.ConditionalAccess);
+			}
 
 			var delegate_method = method_group.BestCandidate;
 
@@ -579,6 +613,12 @@ namespace Mono.CSharp {
 			}
 
 			ec.Emit (OpCodes.Newobj, constructor_method);
+		}
+
+		public override void FlowAnalysis (FlowAnalysisContext fc)
+		{
+			base.FlowAnalysis (fc);
+			method_group.FlowAnalysis (fc);
 		}
 
 		void Error_ConversionFailed (ResolveContext ec, MethodSpec method, Expression return_type)
@@ -616,7 +656,8 @@ namespace Mono.CSharp {
 			var invoke = Delegate.GetInvokeMethod (target_type);
 
 			Arguments arguments = CreateDelegateMethodArguments (ec, invoke.Parameters, invoke.Parameters.Types, mg.Location);
-			return mg.OverloadResolve (ec, ref arguments, null, OverloadResolver.Restrictions.CovariantDelegate | OverloadResolver.Restrictions.ProbingOnly) != null;
+			mg = mg.OverloadResolve (ec, ref arguments, null, OverloadResolver.Restrictions.CovariantDelegate | OverloadResolver.Restrictions.ProbingOnly);
+			return mg != null && Delegate.IsTypeCovariant (ec, mg.BestCandidateReturnType, invoke.ReturnType);
 		}
 
 		#region IErrorHandler Members
@@ -824,13 +865,15 @@ namespace Mono.CSharp {
 	class DelegateInvocation : ExpressionStatement
 	{
 		readonly Expression InstanceExpr;
+		readonly bool conditionalAccessReceiver;
 		Arguments arguments;
 		MethodSpec method;
 		
-		public DelegateInvocation (Expression instance_expr, Arguments args, Location loc)
+		public DelegateInvocation (Expression instance_expr, Arguments args, bool conditionalAccessReceiver, Location loc)
 		{
 			this.InstanceExpr = instance_expr;
 			this.arguments = args;
+			this.conditionalAccessReceiver = conditionalAccessReceiver;
 			this.loc = loc;
 		}
 
@@ -871,29 +914,45 @@ namespace Mono.CSharp {
 				return null;
 
 			type = method.ReturnType;
+			if (conditionalAccessReceiver)
+				type = LiftMemberType (ec, type);
+
 			eclass = ExprClass.Value;
 			return this;
 		}
 
 		public override void Emit (EmitContext ec)
 		{
+			if (conditionalAccessReceiver) {
+				ec.ConditionalAccess = new ConditionalAccessContext (type, ec.DefineLabel ());
+			}
+
 			//
 			// Invocation on delegates call the virtual Invoke member
 			// so we are always `instance' calls
 			//
 			var call = new CallEmitter ();
 			call.InstanceExpression = InstanceExpr;
-			call.EmitPredefined (ec, method, arguments, loc);
+			call.Emit (ec, method, arguments, loc);
+
+			if (conditionalAccessReceiver)
+				ec.CloseConditionalAccess (type.IsNullableType && type !=  method.ReturnType ? type : null);
 		}
 
 		public override void EmitStatement (EmitContext ec)
 		{
-			Emit (ec);
-			// 
-			// Pop the return value if there is one
-			//
-			if (type.Kind != MemberKind.Void)
-				ec.Emit (OpCodes.Pop);
+			if (conditionalAccessReceiver) {
+				ec.ConditionalAccess = new ConditionalAccessContext (type, ec.DefineLabel ()) {
+					Statement = true
+				};
+			}
+
+			var call = new CallEmitter ();
+			call.InstanceExpression = InstanceExpr;
+			call.EmitStatement (ec, method, arguments, loc);
+
+			if (conditionalAccessReceiver)
+				ec.CloseConditionalAccess (null);
 		}
 
 		public override System.Linq.Expressions.Expression MakeExpression (BuilderContext ctx)

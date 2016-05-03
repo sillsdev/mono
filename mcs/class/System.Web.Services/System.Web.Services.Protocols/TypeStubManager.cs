@@ -110,7 +110,6 @@ namespace System.Web.Services.Protocols {
 			if (!defaultAdded && !isClientSide)
 				AddBindingAt (0, new BindingInfo (null, defaultBindingName, logicalType.WebServiceNamespace));
 
-#if NET_2_0
 			foreach (Type ifaceType in Type.GetInterfaces ()) {
 				o = ifaceType.GetCustomAttributes (typeof (WebServiceBindingAttribute), false);
 				if (o.Length > 0) {
@@ -119,17 +118,14 @@ namespace System.Web.Services.Protocols {
 						AddBinding (new BindingInfo (at, defaultBindingName, LogicalType.WebServiceNamespace));
 				}
 			}
-#endif
 		}
 		
-#if NET_2_0
 		public WsiProfiles WsiClaims {
 			get {
 				return (((BindingInfo) Bindings [0]).WebServiceBindingAttribute != null) ?
 					((BindingInfo) Bindings [0]).WebServiceBindingAttribute.ConformsTo : WsiProfiles.None;
 			}
 		}
-#endif
 		
 		public LogicalTypeInfo LogicalType
 		{
@@ -280,28 +276,7 @@ namespace System.Web.Services.Protocols {
 	//
 	internal class TypeStubManager 
 	{
-#if !TARGET_JVM
 		static Hashtable type_to_manager;
-#else
-		const string type_to_manager_key = "TypeStubManager.type_to_manager";
-		static Hashtable type_to_manager {
-			get {
-				Hashtable hash = (Hashtable)AppDomain.CurrentDomain.GetData(type_to_manager_key);
-
-				if (hash != null)
-					return hash;
-
-				lock(type_to_manager_key) {
-					AppDomain.CurrentDomain.SetData(type_to_manager_key, new Hashtable());
-				}
-
-				return (Hashtable)AppDomain.CurrentDomain.GetData(type_to_manager_key);
-			}
-			set {
-				//do nothing: we manage our type_to_manager per domain
-			}
-		}
-#endif
 		
 		static TypeStubManager ()
 		{

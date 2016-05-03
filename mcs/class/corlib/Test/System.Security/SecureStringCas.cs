@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Reflection;
@@ -58,9 +57,7 @@ namespace MonoCasTests.System.Security {
 			try {
 				SecureStringTest unit = new SecureStringTest ();
 				unit.DefaultConstructor ();
-#if !TARGET_JVM
 				unit.UnsafeConstructor ();
-#endif
 				unit.ReadOnly ();
 				unit.Disposed ();
 			}
@@ -85,4 +82,3 @@ namespace MonoCasTests.System.Security {
 	}
 }
 
-#endif

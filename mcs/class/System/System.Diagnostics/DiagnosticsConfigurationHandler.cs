@@ -42,6 +42,7 @@ using System.Xml;
 #endif
 namespace System.Diagnostics
 {
+/*
 	// It handles following elements in <system.diagnostics> :
 	//	- <sharedListeners> [2.0]
 	//	- <sources>
@@ -81,6 +82,8 @@ namespace System.Diagnostics
 			}
 		}
 	}
+*/
+
 #if (XML_DEP)
 	[Obsolete ("This class is obsoleted")]
 	public class DiagnosticsConfigurationHandler : IConfigurationSectionHandler
@@ -94,6 +97,7 @@ namespace System.Diagnostics
 		public DiagnosticsConfigurationHandler ()
 		{
 			elementHandlers ["assert"] = new ElementHandler (AddAssertNode);
+			elementHandlers ["performanceCounters"] = new ElementHandler (AddPerformanceCountersNode);
 			elementHandlers ["switches"] = new ElementHandler (AddSwitchesNode);
 			elementHandlers ["trace"] = new ElementHandler (AddTraceNode);
 			elementHandlers ["sources"] = new ElementHandler (AddSourcesNode);
@@ -181,12 +185,30 @@ namespace System.Diagnostics
 				ThrowUnrecognizedElement (node.ChildNodes[0]);
 		}
 
+		private void AddPerformanceCountersNode (IDictionary d, XmlNode node)
+		{
+			XmlAttributeCollection c = node.Attributes;
+			string filemappingsize = GetAttribute (c, "filemappingsize", false, node);
+			ValidateInvalidAttributes (c, node);
+			if (filemappingsize != null) {
+				try {
+					d ["filemappingsize"] = int.Parse (filemappingsize);
+				}
+				catch (Exception e) {
+					throw new ConfigurationException ("The `filemappingsize' attribute must be an integral value.",
+							e, node);
+				}
+			}
+
+			if (node.ChildNodes.Count > 0)
+				ThrowUnrecognizedElement (node.ChildNodes[0]);
+		}
+
 		// name and value attributes are required
 		// Docs do not define "remove" or "clear" elements, but .NET recognizes
 		// them
 		private void AddSwitchesNode (IDictionary d, XmlNode node)
 		{
-#if !TARGET_JVM
 			// There are no attributes on <switch/>
 			ValidateInvalidAttributes (node.Attributes, node);
 
@@ -224,7 +246,6 @@ namespace System.Diagnostics
 			}
 
 			d [node.Name] = newNodes;
-#endif
 		}
 
 		private static object GetSwitchValue (string name, string value)
@@ -287,7 +308,7 @@ namespace System.Diagnostics
 		{
 			TraceListenerCollection shared_listeners = d ["sharedListeners"] as TraceListenerCollection;
 			if (shared_listeners == null) {
-				shared_listeners = new TraceListenerCollection (false);
+				shared_listeners = new TraceListenerCollection ();
 				d ["sharedListeners"] = shared_listeners;
 			}
 			return shared_listeners;
@@ -367,7 +388,6 @@ namespace System.Diagnostics
 		// for add, "name" is required; initializeData is optional; "type" is required in 1.x, optional in 2.0.
 		private void AddTraceListeners (IDictionary d, XmlNode listenersNode, TraceListenerCollection listeners)
 		{
-#if !TARGET_JVM
 			// There are no attributes on <listeners/>
 			ValidateInvalidAttributes (listenersNode.Attributes, listenersNode);
 
@@ -398,7 +418,6 @@ namespace System.Diagnostics
 				else
 					ThrowUnrecognizedNode (child);
 			}
-#endif
 		}
 
 		private void AddTraceListener (IDictionary d, XmlNode child, XmlAttributeCollection attributes, TraceListenerCollection listeners)
@@ -418,7 +437,8 @@ namespace System.Diagnostics
 						"Listener '{0}' references a shared " +
 						"listener and can only have a 'Name' " +
 						"attribute.", name));
-				listeners.Add (shared, configValues);
+				shared.IndentSize = configValues.IndentSize;
+				listeners.Add (shared);
 				return;
 			}
 #else
@@ -485,7 +505,8 @@ namespace System.Diagnostics
 			}
 #endif
 
-			listeners.Add (l, configValues);
+			l.IndentSize = configValues.IndentSize;
+			listeners.Add (l);
 		}
 
 		private void RemoveTraceListener (string name)

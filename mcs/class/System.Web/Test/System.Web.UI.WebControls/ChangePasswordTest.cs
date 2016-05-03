@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Drawing;
@@ -824,7 +823,6 @@ namespace MonoTests.System.Web.UI.WebControls
 			RequiredFieldValidator rfv = cp.ChangePasswordTemplateContainer.FindControl ("text1required") as RequiredFieldValidator;
 			Assert.IsNotNull (rfv, "#A2");
 		}
-#if NET_4_0
 		[Test]
 		public void RenderOuterTableForbiddenStyles ()
 		{
@@ -891,7 +889,6 @@ namespace MonoTests.System.Web.UI.WebControls
 				}
 			}
 		}
-#endif
 		[TestFixtureTearDown]
 		public void TearDown ()
 		{
@@ -900,4 +897,3 @@ namespace MonoTests.System.Web.UI.WebControls
 	}
 }
 
-#endif

@@ -18,7 +18,8 @@ public class FinalizerException {
 		int* values = stackalloc int [20];
 		aptr = new IntPtr (values);
 		if (depth <= 0) {
-			new FinalizerException ();
+			for (int i = 0; i < 10; i++)
+				new FinalizerException ();
 			return;
 		}
 		MakeException (depth - 1);
@@ -30,7 +31,9 @@ public class FinalizerException {
 			Environment.Exit (0);
 		};
 
-		MakeException (1024);
+		var t = new Thread (delegate () { MakeException (1024); });
+		t.Start ();
+		t.Join ();
 
 		GC.Collect ();
 		GC.WaitForPendingFinalizers ();

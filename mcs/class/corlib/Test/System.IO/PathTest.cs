@@ -173,9 +173,10 @@ namespace MonoTests.System.IO
 			Assert.AreEqual ("one", testPath, "Combine #03");
 
 			string current = Directory.GetCurrentDirectory ();
+			bool currentIsDSC = current.Length == 1 && current [0] == DSC;
 			testPath = Path.Combine (current, "one");
 
-			string expected = current + DSC + "one";
+			string expected = (currentIsDSC ? String.Empty : current) + DSC + "one";
 			Assert.AreEqual (expected, testPath, "Combine #04");
 
 			testPath = Path.Combine ("one", current);
@@ -200,9 +201,7 @@ namespace MonoTests.System.IO
 			expected = "one" + DSC + "two" + DSC;
 			Assert.AreEqual (expected, testPath, "Combine #07");
 
-#if NET_4_0
 			Assert.AreEqual ("a", Path.Combine (new [] { "a", "" }), "Combine #08");
-#endif
 		}
 
 		[Test]
@@ -484,9 +483,9 @@ namespace MonoTests.System.IO
 		public void GetFullPath ()
 		{
 			string current = Directory.GetCurrentDirectory ();
-
+			bool currentIsDSC = current.Length == 1 && current [0] == DSC;
 			string testFullPath = Path.GetFullPath ("foo.txt");
-			string expected = current + DSC + "foo.txt";
+			string expected = (currentIsDSC ? String.Empty : current) + DSC + "foo.txt";
 			Assert.AreEqual (expected, testFullPath, "GetFullPath #01");
 
 			testFullPath = Path.GetFullPath ("a//./.././foo.txt");
@@ -545,6 +544,16 @@ namespace MonoTests.System.IO
 			Assert.AreEqual (Environment.CurrentDirectory, Path.GetFullPath ("."), "#03");
 			Assert.AreEqual (Path.Combine (Environment.CurrentDirectory, "hey"),
 					     Path.GetFullPath ("hey"), "#04");
+			Assert.AreEqual ("/", Path.GetFullPath ("/"), "#01");
+
+			string curdir = Directory.GetCurrentDirectory ();
+			try {
+				Directory.SetCurrentDirectory ("/");
+				Assert.AreEqual ("/test.txt", Path.GetFullPath ("test.txt"), "xambug #833");
+			}
+			finally {
+				Directory.SetCurrentDirectory (curdir);
+			}
 		}
 
 		[Test]
@@ -574,10 +583,6 @@ namespace MonoTests.System.IO
 				{"root//dir", "root\\dir"},
 				{"root/.              /", "root\\"},
 				{"root/..             /", ""},
-#if !NET_2_0
-				{"root/      .              /", "root\\"},
-				{"root/      ..             /", ""},
-#endif
 				{"root/./", "root\\"},
 				{"root/..                      /", ""},
 				{".//", ""}
@@ -616,10 +621,6 @@ namespace MonoTests.System.IO
 				{"root//dir", "root\\dir"},
 				{"root/.              /", "root\\"},
 				{"root/..             /", ""},
-#if !NET_2_0
-				{"root/      .              /", "root\\"},
-				{"root/      ..             /", ""},
-#endif
 				{"root/./", "root\\"},
 				{"root/..                      /", ""},
 				{".//", ""}
@@ -661,10 +662,6 @@ namespace MonoTests.System.IO
 				{"root//dir", "root\\dir"},
 				{"root/.              /", "root\\"},
 				{"root/..             /", ""},
-#if !NET_2_0
-				{"root/      .              /", "root\\"},
-				{"root/      ..             /", ""},
-#endif
 				{"root/./", "root\\"},
 				{"root/..                      /", ""},
 				{".//", ""}
@@ -765,9 +762,7 @@ namespace MonoTests.System.IO
 		{
 			if (Windows) {
 				Assert.AreEqual (@"Z:\", Path.GetFullPath ("Z:"), "GetFullPath w#01");
-#if !TARGET_JVM // Java full (canonical) path always starts with caps drive letter
 				Assert.AreEqual (@"c:\abc\def", Path.GetFullPath (@"c:\abc\def"), "GetFullPath w#02");
-#endif
 				Assert.IsTrue (Path.GetFullPath (@"\").EndsWith (@"\"), "GetFullPath w#03");
 				// "\\\\" is not allowed
 				Assert.IsTrue (Path.GetFullPath ("/").EndsWith (@"\"), "GetFullPath w#05");
@@ -858,12 +853,8 @@ namespace MonoTests.System.IO
 		}
 
 		[Test]
-#if ONLY_1_1
-		[Category ("NotWorking")] // we also throw ArgumentException on 1.0 profile
-#endif
 		public void GetPathRoot_Path_InvalidPathChars ()
 		{
-#if NET_2_0
 			try {
 				Path.GetPathRoot ("hi\0world");
 				Assert.Fail ("#1");
@@ -874,9 +865,6 @@ namespace MonoTests.System.IO
 				Assert.IsNotNull (ex.Message, "#4");
 				Assert.IsNull (ex.ParamName, "#5");
 			}
-#else
-			Assert.AreEqual (String.Empty, Path.GetPathRoot ("hi\0world"));
-#endif
 		}
 
 		[Test]
@@ -1037,11 +1025,7 @@ namespace MonoTests.System.IO
 
 			string curdir = Directory.GetCurrentDirectory ();
 			try {
-#if TARGET_JVM
-				string system = "C:\\WINDOWS\\system32\\";
-#else
 				string system = Environment.SystemDirectory;
-#endif
 				Directory.SetCurrentDirectory (system);
 				string drive = system.Substring (0, 2);
 				Assert.AreEqual (system, Path.GetFullPath (drive), "current dir");
@@ -1062,11 +1046,7 @@ namespace MonoTests.System.IO
 
 			string curdir = Directory.GetCurrentDirectory ();
 			try {
-#if TARGET_JVM
-				string system = "C:\\WINDOWS\\system32\\";
-#else
 				string system = Environment.SystemDirectory;
-#endif
 				Directory.SetCurrentDirectory (system);
 				// e.g. C:dir (no backslash) will return CurrentDirectory + dir
 				string dir = system.Substring (0, 2) + "dir";
@@ -1078,9 +1058,6 @@ namespace MonoTests.System.IO
 		}
 #endif
 		[Test]
-#if TARGET_JVM
-		[Ignore("Java full (canonical) path always returns windows dir in caps")]
-#endif
 		public void WindowsDriveC14N_77058 ()
 		{
 			// check for Unix platforms - see FAQ for more details
@@ -1101,20 +1078,14 @@ namespace MonoTests.System.IO
 		{
 			char[] invalid = Path.InvalidPathChars;
 			if (Windows) {
-#if NET_2_0
 				Assert.AreEqual (36, invalid.Length, "Length");
-#else
-				Assert.AreEqual (15, invalid.Length, "Length");
-#endif
+
 				foreach (char c in invalid) {
 					int i = (int) c;
-#if NET_2_0
+
 					if (i < 32)
 						continue;
-#else
-					if ((i == 0) || (i == 8) || ((i > 15) && (i < 19)) || ((i > 19) && (i < 26)))
-						continue;
-#endif
+
 					// in both 1.1 SP1 and 2.0
 					if ((i == 34) || (i == 60) || (i == 62) || (i == 124))
 						continue;
@@ -1146,7 +1117,6 @@ namespace MonoTests.System.IO
 			}
 		}
 
-#if NET_2_0
 		[Test]
 		public void GetInvalidFileNameChars_Values ()
 		{
@@ -1269,8 +1239,7 @@ namespace MonoTests.System.IO
 				}
 			}
 		}
-#endif
-#if NET_4_0
+
 		string Concat (string sep, params string [] parms)
 		{
 			return String.Join (sep, parms);
@@ -1410,7 +1379,6 @@ namespace MonoTests.System.IO
 
 			Assert.AreEqual ("", Path.Combine ("", "", "", "", ""), "#A4");
 		}
-#endif
 	}
 }
 

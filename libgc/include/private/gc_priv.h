@@ -1214,6 +1214,8 @@ extern long GC_large_alloc_warn_suppressed;
   extern GC_bool GC_world_stopped;
 #endif
 
+extern void (*GC_notify_event) GC_PROTO((GC_EventType));
+
 /* Operations */
 # ifndef abs
 #   define abs(x)  ((x) < 0? (-(x)) : (x))
@@ -1453,6 +1455,10 @@ GC_bool GC_is_tmp_root GC_PROTO((ptr_t p));
 # endif
 void GC_register_dynamic_libraries GC_PROTO((void));
   		/* Add dynamic library data sections to the root set. */
+
+void GC_cond_register_dynamic_libraries GC_PROTO((void));
+		/* Remove and reregister dynamic libraries if we're     */
+		/* configured to do that at each GC.                    */
 
 GC_bool GC_register_main_static_data GC_PROTO((void));
 		/* We need to register the main data segment.  Returns	*/

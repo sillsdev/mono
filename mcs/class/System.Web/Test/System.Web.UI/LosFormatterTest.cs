@@ -81,13 +81,8 @@ namespace MonoTests.System.Web.UI
 			byte [] data = Convert.FromBase64String (expected);
 			byte [] signed_data = Convert.FromBase64String (signed);
 			Assert.IsTrue (BitConverter.ToString (signed_data).StartsWith (BitConverter.ToString (data)), "4 / same data");
-#if NET_4_0
 			// 32 bytes == 256 bits -> match HMACSHA256 as default
 			Assert.AreEqual (32, signed_data.Length - data.Length, "signature length");
-#else
-			// 20 bytes == 160 bits -> match HMACSHA1 as default
-			Assert.AreEqual (20, signed_data.Length - data.Length, "signature length");
-#endif
 		}
 
 		[Test]
@@ -114,13 +109,8 @@ namespace MonoTests.System.Web.UI
 			byte [] data = Convert.FromBase64String (expected);
 			byte [] signed_data = Convert.FromBase64String (signed);
 			Assert.IsTrue (BitConverter.ToString (signed_data).StartsWith (BitConverter.ToString (data)), "5 / same data");
-#if NET_4_0
 			// 32 bytes == 256 bits -> match HMACSHA256 as default
 			Assert.AreEqual (32, signed_data.Length - data.Length, "signature length");
-#else
-			// 20 bytes == 160 bits -> match HMACSHA1 as default
-			Assert.AreEqual (20, signed_data.Length - data.Length, "signature length");
-#endif
 			LosFormatter lf6 = new LosFormatter (true, "string"); // bug #649551
 			signed = NoKeyRoundTrip (lf6, "true, plain");
 			Assert.AreNotEqual (expected, signed, "6");
@@ -171,7 +161,6 @@ namespace MonoTests.System.Web.UI
 			Assert.AreNotEqual (r4, r5, "r4-r5");
 		}
 
-#if NET_4_0
 		[Test]
 		[ExpectedException (typeof (NotSupportedException))]
 		public void Deserialize_Stream_NonSeekable ()
@@ -181,19 +170,6 @@ namespace MonoTests.System.Web.UI
 			LosFormatter lf = new LosFormatter ();
 			lf.Serialize (ns, s1);
 		}
-#else
-		[Test] // bug #411115
-		public void Deserialize_Stream_NonSeekable ()
-		{
-			string s1 = "Hello world";
-			NonSeekableStream ns = new NonSeekableStream ();
-			LosFormatter lf = new LosFormatter ();
-			lf.Serialize (ns, s1);
-			ns.Reset ();
-			string s2 = lf.Deserialize (ns) as string;
-			Assert.AreEqual (s1, s2);
-		}
-#endif
 		[Test] // bug #324526
 		public void Serialize ()
 		{
@@ -217,11 +193,7 @@ namespace MonoTests.System.Web.UI
 			StringWriter sw = new StringWriter ();
 			lf.Serialize (sw, s);
 			string s1 = sw.ToString ();
-#if NET_2_0
 			Assert.AreEqual ("/wEFC0hlbGxvIHdvcmxk", s1, "#1");
-#else
-			Assert.AreEqual ("SGVsbG8gd29ybGQ=", s1, "#1");
-#endif
 			string s2 = lf.Deserialize (s1) as string;
 			Assert.IsNotNull (s2, "#2");
 			Assert.AreEqual (s, s2, "#3");
@@ -253,11 +225,7 @@ namespace MonoTests.System.Web.UI
 			MemoryStream ms = new MemoryStream ();
 			lf.Serialize (ms, s);
 			string s1 = Encoding.UTF8.GetString (ms.GetBuffer (), 0, (int) ms.Length);
-#if NET_2_0
 			Assert.AreEqual ("/wEFC0hlbGxvIHdvcmxk", s1, "#1");
-#else
-			Assert.AreEqual ("SGVsbG8gd29ybGQ=", s1, "#1");
-#endif
 			string s2 = lf.Deserialize (s1) as string;
 			Assert.IsNotNull (s2, "#2");
 			Assert.AreEqual (s, s2, "#3");
@@ -287,20 +255,12 @@ namespace MonoTests.System.Web.UI
 			MemoryStream ms = new MemoryStream ();
 			lf.Serialize (ms, null);
 			string s1 = Encoding.UTF8.GetString (ms.GetBuffer (), 0, (int) ms.Length);
-#if NET_2_0
 			Assert.AreEqual ("/wFk", s1, "#1");
-#else
-			Assert.AreEqual (string.Empty, s1, "#1");
-#endif
 
 			StringWriter sw = new StringWriter ();
 			lf.Serialize (sw, null);
 			string s2 = sw.ToString ();
-#if NET_2_0
 			Assert.AreEqual ("/wFk", s1, "#2");
-#else
-			Assert.AreEqual (string.Empty, s1, "#2");
-#endif
 		}
 
 		class NonSeekableStream : MemoryStream

@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#if NET_2_0
 
 using System;
 using System.Collections.Generic;
@@ -115,14 +114,6 @@ namespace MonoTests.System.Web.UI.WebControls
 			Assert.AreEqual (true, t.DoSupportAutoEvents, "SupportAutoEvents");
 		}
 
-#if TARGET_JVM
-		[Test]
-		public void TemplateControl_DefaultPropertyNotWorking ()
-		{
-			PokerTemplateControl t = new PokerTemplateControl ();
-			Assert.AreEqual (null, t.AppRelativeVirtualPath, "AppRelativeVirtualPath");
-		}
-#endif
 
 		[Test]
 		[Category ("NunitWeb")]
@@ -343,23 +334,6 @@ namespace MonoTests.System.Web.UI.WebControls
 		}
 
 
-#if TARGET_JVM
-		[Test]
-		[ExpectedException(typeof(ArgumentNullException))]
-		public void TemplateControl_AppRelativeVirtualPathException1 ()
-		{
-			PokerTemplateControl t = new PokerTemplateControl ();
-			t.AppRelativeVirtualPath = null;
-		}
-
-		[Test]
-		[ExpectedException (typeof (ArgumentException))]
-		public void TemplateControl_AppRelativeVirtualPathException2 ()
-		{
-			PokerTemplateControl t = new PokerTemplateControl ();
-			t.AppRelativeVirtualPath = "fake";
-		}
-#endif
 		[TestFixtureTearDown]
 		public void TearDown ()
 		{
@@ -367,4 +341,3 @@ namespace MonoTests.System.Web.UI.WebControls
 		}
 	}
 }
-#endif

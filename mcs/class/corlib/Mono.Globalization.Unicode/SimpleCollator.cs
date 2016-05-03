@@ -505,8 +505,7 @@ Console.WriteLine (" -> '{0}'", c.Replacement);
 
 		static bool IsIgnorable (int i, COpt opt)
 		{
-			return Uni.IsIgnorable (i, (byte)
-				(((opt & COpt.Ordinal) == 0 && (opt & COpt.OrdinalIgnoreCase) == 0 ? 1 : 0) +
+			return Uni.IsIgnorable (i, (byte) (1 +
 				((opt & COpt.IgnoreSymbols) != 0 ? 2 : 0) +
 				((opt & COpt.IgnoreNonSpace) != 0 ? 4 : 0)));
 			
@@ -1453,9 +1452,9 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 		public unsafe int IndexOf (string s, string target, int start, int length, CompareOptions opt)
 		{
 			if (opt == CompareOptions.Ordinal)
-				return IndexOfOrdinal (s, target, start, length);
+				throw new NotSupportedException ("Should not be reached");
 			if (opt == CompareOptions.OrdinalIgnoreCase)
-				return IndexOfOrdinalIgnoreCase (s, target, start, length);
+				throw new NotSupportedException ("Should not be reached");
 			if (opt == CompareOptions.None) {
 				bool testWasUnable;
 				int ret = QuickIndexOf (s, target, start, length, out testWasUnable);
@@ -1504,30 +1503,6 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 			return -1;
 		}
 
-		int IndexOfOrdinalIgnoreCase (string s, string target, int start, int length)
-		{
-			if (target.Length == 0)
-				return 0;
-			else if (target.Length > length)
-				return -1;
-
-			int end = start + length - target.Length + 1;
-			for (int i = start; i < end; i++) {
-				bool no = false;
-				for (int j = 0; j < target.Length; j++) {
-					// I think almost all text has more lower letters than upper ones. Thus with this invariant comparison ToLower() should be faster since it costs less operations.
-					if (textInfo.ToLower (s [i + j]) != textInfo.ToLower (target [j])) {
-						no = true;
-						break;
-					}
-				}
-				if (no)
-					continue;
-				return i;
-			}
-			return -1;
-		}
-
 		// char
 
 		public int IndexOf (string s, char target, CompareOptions opt)
@@ -1538,9 +1513,9 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 		public unsafe int IndexOf (string s, char target, int start, int length, CompareOptions opt)
 		{
 			if (opt == CompareOptions.Ordinal)
-				return IndexOfOrdinal (s, target, start, length);
+				throw new NotSupportedException ("Should not be reached");			
 			if (opt == CompareOptions.OrdinalIgnoreCase)
-				return IndexOfOrdinalIgnoreCase (s, target, start, length);
+				throw new NotSupportedException ("Should not be reached");
 			byte* alwaysMatchFlags = stackalloc byte [16];
 			byte* neverMatchFlags = stackalloc byte [16];
 			byte* targetSortKey = stackalloc byte [4];
@@ -1585,16 +1560,6 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 			int end = start + length;
 			for (int i = start; i < end; i++)
 				if (s [i] == target)
-					return i;
-			return -1;
-		}
-
-		int IndexOfOrdinalIgnoreCase (string s, char target, int start, int length)
-		{
-			int end = start + length;
-			target = textInfo.ToLower (target);
-			for (int i = start; i < end; i++)
-				if (textInfo.ToLower (s [i]) == target)
 					return i;
 			return -1;
 		}
@@ -1696,7 +1661,7 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 			if (opt == CompareOptions.Ordinal)
 				return LastIndexOfOrdinal (s, target, start, length);
 			if (opt == CompareOptions.OrdinalIgnoreCase)
-				return LastIndexOfOrdinalIgnoreCase (s, target, start, length);
+				throw new NotSupportedException ("Should not be reached");
 			byte* alwaysMatchFlags = stackalloc byte [16];
 			byte* neverMatchFlags = stackalloc byte [16];
 			byte* targetSortKey = stackalloc byte [4];
@@ -1741,34 +1706,6 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 			return -1;
 		}
 
-		int LastIndexOfOrdinalIgnoreCase (string s, string target, int start, int length)
-		{
-			if (target.Length == 0)
-				return start;
-			if (s.Length < length || target.Length > length)
-				return -1;
-			int end = start - length + target.Length - 1;
-			char tail = textInfo.ToLower (target [target.Length - 1]);
-			for (int i = start; i > end;) {
-				if (textInfo.ToLower (s [i]) != tail) {
-					i--;
-					continue;
-				}
-				int x = i - target.Length + 1;
-				i--;
-				bool mismatch = false;
-				for (int j = target.Length - 2; j >= 0; j--)
-					if (textInfo.ToLower (s [x + j]) != textInfo.ToLower (target [j])) {
-						mismatch = true;
-						break;
-					}
-				if (mismatch)
-					continue;
-				return x;
-			}
-			return -1;
-		}
-
 		// char
 
 		public int LastIndexOf (string s, char target, CompareOptions opt)
@@ -1779,9 +1716,9 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 		public unsafe int LastIndexOf (string s, char target, int start, int length, CompareOptions opt)
 		{
 			if (opt == CompareOptions.Ordinal)
-				return LastIndexOfOrdinal (s, target, start, length);
+				throw new NotSupportedException ();
 			if (opt == CompareOptions.OrdinalIgnoreCase)
-				return LastIndexOfOrdinalIgnoreCase (s, target, start, length);
+				throw new NotSupportedException ();			
 			byte* alwaysMatchFlags = stackalloc byte [16];
 			byte* neverMatchFlags = stackalloc byte [16];
 			byte* targetSortKey = stackalloc byte [4];
@@ -1822,29 +1759,6 @@ Console.WriteLine ("==== {0} {1} {2} {3} {4} {5} {6} {7} {8}", s, si, send, leng
 					ti, !Uni.HasSpecialWeight ((char) ti),
 					ref ctx);
 			}
-		}
-
-		int LastIndexOfOrdinal (string s, char target, int start, int length)
-		{
-			if (s.Length == 0)
-				return -1;
-			int end = start - length;
-			for (int i = start; i > end; i--)
-				if (s [i] == target)
-					return i;
-			return -1;
-		}
-
-		int LastIndexOfOrdinalIgnoreCase (string s, char target, int start, int length)
-		{
-			if (s.Length == 0)
-				return -1;
-			int end = start - length;
-			char c = textInfo.ToUpper (target);
-			for (int i = start; i > end; i--)
-				if (textInfo.ToUpper (s [i]) == c)
-					return i;
-			return -1;
 		}
 
 		// Searches target byte[] keydata

@@ -28,7 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using System;
 using System.Configuration;
 using System.ComponentModel;
@@ -56,9 +55,7 @@ namespace System.Web.Configuration
 		static ConfigurationProperty urlLinePragmasProp;
 		static ConfigurationProperty codeSubDirectoriesProp;
 		static ConfigurationProperty optimizeCompilationsProp;
-#if NET_4_0
 		static ConfigurationProperty targetFrameworkProp;
-#endif
 		
 		static CompilationSection ()
 		{
@@ -67,11 +64,9 @@ namespace System.Web.Configuration
 								    ConfigurationPropertyOptions.None);
 			assemblyPostProcessorTypeProp = new ConfigurationProperty ("assemblyPostProcessorType", typeof (string), "");
 			batchProp = new ConfigurationProperty ("batch", typeof (bool), true);
-#if !TARGET_JVM
 			buildProvidersProp = new ConfigurationProperty ("buildProviders", typeof (BuildProviderCollection), null,
 									null, PropertyHelper.DefaultValidator,
 									ConfigurationPropertyOptions.None);
-#endif
 			batchTimeoutProp = new ConfigurationProperty ("batchTimeout", typeof (TimeSpan), new TimeSpan (0, 15, 0),
 								      PropertyHelper.TimeSpanSecondsOrInfiniteConverter,
 								      PropertyHelper.PositiveTimeSpanValidator,
@@ -99,19 +94,15 @@ namespace System.Web.Configuration
 			// this hotfix: http://support.microsoft.com/kb/961884
 			optimizeCompilationsProp = new ConfigurationProperty ("optimizeCompilations", typeof (bool), false);
 
-#if NET_4_0
 			// Mono ignores this as there is no way to switch the runtime version
 			// dynamically while application is running
 			targetFrameworkProp = new ConfigurationProperty ("targetFramework", typeof (string), null);
-#endif
 
 			properties = new ConfigurationPropertyCollection ();
 			properties.Add (assembliesProp);
 			properties.Add (assemblyPostProcessorTypeProp);
 			properties.Add (batchProp);
-#if !TARGET_JVM
 			properties.Add (buildProvidersProp);
-#endif
 			properties.Add (batchTimeoutProp);
 			properties.Add (codeSubDirectoriesProp);
 			properties.Add (compilersProp);
@@ -126,9 +117,7 @@ namespace System.Web.Configuration
 			properties.Add (tempDirectoryProp);
 			properties.Add (urlLinePragmasProp);
 			properties.Add (optimizeCompilationsProp);
-#if NET_4_0
 			properties.Add (targetFrameworkProp);
-#endif
 		}
 
 		public CompilationSection ()
@@ -171,12 +160,10 @@ namespace System.Web.Configuration
 			set { base [batchTimeoutProp] = value; }
 		}
 
-#if !TARGET_JVM
 		[ConfigurationProperty ("buildProviders")]
 		public BuildProviderCollection BuildProviders {
 			get { return (BuildProviderCollection) base [buildProvidersProp]; }
 		}
-#endif
 
 		[ConfigurationProperty ("codeSubDirectories")]
 		public CodeSubDirectoriesCollection CodeSubDirectories {
@@ -241,13 +228,11 @@ namespace System.Web.Configuration
 			set { base [strictProp] = value; }
 		}
 
-#if NET_4_0
 		[ConfigurationProperty ("targetFramework", DefaultValue = null)]
 		public string TargetFramework {
 			get { return (string) base [targetFrameworkProp]; }
 			set { base [targetFrameworkProp] = value; }
 		}
-#endif
 		
 		[ConfigurationProperty ("tempDirectory", DefaultValue = "")]
 		public string TempDirectory {
@@ -266,5 +251,4 @@ namespace System.Web.Configuration
 		}
 	}
 }
-#endif // NET_2_0
 

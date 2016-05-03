@@ -47,6 +47,14 @@ class Tests {
 		return true;
 	}
 
+	class Gen<T>
+	{
+		[MethodImpl(MethodImplOptions.Synchronized)]
+		public static void Run ()
+		{
+		}
+	}
+
 	public delegate int Delegate1 ();
 
 	static public int Main (String[] args) {
@@ -68,10 +76,11 @@ class Tests {
 			b.test_exception ();
 		}
 		catch (SynchronizationLockException ex) {
-			return 1;
+			// OK
 		}
 		catch (Exception ex) {
-			// OK
+			// The other exception should be overwritten by the lock one
+			return 1;
 		}
 		if (is_synchronized (b))
 			return 1;
@@ -105,13 +114,22 @@ class Tests {
 			d ();
 		}
 		catch (SynchronizationLockException ex) {
-			return 2;
+			// OK
 		}
 		catch (Exception ex) {
-			// OK
+			return 2;
 		}
 		if (is_synchronized (b))
 			return 1;
+
+		Monitor.Enter (typeof (Gen<>));
+		Thread t = new Thread (() =>
+			{
+				Gen<object>.Run ();
+			});
+		t.Start ();
+		t.Join ();
+		Monitor.Exit (typeof (Gen<>));
 
 		return 0;
 	}

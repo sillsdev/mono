@@ -149,7 +149,7 @@ csproj-local:
 	config_file=`basename $(PROGRAM) .exe`-$(PROFILE).input; \
 	echo $(thisdir):$$config_file >> $(topdir)/../msvc/scripts/order; \
 	(echo $(is_boot); \
-	echo $(USE_MCS_FLAGS) $(LIBRARY_FLAGS) $(LIB_MCS_FLAGS); \
+	echo $(USE_MCS_FLAGS) $(LIBRARY_FLAGS) $(LIB_MCS_FLAGS) $(patsubst %,-r:%,$(LIB_REFS)); \
 	echo $(PROGRAM); \
 	echo $(BUILT_SOURCES_cmdline); \
 	echo $(build_lib); \
@@ -166,3 +166,6 @@ $(makefrag): $(topdir)/build/executable.make $(depsdir)/.stamp
 doc-update-local:
 	@:
 
+# Need to be here so it comes after the definition of DEP_DIRS/DEP_LIBS
+gen-deps:
+	@echo "$(DEPS_TARGET_DIR): $(DEP_DIRS) $(DEP_LIBS)" >> $(DEPS_FILE)

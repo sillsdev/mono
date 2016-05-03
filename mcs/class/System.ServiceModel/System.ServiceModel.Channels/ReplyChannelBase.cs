@@ -29,11 +29,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Net.Security;
 using System.ServiceModel;
 using System.ServiceModel.Description;
 using System.ServiceModel.Security;
 using System.Threading;
+using System.Xml;
 
 namespace System.ServiceModel.Channels
 {
@@ -85,15 +87,16 @@ namespace System.ServiceModel.Channels
 
 		protected override void OnClose (TimeSpan timeout)
 		{
-			if (CurrentAsyncThread != null)
+			if (currentAsyncThreads.Count > 0)
 				if (!CancelAsync (timeout))
-					CurrentAsyncThread.Abort ();
+					foreach (Thread asyncThread in currentAsyncThreads)
+						asyncThread.Abort ();
 		}
 
 		public virtual bool CancelAsync (TimeSpan timeout)
 		{
 			// FIXME: It should wait for the actual completion.
-			return CurrentAsyncResult == null;
+			return currentAsyncResults.Count > 0;
 			//return CurrentAsyncResult == null || CurrentAsyncResult.AsyncWaitHandle.WaitOne (timeout);
 		}
 
@@ -109,34 +112,51 @@ namespace System.ServiceModel.Channels
 		TryReceiveDelegate try_recv_delegate;
 
 		object async_result_lock = new object ();
-		protected Thread CurrentAsyncThread { get; private set; }
-		protected IAsyncResult CurrentAsyncResult { get; private set; }
+		HashSet<Thread> currentAsyncThreads = new HashSet<Thread>();
+		HashSet<IAsyncResult> currentAsyncResults = new HashSet<IAsyncResult>();
 
 		public virtual IAsyncResult BeginTryReceiveRequest (TimeSpan timeout, AsyncCallback callback, object state)
 		{
-			if (CurrentAsyncResult != null)
-				throw new InvalidOperationException ("Another async TryReceiveRequest operation is in progress");
+			IAsyncResult result = null;
+
 			if (try_recv_delegate == null)
 				try_recv_delegate = new TryReceiveDelegate (delegate (TimeSpan tout, out RequestContext ctx) {
 					lock (async_result_lock) {
-						if (CurrentAsyncResult != null)
-							CurrentAsyncThread = Thread.CurrentThread;
+						if (currentAsyncResults.Contains (result))
+							currentAsyncThreads.Add (Thread.CurrentThread);
 					}
 					try {
 						return TryReceiveRequest (tout, out ctx);
+					} catch (XmlException ex) {
+						Console.WriteLine ("Xml Exception (Dropped Connection?):" + ex.Message);
+						//on dropped connection, 
+						//whatever you do don't crash
+						//the whole app.  Ignore for now
+					} catch (SocketException ex) {
+						Console.WriteLine ("Socket Exception (Dropped Connection?):" + ex.Message);
+						//on dropped connection, 
+						//whatever you do don't crash
+						//the whole app.  Ignore for now
+					} catch (IOException ex) {
+						Console.WriteLine ("I/O Exception (Dropped Connection?):" + ex.Message);
+						//on dropped connection, 
+						//whatever you do don't crash
+						//the whole app.  Ignore for now
 					} finally {
 						lock (async_result_lock) {
-							CurrentAsyncResult = null;
-							CurrentAsyncThread = null;
+							currentAsyncResults.Remove (result);
+							currentAsyncThreads.Remove (Thread.CurrentThread);
 						}
 					}
+					ctx = null;
+					return false;
 					});
 			RequestContext dummy;
-			IAsyncResult result;
 			lock (async_result_lock) {
-				result = CurrentAsyncResult = try_recv_delegate.BeginInvoke (timeout, out dummy, callback, state);
+				result = try_recv_delegate.BeginInvoke (timeout, out dummy, callback, state);
+				currentAsyncResults.Add (result);
 			}
-			// Note that at this point CurrentAsyncResult can be null here if delegate has run to completion
+			// Note that at this point result can be missing from currentAsyncResults here if delegate has run to completion
 			return result;
 		}
 

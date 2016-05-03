@@ -27,6 +27,9 @@ namespace MonoTests.Microsoft.CSharp
 
 		private static readonly string _sourceLibrary1 = "public class Test1 {}";
 		private static readonly string _sourceLibrary2 = "public class Test2 {}";
+		private static readonly string _sourceLibrary3 =
+			@"public class Test3 { public void F() { } }
+			public class Test4 : Test3 { public void F() { } }";
 		private static readonly string _sourceExecutable = "public class Program { static void Main () { } }";
 
 		[SetUp]
@@ -80,13 +83,11 @@ namespace MonoTests.Microsoft.CSharp
 			Assert.IsTrue (codeGenerator.Supports (GeneratorSupport.StaticConstructors), "#20");
 			Assert.IsTrue (codeGenerator.Supports (GeneratorSupport.TryCatchStatements), "#21");
 			Assert.IsTrue (codeGenerator.Supports (GeneratorSupport.Win32Resources), "#22");
-#if NET_2_0
 			Assert.IsTrue (codeGenerator.Supports (GeneratorSupport.DeclareIndexerProperties), "#23");
 			Assert.IsTrue (codeGenerator.Supports (GeneratorSupport.GenericTypeDeclaration), "#24");
 			Assert.IsTrue (codeGenerator.Supports (GeneratorSupport.GenericTypeReference), "#25");
 			Assert.IsTrue (codeGenerator.Supports (GeneratorSupport.PartialTypes), "#26");
 			Assert.IsTrue (codeGenerator.Supports (GeneratorSupport.Resources), "#27");
-#endif
 		}
 
 		[Test]
@@ -106,9 +107,7 @@ namespace MonoTests.Microsoft.CSharp
 			options.GenerateExecutable = false;
 			options.GenerateInMemory = true;
 			options.TempFiles = new TempFileCollection (_tempDir);
-#if NET_2_0
 			options.EmbeddedResources.Add (sourceFile);
-#endif
 
 			ICodeCompiler compiler = _codeProvider.CreateCompiler ();
 			CompilerResults results = compiler.CompileAssemblyFromFile (options,
@@ -129,7 +128,6 @@ namespace MonoTests.Microsoft.CSharp
 			Assert.AreEqual (1, tempFiles.Length, "#5");
 			Assert.AreEqual (sourceFile, tempFiles[0], "#6");
 			
-#if NET_2_0
 			string[] resources = compiledAssembly.GetManifestResourceNames();
 			Assert.IsNotNull (resources, "#7");
 			Assert.AreEqual (1, resources.Length, "#8");
@@ -141,7 +139,6 @@ namespace MonoTests.Microsoft.CSharp
 			Assert.IsNull (info.FileName, "#13");
 			Assert.IsNull (info.ReferencedAssembly, "#14");
 			Assert.AreEqual ((ResourceLocation.Embedded | ResourceLocation.ContainedInManifestFile), info.ResourceLocation, "#15");
-#endif
 		}
 
 		[Test]
@@ -171,10 +168,8 @@ namespace MonoTests.Microsoft.CSharp
 			options.GenerateInMemory = true;
 			options.OutputAssembly = string.Empty;
 			options.TempFiles = new TempFileCollection (_tempDir);
-#if NET_2_0
 			options.EmbeddedResources.Add (sourceFile1);
 			options.LinkedResources.Add (sourceFile2);
-#endif
 
 			ICodeCompiler compiler = _codeProvider.CreateCompiler ();
 			CompilerResults results = compiler.CompileAssemblyFromFileBatch (options,
@@ -202,7 +197,6 @@ namespace MonoTests.Microsoft.CSharp
 			Assert.IsTrue (File.Exists (sourceFile1), "#C2");
 			Assert.IsTrue (File.Exists (sourceFile2), "#C3");
 
-#if NET_2_0
 			string[] resources = compiledAssembly.GetManifestResourceNames();
 			Assert.IsNotNull (resources, "#D1");
 			Assert.AreEqual (2, resources.Length, "#D2");
@@ -233,7 +227,6 @@ namespace MonoTests.Microsoft.CSharp
 			Assert.AreEqual ("file2.cs", info.FileName, "#F6");
 			Assert.IsNull (info.ReferencedAssembly, "#F7");
 			Assert.AreEqual ((ResourceLocation) 0, info.ResourceLocation, "#F8");
-#endif
 		}
 
 		[Test]
@@ -262,10 +255,8 @@ namespace MonoTests.Microsoft.CSharp
 			options.GenerateExecutable = false;
 			options.GenerateInMemory = true;
 			options.TempFiles = new TempFileCollection (_tempDir);
-#if NET_2_0
 			options.EmbeddedResources.Add (sourceFile1);
 			options.LinkedResources.Add (sourceFile2);
-#endif
 
 			ICodeCompiler compiler = _codeProvider.CreateCompiler ();
 			CompilerResults results = compiler.CompileAssemblyFromFileBatch (options,
@@ -293,7 +284,6 @@ namespace MonoTests.Microsoft.CSharp
 			Assert.IsTrue (File.Exists (sourceFile1), "#C2");
 			Assert.IsTrue (File.Exists (sourceFile2), "#C3");
 
-#if NET_2_0
 			string[] resources = compiledAssembly.GetManifestResourceNames();
 			Assert.IsNotNull (resources, "#D1");
 			Assert.AreEqual (2, resources.Length, "#D2");
@@ -324,7 +314,6 @@ namespace MonoTests.Microsoft.CSharp
 			Assert.AreEqual ("file2.cs", info.FileName, "#F6");
 			Assert.IsNull (info.ReferencedAssembly, "#F7");
 			Assert.AreEqual ((ResourceLocation) 0, info.ResourceLocation, "#F8");
-#endif
 		}
 
 		[Test]
@@ -559,6 +548,22 @@ namespace MonoTests.Microsoft.CSharp
 			string[] tempFiles = Directory.GetFiles (_tempDir);
 			Assert.AreEqual (1, tempFiles.Length, "#3");
 			Assert.AreEqual (tempFile, tempFiles[0], "#4");
+		}
+
+		[Test]
+		public void MultiLineWarningIsReportedAsOneWarning()
+		{
+			CompilerParameters options = new CompilerParameters ();
+			options.GenerateExecutable = false;
+			options.GenerateInMemory = true;
+			options.TempFiles = new TempFileCollection (_tempDir);
+
+			ICodeCompiler compiler = _codeProvider.CreateCompiler ();
+			CompilerResults results = compiler.CompileAssemblyFromSource (options,
+				_sourceLibrary3);
+
+			// verify compilation was successful
+			AssertCompileResults (results, true);
 		}
 
 		private static string CreateTempDirectory ()

@@ -109,6 +109,11 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "BabysitterSupport.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "CommonAssemblyInfo.cs"
                     Link = "..\..\CommonAssemblyInfo.cs"
                     SubType = "Code"
@@ -344,6 +349,11 @@
                 />
                 <File
                     RelPath = "TextCapture.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "ThreadUtility.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />

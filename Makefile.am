@@ -1,25 +1,19 @@
 ACLOCAL_AMFLAGS = -I m4
 
+AM_CFLAGS = $(WERROR_CFLAGS)
+
 MONOTOUCH_SUBDIRS = $(libgc_dir) eglib/src mono
 
 if CROSS_COMPILING
-SUBDIRS = po $(libgc_dir) eglib mono $(ikvm_native_dir) support data runtime scripts man samples msvc $(docs_dir)
+SUBDIRS = po $(libgc_dir) eglib mono $(ikvm_native_dir) support data runtime scripts man samples msvc $(docs_dir) acceptance-tests
 # Keep in sync with SUBDIRS
 ## 'tools' is not normally built
-DIST_SUBDIRS = m4 po libgc eglib mono ikvm-native support data runtime scripts man samples tools msvc docs
+DIST_SUBDIRS = m4 po $(libgc_dir) eglib mono ikvm-native support data runtime scripts man samples tools msvc docs acceptance-tests
 else
-if ONLY_MONOTOUCH
-SUBDIRS = $(MONOTOUCH_SUBDIRS) runtime
-else
-if ONLY_XAMMAC
-SUBDIRS = $(libgc_dir) eglib/src mono runtime
-else
-SUBDIRS = po $(libgc_dir) eglib mono $(ikvm_native_dir) support data runtime scripts man samples msvc $(docs_dir)
+SUBDIRS = po $(libgc_dir) eglib mono $(ikvm_native_dir) support data runtime scripts man samples msvc $(docs_dir) acceptance-tests
 # Keep in sync with SUBDIRS
 ## 'tools' is not normally built
-DIST_SUBDIRS = m4 po libgc eglib mono ikvm-native support data runtime scripts man samples tools msvc docs
-endif
-endif
+DIST_SUBDIRS = m4 po $(libgc_dir) eglib mono ikvm-native support data runtime scripts man samples tools msvc docs acceptance-tests
 endif
 
 all: update_submodules
@@ -31,15 +25,14 @@ update_submodules:
 .PHONY: update_submodules
 
 EXTRA_DIST= \
-        README.md \
-	    LICENSE \
-	    autogen.sh \
-	    build-mingw32.sh \
-	    mkinstalldirs \
-	    mono-uninstalled.pc.in \
-	    winconfig.h \
-	    mono-core.spec \
-	    external
+	README.md 		\
+	LICENSE 		\
+	autogen.sh 		\
+	mkinstalldirs 		\
+	mono-uninstalled.pc.in 	\
+	winconfig.h 		\
+	code_of_conduct.md 	\
+	external
 
 DISTCHECK_CONFIGURE_FLAGS = EXTERNAL_MCS=false EXTERNAL_RUNTIME=false
 
@@ -48,7 +41,11 @@ GIT_DIR ?= $(srcdir)/.git
 dist-hook:
 	test -d $(distdir)/mcs || mkdir $(distdir)/mcs
 	d=`cd $(distdir)/mcs && pwd`; cd $(mcs_topdir) && $(MAKE) distdir=$$d dist-recursive
-	rm -rf `find $(top_distdir)/external -path '*\.git' -and -type d`
+	rm -rf `find $(top_distdir)/external -path '*\.git'`
+	rm -f `find $(top_distdir)/external -path '*\.exe'`
+	rm -f `find $(top_distdir)/external -path '*\.dll' -not -path '*/binary-reference-assemblies/*'`
+	cp mcs/class/lib/basic/System.Configuration.dll mcs/class/lib/monolite/
+	cp mcs/class/lib/basic/System.Security.dll mcs/class/lib/monolite/
 # Disable this for now because it is very slow and causes wrench to timeout:
 #	test ! -d $(GIT_DIR) || ./scripts/commits-to-changelog.py --root=$(distdir) last-commit-with-compulsory-changelog-entry
 
@@ -160,9 +157,9 @@ package-inputs:
 	done
 	echo "</root>" >> msvc/scripts/order.xml
 
-# Update llvm version in configure.in to the output of $LLVM_DIR/bin/llvm-config --version
+# Update llvm version in configure.ac to the output of $LLVM_DIR/bin/llvm-config --version
 update-llvm-version:
 	if test "x$$LLVM_DIR" = "x"; then echo "Set the make variable LLVM_DIR to the directory containing the LLVM installation."; exit 1; fi
-	REV=`$(LLVM_DIR)/bin/llvm-config --version` && sed -e "s,expected_llvm_version=.*,expected_llvm_version=\"$$REV\"," < configure.in > tmp && mv tmp configure.in && echo "Version set to $$REV."
+	REV=`$(LLVM_DIR)/bin/llvm-config --version` && sed -e "s,expected_llvm_version=.*,expected_llvm_version=\"$$REV\"," < configure.ac > tmp && mv tmp configure.ac && echo "Version set to $$REV."
 
 

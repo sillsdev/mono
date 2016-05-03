@@ -60,7 +60,7 @@ namespace Mono.CSharp {
 
 		public override void Error_ValueCannotBeConverted (ResolveContext ec, TypeSpec target, bool expl)
 		{
-			if (!expl && IsLiteral && 
+			if (!expl && IsLiteral && type.BuiltinType != BuiltinTypeSpec.Type.Double &&
 				BuiltinTypeSpec.IsPrimitiveTypeOrDecimal (target) &&
 				BuiltinTypeSpec.IsPrimitiveTypeOrDecimal (type)) {
 				ec.Report.Error (31, loc, "Constant value `{0}' cannot be converted to a `{1}'",
@@ -522,7 +522,7 @@ namespace Mono.CSharp {
 			return Value ? 1 : 0;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -573,7 +573,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -673,7 +673,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode ((ushort) Value);
 		}
@@ -801,7 +801,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -904,7 +904,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -1017,7 +1017,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -1126,7 +1126,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -1302,7 +1302,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -1419,7 +1419,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -1550,7 +1550,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -1674,7 +1674,7 @@ namespace Mono.CSharp {
 			return base.ConvertImplicitly (type);
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -1803,7 +1803,7 @@ namespace Mono.CSharp {
 			Value = v;
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			enc.Encode (Value);
 		}
@@ -2031,8 +2031,6 @@ namespace Mono.CSharp {
 	}
 
 	public class StringConstant : Constant {
-		public readonly string Value;
-
 		public StringConstant (BuiltinTypes types, string s, Location loc)
 			: this (types.String, s, loc)
 		{
@@ -2046,6 +2044,13 @@ namespace Mono.CSharp {
 
 			Value = s;
 		}
+
+		protected StringConstant (Location loc)
+			: base (loc)
+		{
+		}
+
+		public string Value { get; protected set; }
 
 		public override object GetValue ()
 		{
@@ -2085,10 +2090,15 @@ namespace Mono.CSharp {
 				}
 			}
 
-			ec.Emit (OpCodes.Ldstr, Value);
+			var str = Value;
+			if (ec.Module.GetResourceStrings != null && !ec.Module.GetResourceStrings.TryGetValue (str, out str)) {
+				str = Value;
+			}
+
+			ec.Emit (OpCodes.Ldstr, str);
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			// cast to object
 			if (type != targetType)
@@ -2129,6 +2139,137 @@ namespace Mono.CSharp {
 		}
 	}
 
+	class NameOf : StringConstant
+	{
+		readonly SimpleName name;
+
+		public NameOf (SimpleName name)
+			: base (name.Location)
+		{
+			this.name = name;
+		}
+
+		static void Error_MethodGroupWithTypeArguments (ResolveContext rc, Location loc)
+		{
+			rc.Report.Error (8084, loc, "An argument to nameof operator cannot be method group with type arguments");
+		}
+
+		protected override Expression DoResolve (ResolveContext rc)
+		{
+			throw new NotSupportedException ();
+		}
+
+		bool ResolveArgumentExpression (ResolveContext rc, Expression expr)
+		{
+			var sn = expr as SimpleName;
+			if (sn != null) {
+				Value = sn.Name;
+
+				if (rc.Module.Compiler.Settings.Version < LanguageVersion.V_6)
+					rc.Report.FeatureIsNotAvailable (rc.Module.Compiler, Location, "nameof operator");
+
+				var res = sn.LookupNameExpression (rc, MemberLookupRestrictions.IgnoreAmbiguity | MemberLookupRestrictions.NameOfExcluded);
+				if (sn.HasTypeArguments && res is MethodGroupExpr) {
+					Error_MethodGroupWithTypeArguments (rc, expr.Location);
+				}
+
+				return true;
+			}
+
+			var ma = expr as MemberAccess;
+			if (ma != null) {
+				var lexpr = ma.LeftExpression;
+				Expression res;
+
+				using (rc.Set (ResolveContext.Options.NameOfScope)) {
+					res = ma.LookupNameExpression (rc, MemberLookupRestrictions.IgnoreAmbiguity);
+				}
+
+				if (res == null) {
+					return false;
+				}
+
+				if (rc.Module.Compiler.Settings.Version < LanguageVersion.V_6)
+					rc.Report.FeatureIsNotAvailable (rc.Module.Compiler, Location, "nameof operator");
+
+				if (ma is QualifiedAliasMember) {
+					rc.Report.Error (8083, loc, "An alias-qualified name is not an expression");
+					return false;
+				}
+
+				var mg = res as MethodGroupExpr;
+				if (mg != null) {
+					var emg = res as ExtensionMethodGroupExpr;
+					if (emg != null && !emg.ResolveNameOf (rc, ma)) {
+						return true;
+					}
+
+					if (!mg.HasAccessibleCandidate (rc)) {
+						ErrorIsInaccesible (rc, ma.GetSignatureForError (), loc);
+					}
+
+					if (ma.HasTypeArguments) {
+						Error_MethodGroupWithTypeArguments (rc, ma.Location);
+					}
+				}
+
+				//
+				// LAMESPEC: Why is conditional access not allowed?
+				//
+				if (!IsLeftResolvedExpressionValid (ma.LeftExpression) || ma.HasConditionalAccess ()) {
+					rc.Report.Error (8082, lexpr.Location, "An argument to nameof operator cannot include sub-expression");
+					return false;
+				}
+
+				Value = ma.Name;
+				return true;
+			}
+
+			rc.Report.Error (8081, loc, "Expression does not have a name");
+			return false;
+		}
+
+		static bool IsLeftResolvedExpressionValid (Expression expr)
+		{
+			var fe = expr as FieldExpr;
+			if (fe != null) {
+				return fe.InstanceExpression == null || IsLeftResolvedExpressionValid (fe.InstanceExpression);
+			}
+
+			var pe = expr as PropertyExpr;
+			if (pe != null)
+				return pe.InstanceExpression == null || IsLeftResolvedExpressionValid (pe.InstanceExpression);
+
+			var dmb = expr as DynamicMemberBinder;
+			if (dmb != null) {
+				return IsLeftResolvedExpressionValid (dmb.Arguments [0].Expr);
+			}
+
+			if (expr is ConstantExpr || expr is TypeExpr || expr is NamespaceExpression || expr is VariableReference)
+				return true;
+
+			return false;
+		}
+
+		public Expression ResolveOverload (ResolveContext rc, Arguments args)
+		{
+			if (args == null || args.Count != 1) {
+				name.Error_NameDoesNotExist (rc);
+				return null;
+			}
+
+			var arg = args [0];
+			var res = ResolveArgumentExpression (rc, arg.Expr);
+			if (!res) {
+				return null;
+			}
+
+			type = rc.BuiltinTypes.String;
+			eclass = ExprClass.Value;
+			return this;
+		}
+	}
+
 	//
 	// Null constant can have its own type, think of `default (Foo)'
 	//
@@ -2153,7 +2294,7 @@ namespace Mono.CSharp {
 			return base.CreateExpressionTree (ec);
 		}
 
-		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType)
+		public override void EncodeAttributeValue (IMemberContext rc, AttributeEncoder enc, TypeSpec targetType, TypeSpec parameterType)
 		{
 			switch (targetType.BuiltinType) {
 			case BuiltinTypeSpec.Type.Object:
@@ -2174,7 +2315,7 @@ namespace Mono.CSharp {
 				break;
 			}
 
-			base.EncodeAttributeValue (rc, enc, targetType);
+			base.EncodeAttributeValue (rc, enc, targetType, parameterType);
 		}
 
 		public override void Emit (EmitContext ec)
@@ -2314,6 +2455,11 @@ namespace Mono.CSharp {
 			}
 		}
 
+		public override bool ContainsEmitWithAwait ()
+		{
+			return side_effect.ContainsEmitWithAwait ();
+		}
+
 		public override object GetValue ()
 		{
 			return value.GetValue ();
@@ -2339,6 +2485,11 @@ namespace Mono.CSharp {
 		{
 			side_effect.EmitSideEffect (ec);
 			value.EmitSideEffect (ec);
+		}
+
+		public override void FlowAnalysis (FlowAnalysisContext fc)
+		{
+			side_effect.FlowAnalysis (fc);
 		}
 
 		public override bool IsDefaultValue {

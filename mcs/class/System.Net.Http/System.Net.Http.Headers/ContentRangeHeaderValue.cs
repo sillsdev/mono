@@ -170,7 +170,7 @@ namespace System.Net.Http.Headers
 				} else {
 					value.From = nvalue;
 
-					t = lexer.Scan ();
+					t = lexer.Scan (recognizeDash: true);
 					if (t != Token.Type.SeparatorDash)
 						return false;
 
@@ -191,10 +191,11 @@ namespace System.Net.Http.Headers
 			t = lexer.Scan ();
 
 			if (!lexer.IsStarStringValue (t)) {
-				if (!lexer.TryGetNumericValue (t, out nvalue))
+				long lvalue;
+				if (!lexer.TryGetNumericValue (t, out lvalue))
 					return false;
 
-				value.Length = nvalue;
+				value.Length = lvalue;
 			}
 
 			t = lexer.Scan ();

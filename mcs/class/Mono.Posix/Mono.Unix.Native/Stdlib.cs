@@ -169,6 +169,34 @@ namespace Mono.Unix.Native {
 
 		ENOMEDIUM       = 123, // No medium found 
 		EMEDIUMTYPE     = 124, // Wrong medium type 
+
+		ECANCELED       = 125,
+		ENOKEY          = 126,
+		EKEYEXPIRED     = 127,
+		EKEYREVOKED     = 128,
+		EKEYREJECTED    = 129,
+
+		EOWNERDEAD      = 130,
+		ENOTRECOVERABLE = 131,
+
+		// OS X-specific values: OS X value + 1000
+		EPROCLIM        = 1067, // Too many processes
+		EBADRPC         = 1072,	// RPC struct is bad
+		ERPCMISMATCH    = 1073,	// RPC version wrong
+		EPROGUNAVAIL    = 1074,	// RPC prog. not avail
+		EPROGMISMATCH   = 1075,	// Program version wrong
+		EPROCUNAVAIL    = 1076,	// Bad procedure for program
+		EFTYPE          = 1079,	// Inappropriate file type or format
+		EAUTH           = 1080,	// Authentication error
+		ENEEDAUTH       = 1081,	// Need authenticator
+		EPWROFF         = 1082,	// Device power is off
+		EDEVERR         = 1083,	// Device error, e.g. paper out
+		EBADEXEC        = 1085,	// Bad executable
+		EBADARCH        = 1086,	// Bad CPU type in executable
+		ESHLIBVERS      = 1087,	// Shared library version mismatch
+		EBADMACHO       = 1088,	// Malformed Macho file
+		ENOATTR         = 1093,	// Attribute not found
+		ENOPOLICY       = 1103,	// No such policy registered
 	}
 
 	#endregion
@@ -176,9 +204,7 @@ namespace Mono.Unix.Native {
 	#region Classes
 
 	public sealed class FilePosition : MarshalByRefObject, IDisposable 
-#if NET_2_0
 		, IEquatable <FilePosition>
-#endif
 	{
 
 		private static readonly int FilePositionDumpSize = 
@@ -277,26 +303,11 @@ namespace Mono.Unix.Native {
 	// Right now using this attribute gives an assert because it
 	// isn't implemented.
 	//
-#if NET_2_0 && UNMANAGED_FN_PTR_SUPPORT_FIXED
+#if UNMANAGED_FN_PTR_SUPPORT_FIXED
 	[UnmanagedFunctionPointer (CallingConvention.Cdecl)]
 #endif
 	public delegate void SignalHandler (int signal);
 
-#if !NET_2_0
-	internal sealed class SignalWrapper {
-		private IntPtr handler;
-
-		internal SignalWrapper (IntPtr handler)
-		{
-			this.handler = handler;
-		}
-
-		public void InvokeSignalHandler (int signum)
-		{
-			Stdlib.InvokeSignalHandler (signum, handler);
-		}
-	}
-#endif
 
 	internal class XPrintfFunctions
 	{
@@ -369,6 +380,42 @@ namespace Mono.Unix.Native {
 	{
 		internal const string LIBC = "msvcrt";
 		internal const string MPH  = "MonoPosixHelper";
+
+		// It is possible for Mono.Posix and MonoPosixHelper to get out of sync,
+		// for example if NuGet does something weird. To mitigate this, anyone
+		// editing Mono.Posix needs to observe two rules:
+		//   1. When introducing C-interface changes to MonoPosixHelper, update
+		//      the version strings in VersionCheck below and also
+		//      Mono_Unix_VersionString in the C sources.
+		//   2. Any class which performs a DllImport on Stdlib.MPH needs to call
+		//      Stdlib.VersionCheck in its static constructor.
+
+		[DllImport (Stdlib.MPH, CallingConvention=CallingConvention.Cdecl,
+				EntryPoint="Mono_Unix_VersionString")]
+		private static extern IntPtr VersionStringPtr ();
+		private static bool versionCheckPerformed = false;
+		internal static void VersionCheck ()
+		{
+			if (versionCheckPerformed)
+				return;
+
+			// This string is arbitrary; it matters only that it is unique.
+			string assemblyVersion = "MonoProject-2015-12-1";
+			string nativeVersion = Marshal.PtrToStringAnsi (VersionStringPtr ());
+			if (assemblyVersion != nativeVersion)
+			{
+				throw new Exception ("Mono.Posix assembly loaded with a different version (\""
+					+ assemblyVersion + "\") than MonoPosixHelper (\"" + nativeVersion
+				    + "\"). You may need to reinstall Mono.Posix.");
+			}
+
+			versionCheckPerformed = true;
+		}
+
+		static Stdlib ()
+		{
+			VersionCheck ();
+		}
 
 		internal Stdlib () {}
 
@@ -483,11 +530,7 @@ namespace Mono.Unix.Native {
 				return SIG_ERR;
 			if (handler == _SIG_IGN)
 				return SIG_IGN;
-#if NET_2_0
 			return (SignalHandler) Marshal.GetDelegateForFunctionPointer (handler, typeof(SignalHandler));
-#else
-			return new SignalHandler (new SignalWrapper (handler).InvokeSignalHandler);
-#endif
 		}
 
 		public static int SetSignalAction (Signum signal, SignalAction action)

@@ -17,7 +17,7 @@
 
 #include <pthread.h>
 
-static pthread_mutex_t spin = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t spin G_GNUC_UNUSED = PTHREAD_MUTEX_INITIALIZER;
 
 #define NEED_64BIT_CMPXCHG_FALLBACK
 
@@ -25,20 +25,11 @@ static pthread_mutex_t spin = PTHREAD_MUTEX_INITIALIZER;
 
 #ifdef WAPI_NO_ATOMIC_ASM
 
-static mono_once_t spin_once=MONO_ONCE_INIT;
-
-static void spin_init(void)
-{
-	g_warning("Using non-atomic functions!  Expect race conditions when using process-shared handles!");
-}
-
 gint32 InterlockedCompareExchange(volatile gint32 *dest, gint32 exch,
 				  gint32 comp)
 {
 	gint32 old;
 	int ret;
-	
-	mono_once(&spin_once, spin_init);
 	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -64,8 +55,6 @@ gpointer InterlockedCompareExchangePointer(volatile gpointer *dest,
 	gpointer old;
 	int ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	ret = pthread_mutex_lock(&spin);
@@ -89,8 +78,6 @@ gint32 InterlockedAdd(volatile gint32 *dest, gint32 add)
 	gint32 ret;
 	int thr_ret;
 
-	mono_once(&spin_once, spin_init);
-
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -111,8 +98,6 @@ gint64 InterlockedAdd64(volatile gint64 *dest, gint64 add)
 {
 	gint64 ret;
 	int thr_ret;
-
-	mono_once(&spin_once, spin_init);
 
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -135,8 +120,6 @@ gint32 InterlockedIncrement(volatile gint32 *dest)
 	gint32 ret;
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -157,8 +140,6 @@ gint64 InterlockedIncrement64(volatile gint64 *dest)
 {
 	gint64 ret;
 	int thr_ret;
-
-	mono_once(&spin_once, spin_init);
 
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -181,8 +162,6 @@ gint32 InterlockedDecrement(volatile gint32 *dest)
 	gint32 ret;
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -203,8 +182,6 @@ gint64 InterlockedDecrement64(volatile gint64 *dest)
 {
 	gint64 ret;
 	int thr_ret;
-
-	mono_once(&spin_once, spin_init);
 
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -227,8 +204,6 @@ gint32 InterlockedExchange(volatile gint32 *dest, gint32 exch)
 	gint32 ret;
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -249,8 +224,6 @@ gint64 InterlockedExchange64(volatile gint64 *dest, gint64 exch)
 {
 	gint64 ret;
 	int thr_ret;
-
-	mono_once(&spin_once, spin_init);
 
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -273,8 +246,6 @@ gpointer InterlockedExchangePointer(volatile gpointer *dest, gpointer exch)
 	gpointer ret;
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -295,8 +266,6 @@ gint32 InterlockedExchangeAdd(volatile gint32 *dest, gint32 add)
 {
 	gint32 ret;
 	int thr_ret;
-	
-	mono_once(&spin_once, spin_init);
 	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -319,8 +288,6 @@ gint64 InterlockedExchangeAdd64(volatile gint64 *dest, gint64 add)
 	gint64 ret;
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -342,8 +309,6 @@ gint8 InterlockedRead8(volatile gint8 *src)
 	gint8 ret;
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -363,8 +328,6 @@ gint16 InterlockedRead16(volatile gint16 *src)
 {
 	gint16 ret;
 	int thr_ret;
-	
-	mono_once(&spin_once, spin_init);
 	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -386,8 +349,6 @@ gint32 InterlockedRead(volatile gint32 *src)
 	gint32 ret;
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -407,8 +368,6 @@ gint64 InterlockedRead64(volatile gint64 *src)
 {
 	gint64 ret;
 	int thr_ret;
-	
-	mono_once(&spin_once, spin_init);
 	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -430,8 +389,6 @@ gpointer InterlockedReadPointer(volatile gpointer *src)
 	gpointer ret;
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -451,8 +408,6 @@ void InterlockedWrite(volatile gint8 *dst, gint8 val)
 {
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -469,8 +424,6 @@ void InterlockedWrite(volatile gint8 *dst, gint8 val)
 void InterlockedWrite16(volatile gint16 *dst, gint16 val)
 {
 	int thr_ret;
-	
-	mono_once(&spin_once, spin_init);
 	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -489,8 +442,6 @@ void InterlockedWrite(volatile gint32 *dst, gint32 val)
 {
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -508,8 +459,6 @@ void InterlockedWrite64(volatile gint64 *dst, gint64 val)
 {
 	int thr_ret;
 	
-	mono_once(&spin_once, spin_init);
-	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
 	thr_ret = pthread_mutex_lock(&spin);
@@ -526,8 +475,6 @@ void InterlockedWrite64(volatile gint64 *dst, gint64 val)
 void InterlockedWritePointer(volatile gpointer *dst, gpointer val)
 {
 	int thr_ret;
-	
-	mono_once(&spin_once, spin_init);
 	
 	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
 			      (void *)&spin);
@@ -568,15 +515,24 @@ gint64
 InterlockedCompareExchange64(volatile gint64 *dest, gint64 exch, gint64 comp)
 {
 	gint64 old;
+	int ret;
+	
+	pthread_cleanup_push ((void(*)(void *))pthread_mutex_unlock,
+			      (void *)&spin);
+	ret = pthread_mutex_lock(&spin);
+	g_assert (ret == 0);
+	
+	old= *dest;
+	if(old==comp) {
+		*dest=exch;
+	}
+	
+	ret = pthread_mutex_unlock(&spin);
+	g_assert (ret == 0);
+	
+	pthread_cleanup_pop (0);
 
-	pthread_mutex_lock (&spin);
-
-	old = *dest;
-	if(old == comp)
-		*dest = exch;
-
-	pthread_mutex_unlock (&spin);
-	return old;
+	return(old);
 }
 
 #endif

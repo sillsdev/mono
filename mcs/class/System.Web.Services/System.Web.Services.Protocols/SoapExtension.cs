@@ -62,18 +62,7 @@ namespace System.Web.Services.Protocols {
 		public abstract void ProcessMessage (SoapMessage message);
 
 
-#if !TARGET_JVM
 		static ArrayList[] globalExtensions;
-#else
-		static ArrayList[] globalExtensions {
-			get {
-				return (ArrayList[])AppDomain.CurrentDomain.GetData("SoapExtension.globalExtensions");
-			}
-			set {
-				AppDomain.CurrentDomain.SetData("SoapExtension.globalExtensions", value);
-			}
-		}
-#endif
 
 		internal static SoapExtension[] CreateExtensionChain (SoapExtensionRuntimeConfig[] extensionConfigs)
 		{
@@ -111,34 +100,22 @@ namespace System.Web.Services.Protocols {
 			return pos;
 		}
 
-#if !MOBILE
+#if !MOBILE && !XAMMAC_4_5
 		static void InitializeGlobalExtensions ()
 		{
 			globalExtensions = new ArrayList[2];
-#if NET_2_0 
 			if (WebServicesSection.Current == null) return;
 
 			SoapExtensionTypeElementCollection exts = WebServicesSection.Current.SoapExtensionTypes;
-#else
-			ArrayList exts = WSConfig.Instance.ExtensionTypes;
-#endif
 			if (exts == null) return;
 
-#if NET_2_0
 			foreach (SoapExtensionTypeElement econf in exts)
-#else
-			foreach (WSExtensionConfig econf in exts)
-#endif
 			{
 				if (globalExtensions [(int)econf.Group] == null) globalExtensions [(int)econf.Group] = new ArrayList ();
 				ArrayList destList = globalExtensions [(int) econf.Group];
 				bool added = false;
 				for (int n=0; n<destList.Count && !added; n++)
-#if NET_2_0
 					if (((SoapExtensionTypeElement)destList [n]).Priority > econf.Priority) {
-#else
-					if (((WSExtensionConfig)destList [n]).Priority > econf.Priority) {
-#endif
 						destList.Insert (n, econf);
 						added = true;
 					}
@@ -159,11 +136,7 @@ namespace System.Web.Services.Protocols {
 				exts [group] = new SoapExtensionRuntimeConfig [globList.Count];
 				for (int n=0; n<globList.Count; n++)
 				{
-#if NET_2_0
 					SoapExtensionTypeElement econf = (SoapExtensionTypeElement) globList [n];
-#else
-					WSExtensionConfig econf = (WSExtensionConfig) globList [n];
-#endif
 					SoapExtensionRuntimeConfig typeconf = new SoapExtensionRuntimeConfig ();
 					typeconf.Type = econf.Type;
 					SoapExtension ext = (SoapExtension) Activator.CreateInstance (econf.Type);

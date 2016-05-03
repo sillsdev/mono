@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <pwd.h>
 #include <errno.h>
 #include <netdb.h>
@@ -36,7 +37,7 @@
 #include <mono/metadata/class-internals.h>
 #include <mono/metadata/object-internals.h>
 #include <mono/metadata/threads-types.h>
-#include <mono/metadata/gc-internal.h>
+#include <mono/metadata/gc-internals.h>
 #include <mono/utils/mono-threads.h>
 #include "attach.h"
 
@@ -98,10 +99,6 @@ static gboolean stop_receiver_thread;
 
 static gboolean needs_to_start, started;
 
-#define agent_lock() EnterCriticalSection (&agent_mutex)
-#define agent_unlock() LeaveCriticalSection (&agent_mutex)
-static CRITICAL_SECTION agent_mutex;
-
 static void transport_connect (void);
 
 static guint32 WINAPI receiver_thread (void *arg);
@@ -126,15 +123,6 @@ decode_int (guint8 *buf, guint8 **endbuf, guint8 *limit)
 	g_assert (*endbuf <= limit);
 
 	return (((int)buf [0]) << 0) | (((int)buf [1]) << 8) | (((int)buf [2]) << 16) | (((int)buf [3]) << 24);
-}
-
-static inline int
-decode_short (guint8 *buf, guint8 **endbuf, guint8 *limit)
-{
-	*endbuf = buf + 2;
-	g_assert (*endbuf <= limit);
-
-	return (((int)buf [0]) << 0) | (((int)buf [1]) << 8);
 }
 
 static char*
@@ -164,7 +152,7 @@ decode_string_value (guint8 *buf, guint8 **endbuf, guint8 *limit)
 
 	g_assert (length < (1 << 16));
 
-	s = g_malloc (length + 1);
+	s = (char *)g_malloc (length + 1);
 
 	g_assert (p + length <= limit);
 	memcpy (s, p, length);
@@ -192,8 +180,6 @@ mono_attach_parse_options (char *options)
 void
 mono_attach_init (void)
 {
-	InitializeCriticalSection (&agent_mutex);
-
 	config.enabled = TRUE;
 }
 
@@ -220,7 +206,7 @@ mono_attach_start (void)
 	 * by creating it is to enable the attach mechanism if the process receives a 
 	 * SIGQUIT signal, which can only be sent by the owner/root.
 	 */
-	snprintf (path, sizeof (path), "/tmp/.mono_attach_pid%d", getpid ());
+	snprintf (path, sizeof (path), "/tmp/.mono_attach_pid%"PRIdMAX"", (intmax_t) getpid ());
 	fd = open (path, O_RDONLY);
 	if (fd == -1)
 		return FALSE;
@@ -405,7 +391,7 @@ ipc_connect (void)
 		}
 	}
 
-	filename = g_strdup_printf ("%s/.mono-%d", directory, getpid ());
+	filename = g_strdup_printf ("%s/.mono-%"PRIdMAX"", directory, (intmax_t) getpid ());
 	unlink (filename);
 
 	/* Bind a name to the socket.   */
@@ -440,7 +426,7 @@ ipc_connect (void)
 
 	ipc_filename = g_strdup (filename);
 
-	server_uri = g_strdup_printf ("unix://%s/.mono-%d?/vm", directory, getpid ());
+	server_uri = g_strdup_printf ("unix://%s/.mono-%"PRIdMAX"?/vm", directory, (intmax_t) getpid ());
 
 	g_free (filename);
 	g_free (directory);
@@ -538,7 +524,7 @@ receiver_thread (void *arg)
 			content_len = decode_int (p, &p, p_end);
 
 			/* Read message body */
-			body = g_malloc (content_len);
+			body = (guint8 *)g_malloc (content_len);
 			res = read (conn_fd, body, content_len);
 			
 			p = body;

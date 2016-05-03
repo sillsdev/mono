@@ -128,9 +128,20 @@ namespace MonoTests.System.Data
 		}
 
 		[Test]
+		[ExpectedException (typeof (DataException))]
+		public void TestSortWithoutTable ()
+		{
+			DataView dv = new DataView ();
+			dv.Table = new DataTable ();
+			dv.Sort = "abc";
+		}
+
+		[Test]
 		public void TestSort ()
 		{
 			DataView dv = new DataView ();
+			dv.Table = new DataTable ("dummy");
+			dv.Table.Columns.Add ("abc");
 			dv.Sort = "abc";
 			dv.Sort = string.Empty;
 			dv.Sort = "abc";
@@ -238,6 +249,38 @@ namespace MonoTests.System.Data
 			v = dataView [0] [0].ToString ();
 			AssertEquals ("Deleted.Count", 1, dataView.Count);
 			AssertEquals ("Deleted.Value", "1", v);
+		}
+
+		//xamarin bug #18898 # / novell bug #595899
+		[Test]
+		public void Bug18898 ()
+		{
+			var table = new DataTable();
+			table.Columns.Add("col1");
+			table.Columns.Add("col2");
+			
+			table.Rows.Add("1", "2");
+			table.Rows.Add("4", "3");
+
+			table.AcceptChanges();
+
+			table.Rows.Add("5", "6");
+
+			DataView dv = new DataView(table, string.Empty, string.Empty, DataViewRowState.Added);
+			dv.AllowNew = true;
+			var new_row = dv.AddNew();
+			new_row[0] = "7";
+			new_row[1] = "8";
+
+			var another_new_row = dv.AddNew();
+			another_new_row[0] = "9";
+			another_new_row[1] = "10";
+
+			AssertEquals ("#1", dv[2][0], "9");
+
+			//This should not throw a System.Data.VersionNotFoundException: "There is no Proposed data to accces"
+			AssertEquals ("#1", dv[1][0], "7");	
+
 		}
 
 		[Test]
@@ -399,14 +442,14 @@ namespace MonoTests.System.Data
 			AssertNull ("#1", dv.Table);
 			dv.EndInit ();
 
-			AssertEquals ("#2", table, dv.Table);
+			AssertNull ("#2", dv.Table); // still.
 			AssertEquals ("#3", 0, table.Columns.Count);
 
 			table.EndInit ();
+			AssertEquals ("#5", table, dv.Table);
 			AssertEquals ("#4", 2, table.Columns.Count);
 		}
 
-#if NET_2_0
 		private bool dvInitialized;
                 private void OnDataViewInitialized (object src, EventArgs args)
                 {
@@ -431,17 +474,18 @@ namespace MonoTests.System.Data
 			dv.Table = table;
 			AssertNull ("#1", dv.Table);
 			dv.EndInit ();
-
-			dv.Initialized -= new EventHandler (OnDataViewInitialized);
 			
-			AssertEquals ("#2", table, dv.Table);
+			AssertNull ("#2", dv.Table);
 			AssertEquals ("#3", 0, table.Columns.Count);
 
 			table.EndInit ();
+
+			dv.Initialized -= new EventHandler (OnDataViewInitialized); // this should not be unregistered before table.EndInit().
+			
 			AssertEquals ("#4", 2, table.Columns.Count);
-			AssertEquals("DataViewInitialized #5", dvInitialized, true);
+			AssertEquals ("#6", table, dv.Table);
+			AssertEquals ("DataViewInitialized #5", true, dvInitialized);
 		}
-#endif
 
 		[Test]
 		[ExpectedException(typeof(ArgumentException))]
@@ -479,9 +523,6 @@ namespace MonoTests.System.Data
 
 		[Test]
 		[ExpectedException (typeof (ArgumentException))]
-#if TARGET_JVM
-		[NUnit.Framework.Category ("NotWorking")] // defect 5446
-#endif
 		public void Find_3 ()
 		{
 			dataView.Sort = "itemID, itemName";
@@ -622,12 +663,12 @@ namespace MonoTests.System.Data
 		}
 
 		[Test]
-		[ExpectedException (typeof (DataException))]
+		[ExpectedException (typeof (IndexOutOfRangeException))]
 		public void TestDeleteClosed ()
 		{
 			DataView TestView = new DataView (dataTable);
 			TestView.Dispose (); // Close the table
-			TestView.Delete (0);
+			TestView.Delete (0); // cannot access to item at 0.
 		}
 
 		[Test] // based on bug #74631
@@ -679,7 +720,7 @@ namespace MonoTests.System.Data
 		[Test]
 		public void CancelEditAndEvents ()
 		{
-			string reference = " =====ItemAdded:3 ------4 =====ItemAdded:4 ------5 =====ItemAdded:5 ------6 =====ItemDeleted:5 ------5 =====ItemAdded:5";
+			string reference = " =====ItemAdded:3 ------4 =====ItemAdded:3 =====ItemAdded:4 ------5 =====ItemAdded:4 =====ItemAdded:5 ------6 =====ItemDeleted:5 ------5 =====ItemAdded:5";
 
 			eventWriter = new StringWriter ();
 
@@ -713,7 +754,6 @@ namespace MonoTests.System.Data
 		{
 			string result = @"setting table...
 ---- OnListChanged PropertyDescriptorChanged,0,0
------ UpdateIndex : True
 ---- OnListChanged Reset,-1,-1
 table was set.
 ---- OnListChanged PropertyDescriptorChanged,0,0
@@ -908,10 +948,8 @@ table changed.
 		[Test]
 		public void DefaultColumnNameAddListChangedTest ()
 		{
-#if NET_2_0
 			string result = @"setting table...
 ---- OnListChanged PropertyDescriptorChanged,0,0
------ UpdateIndex : True
 ---- OnListChanged Reset,-1,-1
 table was set.
 ---- OnListChanged PropertyDescriptorAdded,0,0
@@ -927,30 +965,6 @@ table was set.
 ---- OnListChanged PropertyDescriptorAdded,0,0
  add a column with an empty name.
 ";
-#else
-			string result = @"setting table...
----- OnListChanged PropertyDescriptorChanged,0,0
------ UpdateIndex : True
----- OnListChanged Reset,-1,-1
-table was set.
----- OnListChanged PropertyDescriptorChanged,0,0
----- OnListChanged PropertyDescriptorAdded,0,0
- default named column added.
----- OnListChanged PropertyDescriptorAdded,0,0
- non-default named column added.
----- OnListChanged PropertyDescriptorChanged,0,0
----- OnListChanged PropertyDescriptorAdded,0,0
- another default named column added (Column2).
----- OnListChanged PropertyDescriptorAdded,0,0
- add a column with the same name as the default columnnames.
----- OnListChanged PropertyDescriptorChanged,0,0
----- OnListChanged PropertyDescriptorAdded,0,0
- add a column with a null name.
----- OnListChanged PropertyDescriptorChanged,0,0
----- OnListChanged PropertyDescriptorAdded,0,0
- add a column with an empty name.
-";
-#endif
 			eventWriter = new StringWriter ();
 			DataTable dt = new DataTable ("table");
 			ComplexEventSequence1View dv =
@@ -969,6 +983,7 @@ table was set.
 			eventWriter.WriteLine (" add a column with an empty name.");
 
 			AssertEquals (result.Replace ("\r\n", "\n"), eventWriter.ToString ().Replace ("\r\n", "\n"));
+			GC.KeepAlive (dv);
 		}
 
 		public class ComplexEventSequence1View : DataView

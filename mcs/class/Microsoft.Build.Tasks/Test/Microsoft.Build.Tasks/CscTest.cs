@@ -44,20 +44,6 @@ namespace MonoTests.Microsoft.Build.Tasks {
 		public void ARFC (CommandLineBuilderExtension commandLine)
 		{
 			base.AddResponseFileCommands (commandLine);
-#if !NET_4_0
-			string s = commandLine.ToString ();
-			if (s.Length == 6)
-				Assert.AreEqual ("/sdk:2", s);
-			else
-				Assert.AreEqual ("/sdk:2 ", s.Substring (0, 7));
-
-			BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-			PropertyInfo pi = typeof (CommandLineBuilderExtension).GetProperty ("CommandLine", flags);
-			System.Text.StringBuilder sb = (System.Text.StringBuilder) pi.GetValue (commandLine, null);
-			sb.Length = 0;
-			if (s.Length > 6)
-				sb.Append (s.Substring (7));
-#endif
 		}
 
 		public void ACLC (CommandLineBuilderExtension commandLine)
@@ -430,6 +416,24 @@ namespace MonoTests.Microsoft.Build.Tasks {
 			csc.ACLC (c2);
 
 			Assert.AreEqual ("/reference:\"A;C\" /reference:B", c1.ToString (), "A1");
+			Assert.AreEqual (String.Empty, c2.ToString (), "A2");
+		}
+
+		[Test]
+		public void TestReferencesAlias ()
+		{
+			CscExtended csc = new CscExtended ();
+			CommandLineBuilderExtension c1 = new CommandLineBuilderExtension ();
+			CommandLineBuilderExtension c2 = new CommandLineBuilderExtension ();
+
+			TaskItem ti1 = new TaskItem ("A");
+			ti1.SetMetadata ("Aliases", "r1,global,r2");
+
+			csc.References = new ITaskItem[2] { ti1, new TaskItem ("B") };
+			csc.ARFC (c1);
+			csc.ACLC (c2);
+
+			Assert.AreEqual ("/reference:r1=A /reference:A /reference:r2=A /reference:B", c1.ToString (), "A1");
 			Assert.AreEqual (String.Empty, c2.ToString (), "A2");
 		}
 

@@ -41,18 +41,22 @@ namespace System.Diagnostics {
 	internal class TraceImplSettings {
 		public const string Key = ".__TraceInfoSettingsKey__.";
 
+	// Disable warning that AutoFlush is not used
+#pragma warning disable 649
 		public bool AutoFlush;
+#pragma warning restore
 		//public int IndentLevel;
 		public int IndentSize = 4;
-		public TraceListenerCollection Listeners = new TraceListenerCollection (false);
+		public TraceListenerCollection Listeners = new TraceListenerCollection ();
 
 		public TraceImplSettings ()
 		{
-			Listeners.Add (new DefaultTraceListener (), this);
+			Listeners.Add (new DefaultTraceListener () { IndentSize = this.IndentSize });
 		}
 	}
 #endif
 
+/*
 	static class TraceImpl {
 
 #if !MOBILE
@@ -61,36 +65,11 @@ namespace System.Diagnostics {
 
 		private static bool autoFlush;
 
-#if TARGET_JVM
-		static readonly LocalDataStoreSlot _indentLevelStore = System.Threading.Thread.AllocateDataSlot ();
-		static readonly LocalDataStoreSlot _indentSizeStore = System.Threading.Thread.AllocateDataSlot ();
-
-		private static int indentLevel {
-			get {
-				object o = System.Threading.Thread.GetData (_indentLevelStore);
-				if (o == null)
-					return 0;
-				return (int) o;
-			}
-			set { System.Threading.Thread.SetData (_indentLevelStore, value); }
-		}
-
-		private static int indentSize {
-			get {
-				object o = System.Threading.Thread.GetData (_indentSizeStore);
-				if (o == null)
-					return 0;
-				return (int) o;
-			}
-			set { System.Threading.Thread.SetData (_indentSizeStore, value); }
-		}
-#else
 		[ThreadStatic]
 		private static int indentLevel;
 
 		[ThreadStatic]
 		private static int indentSize;
-#endif
 
 #if MOBILE
 		static TraceListenerCollection listeners = new TraceListenerCollection (true);
@@ -435,5 +414,6 @@ namespace System.Diagnostics {
 				WriteLine (message, category);
 		}
 	}
+*/
 }
 

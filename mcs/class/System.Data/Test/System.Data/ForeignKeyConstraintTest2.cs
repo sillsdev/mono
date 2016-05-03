@@ -31,7 +31,7 @@ using System;
 using System.Data;
 using MonoTests.System.Data.Utils;
 
-namespace MonoTests_System.Data
+namespace MonoTests.System.Data
 {
 	[TestFixture] public class ForeignKeyConstraintTest2
 	{
@@ -610,7 +610,6 @@ namespace MonoTests_System.Data
 
 			return ds1;
 		}
-#if NET_2_0
 		[Test]
 		public void ForeignConstraint_DateTimeModeTest()
 		{
@@ -632,7 +631,6 @@ namespace MonoTests_System.Data
 				Assert.Fail("#1");
 			} catch (InvalidOperationException e) {}
 		}
-#endif
 
 		[Test] // bug #79689
 		public void ParentChildSameColumn ()

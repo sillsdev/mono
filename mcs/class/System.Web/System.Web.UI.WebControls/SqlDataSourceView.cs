@@ -30,7 +30,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using System.Collections;
 using System.Collections.Specialized;
 using System.Text;
@@ -294,8 +293,8 @@ namespace System.Web.UI.WebControls {
 				catch (Exception e) {
 					exception = e;
 				}
-				SqlDataSourceStatusEventArgs selectedArgs =
-					new SqlDataSourceStatusEventArgs (command, reader.RecordsAffected, exception);
+				int rows = reader == null ? 0 : reader.RecordsAffected;
+				SqlDataSourceStatusEventArgs selectedArgs = new SqlDataSourceStatusEventArgs (command, rows, exception);
 				OnSelected (selectedArgs);
 				if (exception != null && !selectedArgs.ExceptionHandled)
 					throw exception;
@@ -913,6 +912,5 @@ namespace System.Web.UI.WebControls {
 	}
 	
 }
-#endif
 
 

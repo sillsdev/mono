@@ -392,6 +392,26 @@ namespace System.DirectoryServices
 		}
 
 		/// <summary>
+		/// Gets or sets the security descriptor for this entry.
+		/// </summary>
+		/// <remarks>
+		/// Not implemented yet
+		[DSDescription ("An ActiveDirectorySecurity object that represents the security descriptor for this directory entry.")]
+		[DesignerSerializationVisibility (DesignerSerializationVisibility.Hidden)]
+		[Browsable (false)]
+		public ActiveDirectorySecurity ObjectSecurity 
+		{
+			[MonoTODO]
+			get			{
+				throw new NotImplementedException();
+			}
+			[MonoTODO]
+			set			{
+				throw new NotImplementedException();
+			}
+		}
+
+		/// <summary>
 		/// Determines if a cache should be used.
 		/// </summary>
 		[DSDescription ("Determines if a cache should be used.")]
@@ -405,6 +425,16 @@ namespace System.DirectoryServices
 			set 
 			{
 				_usePropertyCache = value;
+			}
+		}
+
+		[DSDescription ("The provider-specific options for this entry.")]
+		[Browsable (false)]
+		[MonoTODO]
+		public DirectoryEntryConfiguration Options
+		{ 
+			get {
+				throw new NotImplementedException ();
 			}
 		}
 
@@ -946,7 +976,6 @@ namespace System.DirectoryServices
 			throw new NotImplementedException();
 		}
 
-#if NET_2_0
 		/// <summary>
 		/// Gets a property value from the native Active Directory Entry.
 		/// </summary>
@@ -979,7 +1008,6 @@ namespace System.DirectoryServices
 		{
 			throw new NotImplementedException ();
 		}
-#endif
 
 		/// <summary>
 		/// Creates a copy of this entry, as a child of the specified parent, with 

@@ -28,7 +28,6 @@
 
 //#define SPEW
 
-#if NET_2_0
 
 using System;
 using System.Text;
@@ -44,9 +43,6 @@ namespace MonoTests.System.Configuration
 	[TestFixture]
 	public class SettingsBaseTest
 	{
-#if TARGET_JVM
-		class CustomerException : Exception	{ }
-#endif
 		class MySettings : SettingsBase
 		{
 			[UserScopedSetting] // ignored in non-ApplicationSettingsBase
@@ -235,11 +231,7 @@ namespace MonoTests.System.Configuration
 			try {
 				Assert.AreEqual (100, s.Foo, "#1");
 				Assert.Fail ("#2");
-#if !TARGET_JVM
 			} catch (Win32Exception) {
-#else
-			} catch (CustomerException) {
-#endif
 			}
 		}
 
@@ -264,11 +256,7 @@ namespace MonoTests.System.Configuration
 		{
 			public override SettingsPropertyValueCollection GetPropertyValues (SettingsContext context, SettingsPropertyCollection props)
 			{
-#if !TARGET_JVM
 				throw new Win32Exception (); // unlikely thrown otherwise.
-#else
-				throw new CustomerException (); // unlikely thrown otherwise.
-#endif
 			}
 		}
 
@@ -340,4 +328,3 @@ namespace MonoTests.System.Configuration
 	}
 }
 
-#endif

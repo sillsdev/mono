@@ -7,6 +7,15 @@
 // (c) Copyright 2006 Novell, Inc. (http://www.novell.com)
 //
 
+#if SECURITY_DEP
+#if MONO_SECURITY_ALIAS
+extern alias MonoSecurity;
+using MSI = MonoSecurity::Mono.Security.Interface;
+#else
+using MSI = Mono.Security.Interface;
+#endif
+#endif
+
 using System;
 using System.IO;
 using System.Net.Sockets;
@@ -17,6 +26,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Net;
 using System.Net.Security;
 using System.Security.Authentication;
+using Mono.Net.Security;
 
 namespace System.Net
 {
@@ -93,6 +103,8 @@ namespace System.Net
 			WebRequestMethods.Ftp.UploadFile, // STOR
 			WebRequestMethods.Ftp.UploadFileWithUniqueName // STUR
 			};
+
+		Encoding dataEncoding = Encoding.UTF8;
 
 		internal FtpWebRequest (Uri uri) 
 		{
@@ -793,7 +805,11 @@ namespace System.Net
 
 			Authenticate ();
 			FtpStatus status = SendCommand ("OPTS", "utf8", "on");
-			// ignore status for OPTS
+			if ((int)status.StatusCode < 200 || (int)status.StatusCode > 300)
+				dataEncoding = Encoding.Default;
+			else
+				dataEncoding = Encoding.UTF8;
+
 			status = SendCommand (WebRequestMethods.Ftp.PrintWorkingDirectory);
 			initial_path = GetInitialPath (status);
 		}
@@ -1080,7 +1096,7 @@ namespace System.Net
 				commandString += " " + String.Join (" ", parameters);
 
 			commandString += EOL;
-			cmd = Encoding.ASCII.GetBytes (commandString);
+			cmd = dataEncoding.GetBytes (commandString);
 			try {
 				controlStream.Write (cmd, 0, cmd.Length);
 			} catch (IOException) {
@@ -1149,31 +1165,14 @@ namespace System.Net
 			ChangeToSSLSocket (ref stream);
 		}
 
-#if SECURITY_DEP
-		RemoteCertificateValidationCallback callback = delegate (object sender,
-									 X509Certificate certificate,
-									 X509Chain chain,
-									 SslPolicyErrors sslPolicyErrors) {
-			// honor any exciting callback defined on ServicePointManager
-			if (ServicePointManager.ServerCertificateValidationCallback != null)
-				return ServicePointManager.ServerCertificateValidationCallback (sender, certificate, chain, sslPolicyErrors);
-			// otherwise provide our own
-			if (sslPolicyErrors != SslPolicyErrors.None)
-				throw new InvalidOperationException ("SSL authentication error: " + sslPolicyErrors);
-			return true;
-			};
-#endif
-
 		internal bool ChangeToSSLSocket (ref Stream stream) {
-#if TARGET_JVM
-			stream.ChangeToSSLSocket ();
-			return true;
-#elif SECURITY_DEP
-			SslStream sslStream = new SslStream (stream, true, callback, null);
-			//sslStream.AuthenticateAsClient (Host, this.ClientCertificates, SslProtocols.Default, false);
-			//TODO: client certificates
+#if SECURITY_DEP
+			var provider = MonoTlsProviderFactory.GetProviderInternal ();
+			var settings = MSI.MonoTlsSettings.CopyDefaultSettings ();
+			settings.UseServicePointManagerCallback = true;
+			var sslStream = provider.CreateSslStream (stream, true, settings);
 			sslStream.AuthenticateAsClient (requestUri.Host, null, SslProtocols.Default, false);
-			stream = sslStream;
+			stream = sslStream.AuthenticatedStream;
 			return true;
 #else
 			throw new NotImplementedException ();

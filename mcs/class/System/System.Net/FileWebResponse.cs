@@ -145,11 +145,7 @@ namespace System.Net
 			((IDisposable) this).Dispose ();
 		}
 
-#if TARGET_JVM //enable overrides for extenders
-		public override void Dispose()
-#else
 		void IDisposable.Dispose()
-#endif
 		{
 			Dispose (true);
 			
@@ -157,9 +153,7 @@ namespace System.Net
 			GC.SuppressFinalize (this);  
 		}
 		
-#if NET_4_0
 		protected override
-#endif		
 		void Dispose (bool disposing)
 		{
 			if (this.disposed)
@@ -177,9 +171,7 @@ namespace System.Net
 			fileStream = null;
 			if (stream != null)
 				stream.Close (); // also closes webRequest
-#if NET_4_0
 			base.Dispose (disposing);
-#endif
 		}
 		
 		private void CheckDisposed ()

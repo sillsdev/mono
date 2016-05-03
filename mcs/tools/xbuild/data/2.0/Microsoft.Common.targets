@@ -18,7 +18,6 @@
 		<AssemblyName Condition="'$(AssemblyName)' == ''">$(MSBuildProjectName)</AssemblyName>
 		<OutputPath Condition="'$(OutputPath)' != '' and !HasTrailingSlash('$(OutputPath)')">$(OutputPath)\</OutputPath>
 		<OutputPath Condition=" '$(Platform)'=='' and '$(Configuration)'=='' and '$(OutputPath)'=='' ">bin\Debug\</OutputPath>
-		<WarningLevel Condition="'$(WarningLevel)' == ''" >2</WarningLevel>
 		<TargetFrameworkVersion Condition="'$(TargetFrameworkVersion)' == ''">v2.0</TargetFrameworkVersion>
 	</PropertyGroup>
 
@@ -110,14 +109,8 @@
 	</PropertyGroup>
 	<Target Name="GetFrameworkPaths" DependsOnTargets="$(GetFrameworkPathsDependsOn)">
 		<GetFrameworkPath>
-			<Output Condition="'$(TargetFrameworkVersion)' == 'v3.5'"
-				TaskParameter="FrameworkVersion35Path"
-				ItemName="_CombinedTargetFrameworkDirectoriesItem"/>
-			<Output Condition="'$(TargetFrameworkVersion)' == 'v3.0' or '$(TargetFrameworkVersion)' == 'v3.5'"
-				TaskParameter="FrameworkVersion30Path"
-				ItemName="_CombinedTargetFrameworkDirectoriesItem"/>
-			<Output Condition="'$(TargetFrameworkVersion)' == 'v2.0' or '$(TargetFrameworkVersion)' == 'v3.0' or '$(TargetFrameworkVersion)' == 'v3.5'"
-				TaskParameter="FrameworkVersion20Path"
+			<Output
+				TaskParameter="Path"
 				ItemName="_CombinedTargetFrameworkDirectoriesItem"/>
 		</GetFrameworkPath>
 		<CreateProperty Value="@(_CombinedTargetFrameworkDirectoriesItem)">
@@ -125,7 +118,7 @@
 		</CreateProperty>
 
 		<Warning Text="TargetFrameworkVersion '$(TargetFrameworkVersion)' not supported by this toolset (ToolsVersion: $(MSBuildToolsVersion))."
-			Condition="'$(TargetFrameworkVersion)' != 'v3.5' and '$(TargetFrameworkVersion)' != 'v3.0' and '$(TargetFrameworkVersion)' != 'v2.0'"/>
+			Condition="'$(TargetFrameworkVersion)' != 'v2.0'"/>
 	</Target>
 
 	<PropertyGroup>
@@ -137,6 +130,7 @@
 		<AllowedReferenceRelatedFileExtensions Condition=" '$(AllowedReferenceRelatedFileExtensions)' == '' ">
 			.exe.mdb;
 			.dll.mdb;
+			.pdb;
 			.xml
 		</AllowedReferenceRelatedFileExtensions>
 
@@ -200,13 +194,13 @@
 		<AssignProjectConfiguration
 			ProjectReferences = "@(ProjectReference)"
 			SolutionConfigurationContents = "$(CurrentSolutionConfigurationContents)"
-			Condition="'$(BuildingSolutionFile)' == 'true'">
+			Condition="$(CurrentSolutionConfigurationContents) != '' and ('$(BuildingSolutionFile)' == 'true' or '$(BuildingInsideVisualStudio)' == 'true')">
 
 			<Output TaskParameter = "AssignedProjects" ItemName = "ProjectReferenceWithConfiguration"/>
 		</AssignProjectConfiguration>
 
 		<!-- Else, just -->
-		<CreateItem Include="@(ProjectReference)" Condition="'$(BuildingSolutionFile)' != 'true'">
+		<CreateItem Include="@(ProjectReference)" Condition="$(CurrentSolutionConfigurationContents) == '' or ('$(BuildingSolutionFile)' != 'true' and '$(BuildingInsideVisualStudio)' != 'true')">
 			<Output TaskParameter="Include" ItemName="ProjectReferenceWithConfiguration"/>
 		</CreateItem>
 
@@ -496,6 +490,14 @@
 			<Output TaskParameter="DestinationFiles" ItemName="FileWrites"/>
 		</Copy>
 
+		<Copy
+			SourceFiles="$(IntermediateOutputPath)$(AssemblyName).pdb"
+			Condition="'$(OutDir)' != '' and Exists('$(IntermediateOutputPath)$(AssemblyName).pdb')"
+			DestinationFolder="$(OutDir)"
+			SkipUnchangedFiles="$(SkipCopyUnchangedFiles)" >
+			<Output TaskParameter="DestinationFiles" ItemName="FileWrites"/>
+		</Copy>
+
 		<Copy SourceFiles="@(IntermediateAssembly)" Condition="'$(OutDir)' != '' and Exists ('@(IntermediateAssembly)')" DestinationFolder="$(OutDir)" SkipUnchangedFiles="$(SkipCopyUnchangedFiles)">
 			<Output TaskParameter="DestinationFiles" ItemName="FileWrites"/>
 		</Copy>
@@ -730,6 +732,11 @@
 
 		<CreateItem Include="$(IntermediateOutputPath)$(AssemblyName)$(TargetExt).mdb"
 			Condition="Exists('$(IntermediateOutputPath)$(AssemblyName)$(TargetExt).mdb')">
+			<Output TaskParameter="Include" ItemName="FileWrites"/>
+		</CreateItem>
+
+		<CreateItem Include="$(IntermediateOutputPath)$(AssemblyName).pdb"
+			Condition="Exists('$(IntermediateOutputPath)$(AssemblyName).pdb')">
 			<Output TaskParameter="Include" ItemName="FileWrites"/>
 		</CreateItem>
 	</Target>

@@ -44,11 +44,13 @@ namespace Mono.CSharp
 	using System.Text.RegularExpressions;
 	using System.Threading;
 	using System.Collections.Generic;
+	using System.Globalization;
 	
 	internal class CSharpCodeCompiler : CSharpCodeGenerator, ICodeCompiler
 	{
 		static string windowsMcsPath;
 		static string windowsMonoPath;
+		static string unixMcsCommand;
 
 		Mutex mcsOutMutex;
 		StringCollection mcsOutput;
@@ -84,6 +86,13 @@ namespace Mono.CSharp
 				
 				if (!File.Exists (windowsMcsPath))
 					throw new FileNotFoundException ("Windows mcs path not found: " + windowsMcsPath);
+			} else {
+				var mscorlibPath = new Uri (typeof (object).Assembly.CodeBase).LocalPath;
+				var unixMcsPath = Path.GetFullPath (Path.Combine (mscorlibPath, "..", "..", "..", "..", "bin", "mcs"));
+				if (File.Exists (unixMcsPath))
+					unixMcsCommand = unixMcsPath;
+				else
+					unixMcsCommand = "mcs";
 			}
 		}
 
@@ -172,33 +181,12 @@ namespace Mono.CSharp
 				mcs.StartInfo.Arguments = "\"" + windowsMcsPath + "\" " +
 					BuildArgs (options, fileNames, ProviderOptions);
 			} else {
-				mcs.StartInfo.FileName="mcs";
+				mcs.StartInfo.FileName=unixMcsCommand;
 				mcs.StartInfo.Arguments=BuildArgs(options, fileNames, ProviderOptions);
 			}
 
 			mcsOutput = new StringCollection ();
 			mcsOutMutex = new Mutex ();
-#if !NET_4_0
-			/*
-			 * !:. KLUDGE WARNING .:!
-			 *
-			 * When running the 2.0 test suite some assemblies will invoke mcs via
-			 * CodeDOM and the new mcs process will find the MONO_PATH variable in its
-			 * environment pointing to the net_2_0 library which will cause the runtime
-			 * to attempt to load the 2.0 corlib into 4.0 process and thus mcs will
-			 * fail. At the same time, we must not touch MONO_PATH when running outside
-			 * the test suite, thus the kludge.
-			 *
-			 * !:. KLUDGE WARNING .:!
-			 */
-			if (Environment.GetEnvironmentVariable ("MONO_TESTS_IN_PROGRESS") != null) {
-				string monoPath = Environment.GetEnvironmentVariable ("MONO_PATH");
-				if (!String.IsNullOrEmpty (monoPath)) {
-					monoPath = monoPath.Replace ("/class/lib/net_2_0", "/class/lib/net_4_0");
-					mcs.StartInfo.EnvironmentVariables ["MONO_PATH"] = monoPath;
-				}
-			}
-#endif
 /*		       
 			string monoPath = Environment.GetEnvironmentVariable ("MONO_PATH");
 			if (monoPath != null)
@@ -362,11 +350,7 @@ namespace Mono.CSharp
 				string langver;
 
 				if (!providerOptions.TryGetValue ("CompilerVersion", out langver))
-#if NET_4_0
 					langver = "3.5";
-#else
-					langver = "2.0";
-#endif
 
 				if (langver.Length >= 1 && langver [0] == 'v')
 					langver = langver.Substring (1);
@@ -381,14 +365,6 @@ namespace Mono.CSharp
 						break;
 				}
 			}
-
-#if NET_4_5			
-			args.Append("/sdk:4.5");
-#elif NET_4_0
-			args.Append("/sdk:4");
-#else
-			args.Append("/sdk:2");
-#endif
 
 			args.Append (" -- ");
 			foreach (string source in fileNames)
@@ -409,6 +385,12 @@ namespace Mono.CSharp
 			\s*
 			(?<message>.*)$";
 
+		static readonly Regex RelatedSymbolsRegex = new Regex(
+			@"
+            \(Location\ of\ the\ symbol\ related\ to\ previous\ (warning|error)\)
+			",
+			RegexOptions.Compiled | RegexOptions.ExplicitCapture | RegexOptions.IgnorePatternWhitespace);
+
 		private static CompilerError CreateErrorFromString(string error_string)
 		{
 			if (error_string.StartsWith ("BETA"))
@@ -421,18 +403,24 @@ namespace Mono.CSharp
 			Regex reg = new Regex (ErrorRegexPattern, RegexOptions.Compiled | RegexOptions.ExplicitCapture | RegexOptions.IgnorePatternWhitespace);
 			Match match=reg.Match(error_string);
 			if (!match.Success) {
-				// We had some sort of runtime crash
-				error.ErrorText = error_string;
-				error.IsWarning = false;
-				error.ErrorNumber = "";
-				return error;
+				match = RelatedSymbolsRegex.Match (error_string);
+				if (!match.Success) {
+					// We had some sort of runtime crash
+					error.ErrorText = error_string;
+					error.IsWarning = false;
+					error.ErrorNumber = "";
+					return error;
+				} else {
+					// This line is a continuation of previous warning of error
+					return null;
+				}
 			}
 			if (String.Empty != match.Result("${file}"))
 				error.FileName=match.Result("${file}");
 			if (String.Empty != match.Result("${line}"))
 				error.Line=Int32.Parse(match.Result("${line}"));
 			if (String.Empty != match.Result("${column}"))
-				error.Column=Int32.Parse(match.Result("${column}"));
+				error.Column=Int32.Parse(match.Result("${column}").Trim('+'));
 
 			string level = match.Result ("${level}");
 			if (level == "warning")

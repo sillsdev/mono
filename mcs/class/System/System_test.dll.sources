@@ -25,11 +25,13 @@ System/LdapStyleUriParserTest.cs
 System/NetPipeStyleUriParserTest.cs
 System/NetTcpStyleUriParserTest.cs
 System/NewsStyleUriParserTest.cs
+System/StringTester.cs
 System/UriBuilderTest.cs
 System/UriParserTest.cs
 System/UriTest.cs
 System/UriTest2.cs
 System/UriTest3.cs
+System/UriPermutationsTest.cs
 System/UriTypeConverterTest.cs
 System.CodeDom/CodeArgumentReferenceExpressionTest.cs
 System.CodeDom/CodeArrayCreateExpressionTest.cs
@@ -118,6 +120,7 @@ System.ComponentModel/AttributeProviderAttributeTest.cs
 System.ComponentModel/BackgroundWorkerTest.cs
 System.ComponentModel/BindingListTest.cs
 System.ComponentModel/ByteConverterTests.cs
+System.ComponentModel/CategoryAttributeTests.cs
 System.ComponentModel/CharConverterTest.cs
 System.ComponentModel/CollectionConverterTest.cs
 System.ComponentModel/ComplexBindingPropertiesAttributeTest.cs
@@ -180,6 +183,7 @@ System.Diagnostics/DelimitedListTraceListenerTest.cs
 System.Diagnostics/EventLogTest.cs
 System.Diagnostics/StopwatchTest.cs
 System.Diagnostics/SourceSwitchTest.cs
+System.Diagnostics/TextWriterTraceListenerHelper.cs
 System.Diagnostics/TextWriterTraceListenerTest.cs
 System.Diagnostics/TraceSourceTest.cs
 System.Diagnostics/TraceListenerTest.cs
@@ -227,7 +231,6 @@ System.Net/ServicePointManagerTest.cs
 System.Net/ServicePointTest.cs
 System.Net/SocketPermissionAttributeTest.cs
 System.Net/SocketPermissionTest.cs
-System.Net/SocketResponder.cs
 System.Net/WebHeaderCollectionTest.cs
 System.Net/WebPermissionAttributeTest.cs
 System.Net/WebPermissionTest.cs
@@ -246,6 +249,7 @@ System.Net.Sockets/TcpClientTest.cs
 System.Net.Sockets/TcpListenerTest.cs
 System.Net.Sockets/SocketTest.cs
 System.Net.Sockets/SocketAsyncEventArgsTest.cs
+System.Net.Sockets/SocketConnectAsyncTest.cs
 System.Net.Sockets/UdpClientTest.cs
 System.Net.Sockets/SocketAsyncTest.cs
 System.Net.Mail/LinkedResourceTest.cs
@@ -264,7 +268,10 @@ System.Net.Mail/SmtpPermissionAttributeTest.cs
 System.Net.Mail/SmtpServer.cs
 System.Net.Mime/ContentDispositionTest.cs
 System.Net.Mime/ContentTypeTest.cs
+System.Net.NetworkInformation/IPInterfacePropertiesTest.cs
+System.Net.NetworkInformation/NetworkInterfaceTest.cs
 System.Net.NetworkInformation/PhysicalAddressTest.cs
+System.Net.NetworkInformation/PingTest.cs
 System.Net.Security/SslStreamTest.cs
 System.Runtime.Versioning/FrameworkNameTest.cs
 System.Security.AccessControl/SemaphoreSecurityTest.cs
@@ -317,6 +324,7 @@ System.Text.RegularExpressions/RegexReplaceTests.cs
 System.Text.RegularExpressions/RegexTrial.cs
 System.Text.RegularExpressions/RegexTest.cs
 System.Text.RegularExpressions/RegexBugs.cs
+System.Text.RegularExpressions/RegexBugs_Long.cs
 System.Text.RegularExpressions/RegexMatchTests.cs
 System.Text.RegularExpressions/RegexReplace.cs
 System.Text.RegularExpressions/RegexResultTests.cs
@@ -500,3 +508,5 @@ System.Collections.Concurrent/ConcurrentBagTests.cs
 System.Collections.Concurrent/CollectionStressTestHelper.cs
 System.Collections.Concurrent/ParallelTestHelper.cs
 System.Net.WebSockets/ClientWebSocketTest.cs
+../../test-helpers/NetworkHelpers.cs
+../../test-helpers/SocketResponder.cs

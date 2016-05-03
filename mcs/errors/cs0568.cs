@@ -1,14 +1,9 @@
 // CS0568: Structs cannot contain explicit parameterless constructors
-// Line: 5
-struct A {
-	int a;
-	A () { a = 1; }
-}
+// Line: 6
 
-class D {
-	static void Main ()
+struct S
+{
+	public S ()
 	{
-		A [] a = new A [10];
-
 	}
 }

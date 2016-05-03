@@ -27,6 +27,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Xml.Linq;
 
 namespace Xamarin.ApiDiff {
@@ -66,13 +67,18 @@ namespace Xamarin.ApiDiff {
 			Compare (s.Elements ("class"), t.Elements ("class"));
 		}
 
-		public override void Added (XElement target)
+		public override void Added (XElement target, bool wasParentAdded)
 		{
-			Output.WriteLine ("<h3>New Type {0}.{1}</h3>", State.Namespace, target.Attribute ("name").Value);
-			Output.WriteLine ("<pre>");
+			string name = target.Attribute ("name").Value;
+			if (State.IgnoreNew.Any (re => re.IsMatch (name)))
+				return;
+			Output.WriteLine ("<div> <!-- start type {0} -->", name);
+			Output.WriteLine ("<h3>New Type {0}.{1}</h3>", State.Namespace, name);
+			Output.WriteLine ("<pre class='added' data-is-non-breaking>");
 			State.Indent = 0;
 			AddedInner (target);
 			Output.WriteLine ("</pre>");
+			Output.WriteLine ("</div> <!-- end type {0} -->", name);
 		}
 
 		public void AddedInner (XElement target)
@@ -145,7 +151,7 @@ namespace Xamarin.ApiDiff {
 			if (t != null) {
 				Indent ().WriteLine ("\t// constructors");
 				foreach (var ctor in t.Elements ("constructor"))
-					ccomparer.Added (ctor);
+					ccomparer.Added (ctor, true);
 			}
 
 			t = target.Element ("fields");
@@ -155,28 +161,28 @@ namespace Xamarin.ApiDiff {
 				else
 					SetContext (target);
 				foreach (var field in t.Elements ("field"))
-					fcomparer.Added (field);
+					fcomparer.Added (field, true);
 			}
 
 			t = target.Element ("properties");
 			if (t != null) {
 				Indent ().WriteLine ("\t// properties");
 				foreach (var property in t.Elements ("property"))
-					pcomparer.Added (property);
+					pcomparer.Added (property, true);
 			}
 
 			t = target.Element ("events");
 			if (t != null) {
 				Indent ().WriteLine ("\t// events");
 				foreach (var evnt in t.Elements ("event"))
-					ecomparer.Added (evnt);
+					ecomparer.Added (evnt, true);
 			}
 
 			t = target.Element ("methods");
 			if (t != null) {
 				Indent ().WriteLine ("\t// methods");
 				foreach (var method in t.Elements ("method"))
-					mcomparer.Added (method);
+					mcomparer.Added (method, true);
 			}
 
 			t = target.Element ("classes");
@@ -192,11 +198,18 @@ namespace Xamarin.ApiDiff {
 			Indent ().WriteLine ("}");
 		}
 
-		public override void Modified (XElement source, XElement target)
+		public override void Modified (XElement source, XElement target, ApiChanges diff)
 		{
 			// hack - there could be changes that we're not monitoring (e.g. attributes properties)
 			var output = Output;
 			State.Output = new StringWriter ();
+
+			var sb = source.GetAttribute ("base");
+			var tb = target.GetAttribute ("base");
+			if (sb != tb) {
+				Output.Write ("Modified base type: ");
+				Output.WriteLine (new ApiChange ().AppendModified (sb, tb, true).Member.ToString ());
+			}
 
 			ccomparer.Compare (source, target);
 			icomparer.Compare (source, target);
@@ -215,14 +228,17 @@ namespace Xamarin.ApiDiff {
 			var s = (Output as StringWriter).ToString ();
 			State.Output = output;
 			if (s.Length > 0) {
+				var tn = GetTypeName (target);
+				Output.WriteLine ("<!-- start type {0} --> <div>", tn);
 				Output.WriteLine ("<h3>Type Changed: {0}.{1}</h3>", State.Namespace, GetTypeName (target));
 				Output.WriteLine (s);
+				Output.WriteLine ("</div> <!-- end type {0} -->", tn);
 			}
 		}
 
 		public override void Removed (XElement source)
 		{
-			Output.WriteLine ("<h3>Removed Type {0}.{1}", State.Namespace, GetTypeName (source));
+			Output.Write ("<h3>Removed Type <span class='breaking' data-is-breaking>{0}.{1}</span></h3>", State.Namespace, GetTypeName (source));
 		}
 
 		public virtual string GetTypeName (XElement type)

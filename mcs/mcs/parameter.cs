@@ -222,7 +222,7 @@ namespace Mono.CSharp {
 			CallerMask = CallerMemberName | CallerLineNumber | CallerFilePath
 		}
 
-		static readonly string[] attribute_targets = new string[] { "param" };
+		static readonly string[] attribute_targets = new [] { "param" };
 
 		FullNamedExpression texpr;
 		Modifier modFlags;
@@ -371,6 +371,15 @@ namespace Mono.CSharp {
 			return member.IsAccessibleAs (parameter_type);
 		}
 
+		bool IsValidCallerContext (MemberCore memberContext)
+		{
+			var m = memberContext as Method;
+			if (m != null)
+				return !m.IsPartialImplementation;
+
+			return true;
+		}
+
 		// <summary>
 		//   Resolve is used in method definitions
 		// </summary>
@@ -416,6 +425,7 @@ namespace Mono.CSharp {
 		{
 			var pa = rc.Module.PredefinedAttributes;
 			TypeSpec caller_type;
+			Attribute callerMemberName = null, callerFilePath = null;
 
 			foreach (var attr in attributes.Attrs) {
 				var atype = attr.ResolveTypeForComparison ();
@@ -430,16 +440,29 @@ namespace Mono.CSharp {
 							caller_type.GetSignatureForError (), parameter_type.GetSignatureForError ());
 					}
 
+					if (!IsValidCallerContext (rc.CurrentMemberDefinition)) {
+						rc.Report.Warning (4026, 1, attr.Location,
+							"The CallerMemberName applied to parameter `{0}' will have no effect because it applies to a member that is used in context that do not allow optional arguments",
+							name);
+					}
+
 					modFlags |= Modifier.CallerMemberName;
+					callerMemberName = attr;
 					continue;
 				}
 
 				if (atype == pa.CallerLineNumberAttribute) {
 					caller_type = rc.BuiltinTypes.Int;
-					if (caller_type != parameter_type && !Convert.ImplicitNumericConversionExists (caller_type, parameter_type)) {
+					if (caller_type != parameter_type && !Convert.ImplicitStandardConversionExists (new IntConstant (caller_type, int.MaxValue, Location.Null), parameter_type)) {
 						rc.Report.Error (4017, attr.Location,
-							"The CallerMemberName attribute cannot be applied because there is no standard conversion from `{0}' to `{1}'",
+							"The CallerLineNumberAttribute attribute cannot be applied because there is no standard conversion from `{0}' to `{1}'",
 							caller_type.GetSignatureForError (), parameter_type.GetSignatureForError ());
+					}
+
+					if (!IsValidCallerContext (rc.CurrentMemberDefinition)) {
+						rc.Report.Warning (4024, 1, attr.Location,
+							"The CallerLineNumberAttribute applied to parameter `{0}' will have no effect because it applies to a member that is used in context that do not allow optional arguments",
+							name);
 					}
 
 					modFlags |= Modifier.CallerLineNumber;
@@ -454,9 +477,39 @@ namespace Mono.CSharp {
 							caller_type.GetSignatureForError (), parameter_type.GetSignatureForError ());
 					}
 
+					if (!IsValidCallerContext (rc.CurrentMemberDefinition)) {
+						rc.Report.Warning (4025, 1, attr.Location,
+							"The CallerFilePath applied to parameter `{0}' will have no effect because it applies to a member that is used in context that do not allow optional arguments",
+							name);
+					}
+
 					modFlags |= Modifier.CallerFilePath;
+					callerFilePath = attr;
 					continue;
 				}
+			}
+
+			if ((modFlags & Modifier.CallerLineNumber) != 0) {
+				if (callerMemberName != null) {
+					rc.Report.Warning (7081, 1, callerMemberName.Location,
+						"The CallerMemberNameAttribute applied to parameter `{0}' will have no effect. It is overridden by the CallerLineNumberAttribute",
+						Name);
+				}
+
+				if (callerFilePath != null) {
+					rc.Report.Warning (7082, 1, callerFilePath.Location,
+						"The CallerFilePathAttribute applied to parameter `{0}' will have no effect. It is overridden by the CallerLineNumberAttribute",
+						name);
+				}
+			}
+
+			if ((modFlags & Modifier.CallerMemberName) != 0) {
+				if (callerFilePath != null) {
+					rc.Report.Warning (7080, 1, callerFilePath.Location,
+						"The CallerMemberNameAttribute applied to parameter `{0}' will have no effect. It is overridden by the CallerFilePathAttribute",
+						name);
+				}
+
 			}
 		}
 
@@ -510,7 +563,8 @@ namespace Mono.CSharp {
 
 				if (TypeSpecComparer.IsEqual (default_expr.Type, parameter_type) ||
 					(default_expr is NullConstant && TypeSpec.IsReferenceType (parameter_type) && !parameter_type.IsGenericParameter) ||
-					parameter_type.BuiltinType == BuiltinTypeSpec.Type.Object) {
+					parameter_type.BuiltinType == BuiltinTypeSpec.Type.Object ||
+					parameter_type.BuiltinType == BuiltinTypeSpec.Type.Dynamic) {
 					return;
 				}
 
@@ -648,9 +702,9 @@ namespace Mono.CSharp {
 					} else {
 						builder.SetConstant (c.GetValue ());
 					}
-				} else if (default_expr.Type.IsStruct) {
+				} else if (default_expr.Type.IsStruct || default_expr.Type.IsGenericParameter) {
 					//
-					// Handles special case where default expression is used with value-type
+					// Handles special case where default expression is used with value-type or type parameter
 					//
 					// void Foo (S s = default (S)) {}
 					//
@@ -722,6 +776,11 @@ namespace Mono.CSharp {
 		{
 			TypeSpec p_type = ec.Module.PredefinedTypes.ParameterExpression.Resolve ();
 			return new TypeExpression (p_type, location);
+		}
+
+		public void SetIndex (int index)
+		{
+			idx = index;
 		}
 
 		public void Warning_UselessOptionalParameter (Report Report)
@@ -898,6 +957,19 @@ namespace Mono.CSharp {
 			}
 			sb.Append (end);
 			return sb.ToString ();
+		}
+
+		public static bool HasSameParameterDefaults (AParametersCollection a, AParametersCollection b)
+		{
+			if (a == null)
+				return b == null;
+
+			for (int i = 0; i < a.Count; ++i) {
+				if (a.FixedParameters [i].HasDefaultValue != b.FixedParameters [i].HasDefaultValue)
+					return false;
+			}
+
+			return true;
 		}
 
 		public bool HasArglist {
@@ -1086,6 +1158,23 @@ namespace Mono.CSharp {
 			return new ParametersCompiled (parameters, types);
 		}
 
+		public static ParametersCompiled Prefix (ParametersCompiled parameters, Parameter p, TypeSpec type)
+		{
+			var ptypes = new TypeSpec [parameters.Count + 1];
+			ptypes [0] = type;
+			Array.Copy (parameters.Types, 0, ptypes, 1, parameters.Count);
+
+			var param = new Parameter [ptypes.Length];
+			param [0] = p;
+			for (int i = 0; i < parameters.Count; ++i) {
+				var pi = parameters [i];
+				param [i + 1] = pi;
+				pi.SetIndex (i + 1);
+			}
+
+			return ParametersCompiled.CreateFullyResolved (param, ptypes);
+		}
+
 		//
 		// TODO: This does not fit here, it should go to different version of AParametersCollection
 		// as the underlying type is not Parameter and some methods will fail to cast
@@ -1247,6 +1336,9 @@ namespace Mono.CSharp {
 			for (int i = 0; i < parameters.Length; ++i) {
 				Parameter p = (Parameter) parameters [i];
 
+				if (p.Type != null)
+					p.Type.CheckObsoleteness (m, p.Location);
+
 				//
 				// Try not to enter default values resolution if there are is not any default value possible
 				//
@@ -1343,10 +1435,12 @@ namespace Mono.CSharp {
 
 			expr = Child;
 
-			if (!(expr is Constant || expr is DefaultValueExpression || (expr is New && ((New) expr).IsDefaultStruct))) {
-				rc.Report.Error (1736, Location,
-					"The expression being assigned to optional parameter `{0}' must be a constant or default value",
-					p.Name);
+			if (!(expr is Constant || expr is DefaultValueExpression || (expr is New && ((New) expr).IsGeneratedStructConstructor))) {
+				if (!(expr is ErrorExpression)) {
+					rc.Report.Error (1736, Location,
+						"The expression being assigned to optional parameter `{0}' must be a constant or default value",
+						p.Name);
+				}
 
 				return;
 			}

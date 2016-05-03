@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
 
 using System;
 using System.Diagnostics;
@@ -57,9 +56,15 @@ namespace Microsoft.Build.Tasks {
 				else
 					commandLine.AppendSwitch ("/delaysign-");
 			commandLine.AppendSwitchIfNotNull ("/description:", Description);
-			if (EmbedResources != null)
-				foreach (ITaskItem item in EmbedResources)
-					commandLine.AppendSwitchIfNotNull ("/embed:", item.ItemSpec);
+			if (EmbedResources != null) {
+				foreach (ITaskItem item in EmbedResources) {
+					string logical_name = item.GetMetadata ("LogicalName");
+					if (!string.IsNullOrEmpty (logical_name))
+						commandLine.AppendSwitchIfNotNull ("/embed:", string.Format ("{0},{1}", item.ItemSpec, logical_name));
+					else
+						commandLine.AppendSwitchIfNotNull ("/embed:", item.ItemSpec);
+				}
+			}
 			commandLine.AppendSwitchIfNotNull ("/evidence:", EvidenceFile);
 			commandLine.AppendSwitchIfNotNull ("/fileversion:", FileVersion);
 			commandLine.AppendSwitchIfNotNull ("/flags:", Flags);
@@ -261,4 +266,3 @@ namespace Microsoft.Build.Tasks {
 	}
 }
 
-#endif

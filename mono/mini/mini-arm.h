@@ -41,7 +41,7 @@
 
 #define MONO_ARCH_ARCHITECTURE ARM_ARCHITECTURE "," ARM_FP_MODEL
 
-#define MONO_ARCH_CPU_SPEC arm_cpu_desc
+#define MONO_ARCH_CPU_SPEC mono_arm_cpu_desc
 
 #if G_BYTE_ORDER == G_LITTLE_ENDIAN
 #define ARM_LSW_REG ARMREG_R0
@@ -118,11 +118,29 @@
 
 #define MONO_ARCH_INST_REGPAIR_REG2(desc,hreg1) ((desc) == 'l' || (desc) == 'f' || (desc) == 'g' ? ARM_MSW_REG : -1)
 
+#ifdef TARGET_WATCHOS
+#define MONO_ARCH_FRAME_ALIGNMENT 16
+#else
 #define MONO_ARCH_FRAME_ALIGNMENT 8
+#endif
 
 /* fixme: align to 16byte instead of 32byte (we align to 32byte to get 
  * reproduceable results for benchmarks */
 #define MONO_ARCH_CODE_ALIGNMENT 32
+
+/* This needs to hold both a 32 bit int and a 64 bit double */
+#define mono_unwind_reg_t guint64
+
+/* Argument marshallings for calls between gsharedvt and normal code */
+typedef enum {
+	GSHAREDVT_ARG_NONE = 0,
+	GSHAREDVT_ARG_BYVAL_TO_BYREF = 1,
+	GSHAREDVT_ARG_BYREF_TO_BYVAL = 2,
+	GSHAREDVT_ARG_BYREF_TO_BYVAL_I1 = 3,
+	GSHAREDVT_ARG_BYREF_TO_BYVAL_I2 = 4,
+	GSHAREDVT_ARG_BYREF_TO_BYVAL_U1 = 5,
+	GSHAREDVT_ARG_BYREF_TO_BYVAL_U2 = 6
+} GSharedVtArgMarshal;
 
 /* Return value marshalling for calls between gsharedvt and normal code */
 typedef enum {
@@ -156,6 +174,23 @@ typedef struct {
 	int map [MONO_ZERO_LEN_ARRAY];
 } GSharedVtCallInfo;
 
+/* Structure used by the sequence points in AOTed code */
+typedef struct {
+	gpointer ss_trigger_page;
+	gpointer bp_trigger_page;
+	guint8* bp_addrs [MONO_ZERO_LEN_ARRAY];
+} SeqPointInfo;
+
+
+#define PARAM_REGS 4
+#define DYN_CALL_STACK_ARGS 10
+
+typedef struct {
+	mgreg_t regs [PARAM_REGS + DYN_CALL_STACK_ARGS];
+	mgreg_t res, res2;
+	guint8 *ret;
+} DynCallArgs;
+
 void arm_patch (guchar *code, const guchar *target);
 guint8* mono_arm_emit_load_imm (guint8 *code, int dreg, guint32 val);
 int mono_arm_is_rotated_imm8 (guint32 val, gint *rot_amount);
@@ -164,7 +199,7 @@ void
 mono_arm_throw_exception_by_token (guint32 type_token, mgreg_t pc, mgreg_t sp, mgreg_t *int_regs, gdouble *fp_regs);
 
 gpointer
-mono_arm_start_gsharedvt_call (GSharedVtCallInfo *info, gpointer *caller, gpointer *callee, gpointer mrgctx_reg) MONO_INTERNAL;
+mono_arm_start_gsharedvt_call (GSharedVtCallInfo *info, gpointer *caller, gpointer *callee, gpointer mrgctx_reg);
 
 typedef enum {
 	MONO_ARM_FPU_NONE = 0,
@@ -198,11 +233,15 @@ struct MonoLMF {
 
 typedef struct MonoCompileArch {
 	gpointer seq_point_info_var, ss_trigger_page_var;
-	gpointer seq_point_read_var, seq_point_ss_method_var;
+	gpointer seq_point_ss_method_var;
 	gpointer seq_point_bp_method_var;
+	gpointer vret_addr_loc;
 	gboolean omit_fp, omit_fp_computed;
 	gpointer cinfo;
 	gpointer *vfp_scratch_slots [2];
+	int atomic_tmp_offset;
+	guint8 *thunks;
+	int thunks_size;
 } MonoCompileArch;
 
 #define MONO_ARCH_EMULATE_FCONV_TO_I8 1
@@ -213,39 +252,34 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_EMULATE_DIV 1
 #define MONO_ARCH_EMULATE_CONV_R8_UN 1
 #define MONO_ARCH_EMULATE_MUL_OVF 1
-//#define MONO_ARCH_BIGMUL_INTRINS 1
 
 #define ARM_FIRST_ARG_REG 0
 #define ARM_LAST_ARG_REG 3
 
 #define MONO_ARCH_USE_SIGACTION 1
 
-#if defined(__native_client__)
+#if defined(__native_client__) || defined(HOST_WATCHOS)
 #undef MONO_ARCH_USE_SIGACTION
 #endif
 
 #define MONO_ARCH_NEED_DIV_CHECK 1
 
-#define MONO_ARCH_HAVE_CREATE_DELEGATE_TRAMPOLINE
-#define MONO_ARCH_HAVE_XP_UNWIND 1
 #define MONO_ARCH_HAVE_GENERALIZED_IMT_THUNK 1
 
-#define ARM_NUM_REG_ARGS (ARM_LAST_ARG_REG-ARM_FIRST_ARG_REG+1)
-#define ARM_NUM_REG_FPARGS 0
-
 #define MONO_ARCH_HAVE_FULL_AOT_TRAMPOLINES 1
-#define MONO_ARCH_HAVE_IMT 1
 #define MONO_ARCH_HAVE_DECOMPOSE_LONG_OPTS 1
 
 #define MONO_ARCH_AOT_SUPPORTED 1
 #define MONO_ARCH_LLVM_SUPPORTED 1
-#define MONO_ARCH_THIS_AS_FIRST_ARG 1
 
 #define MONO_ARCH_GSHARED_SUPPORTED 1
 #define MONO_ARCH_DYN_CALL_SUPPORTED 1
-#define MONO_ARCH_DYN_CALL_PARAM_AREA 24
+#define MONO_ARCH_DYN_CALL_PARAM_AREA (DYN_CALL_STACK_ARGS * sizeof (mgreg_t))
 
+#ifndef MONO_CROSS_COMPILE
 #define MONO_ARCH_SOFT_DEBUG_SUPPORTED 1
+#endif
+
 #define MONO_ARCH_HAVE_EXCEPTIONS_INIT 1
 #define MONO_ARCH_HAVE_GET_TRAMPOLINES 1
 #define MONO_ARCH_HAVE_CONTEXT_SET_INT_REG 1
@@ -253,15 +287,17 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_GC_MAPS_SUPPORTED 1
 #define MONO_ARCH_HAVE_SETUP_ASYNC_CALLBACK 1
 #define MONO_ARCH_HAVE_CONTEXT_SET_INT_REG 1
+#define MONO_ARCH_HAVE_HANDLER_BLOCK_GUARD 1
 #define MONO_ARCH_HAVE_SETUP_RESUME_FROM_SIGNAL_HANDLER_CTX 1
 #define MONO_ARCH_GSHAREDVT_SUPPORTED 1
 #define MONO_ARCH_HAVE_GENERAL_RGCTX_LAZY_FETCH_TRAMPOLINE 1
 #define MONO_ARCH_HAVE_OPCODE_NEEDS_EMULATION 1
 #define MONO_ARCH_HAVE_OBJC_GET_SELECTOR 1
-#ifdef __linux__
 #define MONO_ARCH_HAVE_OP_TAIL_CALL 1
-#endif
 #define MONO_ARCH_HAVE_DUMMY_INIT 1
+#define MONO_ARCH_HAVE_SDB_TRAMPOLINES 1
+#define MONO_ARCH_HAVE_PATCH_CODE_NEW 1
+#define MONO_ARCH_HAVE_OP_GENERIC_CLASS_INIT 1
 
 #if defined(__native_client__)
 #undef MONO_ARCH_SOFT_DEBUG_SUPPORTED
@@ -269,15 +305,15 @@ typedef struct MonoCompileArch {
 #undef MONO_ARCH_HAVE_CONTEXT_SET_INT_REG
 #endif
 
-/* Matches the HAVE_AEABI_READ_TP define in mini-arm.c */
-#if defined(__ARM_EABI__) && defined(__linux__) && !defined(TARGET_ANDROID) && !defined(__native_client__)
-#define MONO_ARCH_HAVE_TLS_GET 1
-#endif
+#define MONO_ARCH_HAVE_TLS_GET (mono_arm_have_tls_get ())
+// #define MONO_ARCH_HAVE_TLS_GET_REG 1
 
 /* ARM doesn't have too many registers, so we have to use a callee saved one */
 #define MONO_ARCH_RGCTX_REG ARMREG_V5
+#define MONO_ARCH_IMT_REG MONO_ARCH_RGCTX_REG
 /* First argument reg */
 #define MONO_ARCH_VTABLE_REG ARMREG_R0
+#define MONO_ARCH_EXC_REG ARMREG_R0
 
 #define MONO_CONTEXT_SET_LLVM_EXC_REG(ctx, exc) do { (ctx)->regs [0] = (gsize)exc; } while (0)
 
@@ -302,10 +338,10 @@ gboolean
 mono_arm_thumb_supported (void);
 
 GSList*
-mono_arm_get_exception_trampolines (gboolean aot) MONO_INTERNAL;
+mono_arm_get_exception_trampolines (gboolean aot);
 
 guint8*
-mono_arm_get_thumb_plt_entry (guint8 *code) MONO_INTERNAL;
+mono_arm_get_thumb_plt_entry (guint8 *code);
 
 guint8*
 mono_arm_patchable_b (guint8 *code, int cond);
@@ -315,13 +351,19 @@ mono_arm_patchable_bl (guint8 *code, int cond);
 
 #ifdef USE_JUMP_TABLES
 guint8*
-mono_arm_load_jumptable_entry_addr (guint8 *code, gpointer *jte, ARMReg reg) MONO_INTERNAL;
+mono_arm_load_jumptable_entry_addr (guint8 *code, gpointer *jte, ARMReg reg);
 
 guint8*
-mono_arm_load_jumptable_entry (guint8 *code, gpointer *jte, ARMReg reg) MONO_INTERNAL;
+mono_arm_load_jumptable_entry (guint8 *code, gpointer *jte, ARMReg reg);
 #endif
 
 gboolean
-mono_arm_is_hard_float (void) MONO_INTERNAL;
+mono_arm_is_hard_float (void);
+
+gboolean
+mono_arm_have_tls_get (void);
+
+void
+mono_arm_unaligned_stack (MonoMethod *method);
 
 #endif /* __MONO_MINI_ARM_H__ */

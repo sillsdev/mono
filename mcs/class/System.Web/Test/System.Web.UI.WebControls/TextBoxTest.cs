@@ -88,19 +88,15 @@ namespace MonoTests.System.Web.UI.WebControls {
 		public void Defaults ()
 		{
 			Poker p = new Poker ();
-#if NET_2_0
 			Assert.AreEqual (string.Empty, p.ValidationGroup, "ValidationGroup");
 			Assert.AreEqual (false, p.CausesValidation, "CausesValidation");
-#endif
 		}
 
 		[Test]
 		public void Defaults_NotWorking ()
 		{
 			Poker p = new Poker ();
-#if NET_2_0
 			Assert.AreEqual (AutoCompleteType.None, p.AutoCompleteType, "AutoCompleteType");
-#endif
 		}
 
 		[Test]
@@ -109,17 +105,12 @@ namespace MonoTests.System.Web.UI.WebControls {
 			Poker t = new Poker ();
 			t.TextMode = TextBoxMode.MultiLine;
 			t.Text = "</textarea>";
-#if NET_4_0
 			string exp = "<textarea rows=\"2\" cols=\"20\">\r\n&lt;/textarea&gt;</textarea>";
-#else
-			string exp = "<textarea rows=\"2\" cols=\"20\">&lt;/textarea&gt;</textarea>";
-#endif
 
 			HtmlDiff.AssertAreEqual(exp, t.Render (),"MultilineRenderEscape");
 		}
 
 
-#if NET_2_0
 		[Test]
 		public void ValidationProperties ()
 		{
@@ -169,11 +160,7 @@ namespace MonoTests.System.Web.UI.WebControls {
 			t.ValidationGroup = "VG";
 			t.CausesValidation = true;
 			t.TextMode = TextBoxMode.MultiLine;
-#if NET_4_0
 			string exp = "<textarea rows=\"2\" cols=\"20\">\r\n</textarea>";
-#else
-			string exp = "<textarea rows=\"2\" cols=\"20\"></textarea>";
-#endif
 			HtmlDiff.AssertAreEqual (exp, t.Render (),"ValidationRender");
 		}
 
@@ -397,7 +384,6 @@ namespace MonoTests.System.Web.UI.WebControls {
 		{
 			WebTest.Unload ();
 		}
-#endif
 	}
 }
 

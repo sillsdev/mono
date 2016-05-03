@@ -28,9 +28,10 @@ namespace Mono.CSharp {
 		V_3 = 3,
 		V_4 = 4,
 		V_5 = 5,
-		Future = 100,
+		V_6 = 6,
+		Experimental = 100,
 
-		Default = LanguageVersion.V_5,
+		Default = LanguageVersion.V_6,
 	}
 
 	public enum RuntimeVersion
@@ -149,6 +150,8 @@ namespace Mono.CSharp {
 		public bool BreakOnInternalError;
 		#endregion
 
+		public List<string> GetResourceStrings;
+
 		public bool ShowFullPaths;
 
 		//
@@ -159,6 +162,8 @@ namespace Mono.CSharp {
 		public bool StdLib;
 
 		public RuntimeVersion StdLibRuntimeVersion;
+
+		public string RuntimeMetadataVersion;
 
 		public bool WriteMetadataOnly;
 
@@ -578,15 +583,21 @@ namespace Mono.CSharp {
 		{
 			bool valid = true;
 			foreach (string wid in text.Split (numeric_value_separator, StringSplitOptions.RemoveEmptyEntries)) {
+				var warning = wid;
+				if (warning.Length == 6 && warning [0] == 'C' && warning [1] == 'S')
+					warning = warning.Substring (2);
+
 				int id;
-				if (!int.TryParse (wid, NumberStyles.AllowLeadingWhite, CultureInfo.InvariantCulture, out id)) {
-					report.Error (1904, "`{0}' is not a valid warning number", wid);
-					valid = false;
+				if (!int.TryParse (warning, NumberStyles.AllowLeadingWhite, CultureInfo.InvariantCulture, out id)) {
 					continue;
 				}
 
-				if (report.CheckWarningCode (id, Location.Null))
+				if (report.CheckWarningCode (id, Location.Null)) {
 					action (id);
+				} else {
+					report.Error (1904, "`{0}' is not a valid warning number", wid);
+					valid = false;
+				}
 			}
 
 			return valid;
@@ -1134,11 +1145,13 @@ namespace Mono.CSharp {
 
 				switch (value.ToLowerInvariant ()) {
 				case "iso-1":
+				case "1":
 					settings.Version = LanguageVersion.ISO_1;
 					return ParseResult.Success;
 				case "default":
 					settings.Version = LanguageVersion.Default;
 					return ParseResult.Success;
+				case "2":
 				case "iso-2":
 					settings.Version = LanguageVersion.ISO_2;
 					return ParseResult.Success;
@@ -1151,12 +1164,18 @@ namespace Mono.CSharp {
 				case "5":
 					settings.Version = LanguageVersion.V_5;
 					return ParseResult.Success;
-				case "future":
-					settings.Version = LanguageVersion.Future;
+				case "6":
+					settings.Version = LanguageVersion.V_6;
 					return ParseResult.Success;
+				case "experimental":
+					settings.Version = LanguageVersion.Experimental;
+					return ParseResult.Success;
+				case "future":
+					report.Warning (8000, 1, "Language version `future' is no longer supported");
+					goto case "6";
 				}
 
-				report.Error (1617, "Invalid -langversion option `{0}'. It must be `ISO-1', `ISO-2', `3', `4', `5', `Default' or `Future'", value);
+				report.Error (1617, "Invalid -langversion option `{0}'. It must be `ISO-1', `ISO-2', Default or value in range 1 to 6", value);
 				return ParseResult.Error;
 
 			case "/codepage":
@@ -1180,6 +1199,41 @@ namespace Mono.CSharp {
 					}
 					return ParseResult.Error;
 				}
+				return ParseResult.Success;
+
+			case "runtimemetadataversion":
+				if (value.Length == 0) {
+					Error_RequiresArgument (option);
+					return ParseResult.Error;
+				}
+
+				settings.RuntimeMetadataVersion = value;
+				return ParseResult.Success;
+
+			// csc options that we don't support
+			case "/analyzer":
+			case "/appconfig":
+			case "/baseaddress":
+			case "/deterministic":
+			case "/errorendlocation":
+			case "/errorlog":
+			case "/features":
+			case "/highentropyva":
+			case "/highentropyva+":
+			case "/highentropyva-":
+			case "/link":
+			case "/moduleassemblyname":
+			case "/nowin32manifest":
+			case "/pathmap":
+			case "/pdb":
+			case "/preferreduilang":
+			case "/publicsign":
+			case "/reportanalyzer":
+			case "/ruleset":
+			case "/sqmsessionguid":
+			case "/subsystemversion":
+			case "/utf8output":
+			case "/win32manifest":
 				return ParseResult.Success;
 
 			default:
@@ -1428,7 +1482,7 @@ namespace Mono.CSharp {
 				return ParseResult.Success;
 
 			default:
-				if (arg.StartsWith ("--fatal", StringComparison.Ordinal)){
+				if (arg.StartsWith ("--fatal", StringComparison.Ordinal)) {
 					int fatal = 1;
 					if (arg.StartsWith ("--fatal=", StringComparison.Ordinal))
 						int.TryParse (arg.Substring (8), out fatal);
@@ -1453,6 +1507,20 @@ namespace Mono.CSharp {
 						settings.StdLibRuntimeVersion = RuntimeVersion.v4;
 						break;
 					}
+					return ParseResult.Success;
+				}
+
+				if (arg.StartsWith ("--getresourcestrings:", StringComparison.Ordinal)) {
+					string file = arg.Substring (21).Trim ();
+					if (file.Length < 1) {
+						Error_RequiresArgument (arg);
+						return ParseResult.Error;
+					}
+
+					if (settings.GetResourceStrings == null)
+						settings.GetResourceStrings = new List<string> ();
+
+					settings.GetResourceStrings.Add (file);
 					return ParseResult.Success;
 				}
 
@@ -1525,7 +1593,7 @@ namespace Mono.CSharp {
 				"   -help                Lists all compiler options (short: -?)\n" +
 				"   -keycontainer:NAME   The key pair container used to sign the output assembly\n" +
 				"   -keyfile:FILE        The key file used to strongname the ouput assembly\n" +
-				"   -langversion:TEXT    Specifies language version: ISO-1, ISO-2, 3, 4, 5, Default or Future\n" +
+				"   -langversion:TEXT    Specifies language version: ISO-1, ISO-2, 3, 4, 5, Default or Experimental\n" +
 				"   -lib:PATH1[,PATHn]   Specifies the location of referenced assemblies\n" +
 				"   -main:CLASS          Specifies the class with the Main method (short: -m)\n" +
 				"   -noconfig            Disables implicitly referenced assemblies\n" +

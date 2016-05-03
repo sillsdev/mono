@@ -123,7 +123,11 @@ namespace Mono.XBuild.CommandLine {
 			StreamReader reader = new StreamReader (file);
 			string slnVersion = GetSlnFileVersion (reader);
 			if (slnVersion == "12.00")
+#if XBUILD_12
 				projects.DefaultToolsVersion = "12.0";
+#else
+				projects.DefaultToolsVersion = "4.0";
+#endif
 			else if (slnVersion == "11.00")
 				projects.DefaultToolsVersion = "4.0";
 			else if (slnVersion == "10.00")
@@ -206,7 +210,7 @@ namespace Mono.XBuild.CommandLine {
 
 				if (!File.Exists (filename)) {
 					RaiseWarning (0, String.Format ("Project file {0} referenced in the solution file, " +
-								"not found. Ignoring.", filename));
+								" not found. Ignoring.", filename));
 					continue;
 				}
 
@@ -349,11 +353,9 @@ namespace Mono.XBuild.CommandLine {
 
 		void EmitBeforeImports (ProjectRootElement p, string file)
 		{
-#if NET_4_0
 			p.AddImportGroup ().AddImport ("$(MSBuildExtensionsPath)\\$(MSBuildToolsVersion)\\SolutionFile\\ImportBefore\\*").Condition =
 					"'$(ImportByWildcardBeforeSolution)' != 'false' and " +
 					"Exists('$(MSBuildExtensionsPath)\\$(MSBuildToolsVersion)\\SolutionFile\\ImportBefore')";
-#endif
 
 			string before_filename = Path.Combine (Path.GetDirectoryName (file), "before." + Path.GetFileName (file) + ".targets");
 			p.AddImportGroup ().AddImport (before_filename).Condition = String.Format ("Exists ('{0}')", before_filename);
@@ -361,11 +363,9 @@ namespace Mono.XBuild.CommandLine {
 
 		void EmitAfterImports (ProjectRootElement p, string file)
 		{
-#if NET_4_0
 			p.AddImportGroup ().AddImport ("$(MSBuildExtensionsPath)\\$(MSBuildToolsVersion)\\SolutionFile\\ImportAfter\\*").Condition =
 					"'$(ImportByWildcardAfterSolution)' != 'false' and " +
 					"Exists('$(MSBuildExtensionsPath)\\$(MSBuildToolsVersion)\\SolutionFile\\ImportAfter')";
-#endif
 
 			string after_filename = Path.Combine (Path.GetDirectoryName (file), "after." + Path.GetFileName (file) + ".targets");
 			p.AddImportGroup ().AddImport (after_filename).Condition = String.Format ("Exists ('{0}')", after_filename);

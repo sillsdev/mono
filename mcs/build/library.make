@@ -8,6 +8,18 @@
 # All the dep files now land in the same directory so we
 # munge in the library name to keep the files from clashing.
 
+# The including makefile can set the following variables:
+# LIB_MCS_FLAGS - Command line flags passed to mcs.
+# LIB_REFS      - This should be a space separated list of assembly names which are added to the mcs
+#                 command line.
+#
+
+# All dependent libs become dependent dirs for parallel builds
+# Have to rename to handle differences between assembly/directory names
+DEP_LIBS=$(patsubst System.Xml,System.XML,$(LIB_REFS))
+
+LIB_MCS_FLAGS += $(patsubst %,-r:%,$(LIB_REFS))
+
 sourcefile = $(LIBRARY).sources
 
 # If the directory contains the per profile include file, generate list file.
@@ -46,7 +58,7 @@ endif
 endif
 
 ifndef response
-response = $(depsdir)/$(PROFILE)_$(LIBRARY).response
+response = $(depsdir)/$(PROFILE)_$(LIBRARY_SUBDIR)_$(LIBRARY).response
 library_CLEAN_FILES += $(response)
 endif
 
@@ -61,18 +73,34 @@ lib_dir = lib
 endif
 
 ifdef LIBRARY_SUBDIR
-the_libdir = $(topdir)/class/$(lib_dir)/$(PROFILE)/$(LIBRARY_SUBDIR)/
+the_libdir_base = $(topdir)/class/$(lib_dir)/$(PROFILE)/$(LIBRARY_SUBDIR)/
 else
-the_libdir = $(topdir)/class/$(lib_dir)/$(PROFILE)/
+the_libdir_base = $(topdir)/class/$(lib_dir)/$(PROFILE)/
 endif
-ifdef LIBRARY_NEEDS_POSTPROCESSING
-build_libdir = fixup/$(PROFILE)/
-else
+
+ifdef RESOURCE_STRINGS
+ifdef BOOTSTRAP_PROFILE
+MCS_FLAGS_RESOURCE_STRINGS += $(RESOURCE_STRINGS:%=--getresourcestrings:%)
+endif
+endif
+
+#
+# The bare directory contains the plain versions of System and System.Xml
+#
+bare_libdir = $(the_libdir_base)bare
+
+#
+# The secxml directory contains the System version that depends on 
+# System.Xml and Mono.Security
+#
+secxml_libdir = $(the_libdir_base)secxml
+
+the_libdir = $(the_libdir_base)$(intermediate)
+
 ifdef LIBRARY_USE_INTERMEDIATE_FILE
 build_libdir = $(the_libdir)tmp/
 else
 build_libdir = $(the_libdir)
-endif
 endif
 
 the_lib   = $(the_libdir)$(LIBRARY_NAME)
@@ -110,11 +138,10 @@ endif
 
 csproj-local: csproj-library csproj-test
 
-# to overcome the issues with circular dependencies, we'll create csprojs with a counter increment. 
-# This is more amenable for use in VS solutions to reference projects rather than transient dll files in the build process.
-csproj-library:
-	config_file=`basename $(LIBRARY) .dll`-$(PROFILE).input; \
- 	for counter in 1 2 3 4 5 ; do if test -f $(topdir)/../msvc/scripts/inputs/$$config_file ; then config_file=`basename $(LIBRARY) .dll`-$(PROFILE)-$$counter.input; fi ; done ;\
+intermediate_clean=$(subst /,-,$(intermediate))
+csproj-library: 
+	config_file=`basename $(LIBRARY) .dll`-$(intermediate_clean)$(PROFILE).input; \
+	case "$(thisdir)" in *"Facades"*) config_file=Facades_$$config_file;; esac; \
 	echo $(thisdir):$$config_file >> $(topdir)/../msvc/scripts/order; \
 	(echo $(is_boot); \
 	echo $(USE_MCS_FLAGS) $(LIBRARY_FLAGS) $(LIB_MCS_FLAGS); \
@@ -231,13 +258,6 @@ dist-local: dist-default
 	for d in . $$subs ; do \
 	  case $$d in .) : ;; *) test ! -f $$d/ChangeLog || cp -p $$d/ChangeLog $(distdir)/$$d ;; esac ; done
 
-ifdef LIBRARY_NEEDS_POSTPROCESSING
-dist-local: dist-fixup
-FIXUP_PROFILES = default net_2_0
-dist-fixup:
-	$(MKINSTALLDIRS) $(distdir)/fixup $(FIXUP_PROFILES:%=$(distdir)/fixup/%)
-endif
-
 ifndef LIBRARY_COMPILE
 LIBRARY_COMPILE = $(CSCOMPILE)
 endif
@@ -260,7 +280,7 @@ endif
 $(the_lib): $(the_libdir)/.stamp
 
 $(build_lib): $(response) $(sn) $(BUILT_SOURCES) $(build_libdir:=/.stamp)
-	$(LIBRARY_COMPILE) $(LIBRARY_FLAGS) $(LIB_MCS_FLAGS) -target:library -out:$@ $(BUILT_SOURCES_cmdline) @$(response)
+	$(LIBRARY_COMPILE) $(LIBRARY_FLAGS) $(LIB_MCS_FLAGS) $(MCS_FLAGS_RESOURCE_STRINGS) -target:library -out:$@ $(BUILT_SOURCES_cmdline) @$(response)
 	$(Q) $(SN) -R $@ $(LIBRARY_SNK)
 
 ifdef LIBRARY_USE_INTERMEDIATE_FILE
@@ -287,7 +307,7 @@ all-local: $(the_lib)$(PLATFORM_AOT_SUFFIX)
 endif
 endif
 
-makefrag = $(depsdir)/$(PROFILE)_$(LIBRARY).makefrag
+makefrag = $(depsdir)/$(PROFILE)_$(LIBRARY_SUBDIR)_$(LIBRARY).makefrag
 library_CLEAN_FILES += $(makefrag)
 $(makefrag): $(sourcefile)
 #	@echo Creating $@ ...
@@ -328,9 +348,8 @@ $(makefrag) $(test_response) $(test_makefrag) $(btest_response) $(btest_makefrag
 ## Documentation stuff
 
 Q_MDOC_UP=$(if $(V),,@echo "MDOC-UP [$(PROFILE)] $(notdir $(@))";)
-# net_2_0 is needed because monodoc is only compiled in that profile
 MDOC_UP  =$(Q_MDOC_UP) \
-		MONO_PATH="$(topdir)/class/lib/$(DEFAULT_PROFILE)$(PLATFORM_PATH_SEPARATOR)$(topdir)/class/lib/net_2_0$(PLATFORM_PATH_SEPARATOR)$$MONO_PATH" $(RUNTIME) $(topdir)/class/lib/$(DEFAULT_PROFILE)/mdoc.exe \
+		MONO_PATH="$(topdir)/class/lib/$(DEFAULT_PROFILE)$(PLATFORM_PATH_SEPARATOR)$$MONO_PATH" $(RUNTIME) $(topdir)/class/lib/$(DEFAULT_PROFILE)/mdoc.exe \
 		update --delete -o Documentation/en $(the_lib)
 
 doc-update-local: $(the_libdir)/.doc-stamp
@@ -339,3 +358,6 @@ $(the_libdir)/.doc-stamp: $(the_lib)
 	$(MDOC_UP)
 	@echo "doc-stamp" > $@
 
+# Need to be here so it comes after the definition of DEP_DIRS/DEP_LIBS
+gen-deps:
+	@echo "$(DEPS_TARGET_DIR): $(DEP_DIRS) $(DEP_LIBS)" >> $(DEPS_FILE)

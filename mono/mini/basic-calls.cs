@@ -23,14 +23,14 @@ using System.Reflection;
  * the IL code looks.
  */
 
-#if MOBILE
+#if __MOBILE__
 class CallsTests
 #else
 class Tests
 #endif
 {
 
-#if !MOBILE
+#if !__MOBILE__
 	public static int Main (string[] args) {
 		return TestDriver.RunTests (typeof (Tests), args);
 	}
@@ -129,12 +129,12 @@ class Tests
 		return pass_bytes (0, 1, 2, 3, 4, 5, 6);
 	}
 
-	static int pass_sbytes (sbyte a, sbyte b, sbyte c, sbyte d, sbyte e, sbyte f, sbyte g) {
-		return (int)(a + b + c + d + e + f + g);
+	static int pass_sbytes (sbyte a, sbyte b, sbyte c, sbyte d, sbyte e, sbyte f, sbyte g, sbyte h1, sbyte h2, sbyte h3, sbyte h4) {
+		return (int)(a + b + c + d + e + f + g + h1 + h2 + h3 + h4);
 	}
 
-	public static int test_21_sparc_sbyte_argument_passing () {
-		return pass_sbytes (0, 1, 2, 3, 4, 5, 6);
+	public static int test_55_sparc_sbyte_argument_passing () {
+		return pass_sbytes (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 	}
 
 	static int pass_shorts (short a, short b, short c, short d, short e, short f, short g) {
@@ -317,5 +317,29 @@ class Tests
 			return 2;
 		return 0;
 	}
-}
 
+	public static bool arm64_stack_arg_reg_bool (object o1, object o2, object o3, object o4, object o5, object o6, object o7,
+												 bool foo, bool bar) {
+		bool res1 = bar || foo;
+		bool res2 = bar || foo;
+		return res1 | res2;
+	}
+
+	public static int arm64_stack_arg_reg_sbyte (object o1, object o2, object o3, object o4, object o5, object o6, object o7,
+												 sbyte foo, sbyte bar) {
+		int res1 = bar + foo;
+		int res2 = bar + foo;
+		return res1 + res2;
+	}
+
+	// bool argument passed on the stack and promoted to a register
+	public static int test_0_arm64_stack_arg_reg_bool () {
+	    bool res = arm64_stack_arg_reg_bool (null, null, null, null, null, null, null, false, false);
+		return res ? 1 : 0;
+	}
+
+	public static int test_0_arm64_stack_arg_reg_sbyte () {
+	    int res = arm64_stack_arg_reg_sbyte (null, null, null, null, null, null, null, -4, -7);
+		return res == -22 ? 0 : 1;
+	}
+}

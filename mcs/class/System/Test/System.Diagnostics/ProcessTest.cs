@@ -52,6 +52,16 @@ namespace MonoTests.System.Diagnostics
 			}
 		}
 
+		[Test] // Covers #26363
+		[NUnit.Framework.Category ("MobileNotWorking")]
+		public void GetProcesses_StartTime ()
+		{
+			foreach (var p in Process.GetProcesses ()) {
+				if (!p.HasExited && p.StartTime.Year < 1800)
+					Assert.Fail ("Process should not be started since the 18th century.");
+			}
+		}
+
 		[Test]
 		public void PriorityClass_NotStarted ()
 		{
@@ -94,6 +104,7 @@ namespace MonoTests.System.Diagnostics
 			}
 		}
 
+#if MONO_FEATURE_PROCESS_START
 		[Test] // Start ()
 		public void Start1_FileName_Empty ()
 		{
@@ -593,7 +604,6 @@ namespace MonoTests.System.Diagnostics
 			}
 		}
 
-#if NET_2_0		
 		[Test]
 		public void Start_UseShellExecuteWithEmptyUserName ()
 		{
@@ -629,7 +639,6 @@ namespace MonoTests.System.Diagnostics
 			} catch (Win32Exception) {
 			}
 		}
-#endif
 		
 		[Test] // Start (string, string)
 		public void Start4_FileName_Null ()
@@ -722,10 +731,7 @@ namespace MonoTests.System.Diagnostics
 			}
 		}
 
-		int bytesRead = -1;
-
-#if NET_2_0
-// Not technically a 2.0 only test, but I use lambdas, so I need gmcs
+		public int bytesRead = -1;
 
 		[Test]
 		[NUnit.Framework.Category ("MobileNotWorking")]
@@ -771,12 +777,112 @@ namespace MonoTests.System.Diagnostics
 
 			Assert.AreEqual (true, r, "Null Argument Events Raised");
 		}
-		
-		private ProcessStartInfo GetCrossPlatformStartInfo ()
+
+		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
+		public void TestEnableEventsAfterExitedEvent ()
 		{
-			return RunningOnUnix ? new ProcessStartInfo ("/bin/ls", "/") : new ProcessStartInfo ("help", "");
+			Process p = new Process ();
+			
+			p.StartInfo = GetCrossPlatformStartInfo ();
+			p.StartInfo.UseShellExecute = false;
+			p.StartInfo.RedirectStandardOutput = true;
+			p.StartInfo.RedirectStandardError = true;
+
+			var exitedCalledCounter = 0;
+			var exited = new ManualResetEventSlim ();
+			p.Exited += (object sender, EventArgs e) => {
+				exitedCalledCounter++;
+				Assert.IsTrue (p.HasExited);
+				exited.Set ();
+			};
+
+			p.EnableRaisingEvents = true;
+
+			p.Start ();
+			p.BeginErrorReadLine ();
+			p.BeginOutputReadLine ();
+			p.WaitForExit ();
+
+			exited.Wait (10000);
+			Assert.AreEqual (1, exitedCalledCounter);
+			Thread.Sleep (50);
+			Assert.AreEqual (1, exitedCalledCounter);
 		}
-		
+
+		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
+		public void TestEnableEventsBeforeExitedEvent ()
+		{
+			Process p = new Process ();
+			
+			p.StartInfo = GetCrossPlatformStartInfo ();
+			p.StartInfo.UseShellExecute = false;
+			p.StartInfo.RedirectStandardOutput = true;
+			p.StartInfo.RedirectStandardError = true;
+
+			p.EnableRaisingEvents = true;
+
+			var exitedCalledCounter = 0;
+			var exited = new ManualResetEventSlim ();
+			p.Exited += (object sender, EventArgs e) => {
+				exitedCalledCounter++;
+				Assert.IsTrue (p.HasExited);
+				exited.Set ();
+			};
+
+			p.Start ();
+			p.BeginErrorReadLine ();
+			p.BeginOutputReadLine ();
+			p.WaitForExit ();
+
+			Assert.IsTrue (exited.Wait (10000));
+			Assert.AreEqual (1, exitedCalledCounter);
+			Thread.Sleep (50);
+			Assert.AreEqual (1, exitedCalledCounter);
+		}
+
+		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
+		public void TestDisableEventsBeforeExitedEvent ()
+		{
+			Process p = new Process ();
+			
+			p.StartInfo = GetCrossPlatformStartInfo ();
+			p.StartInfo.UseShellExecute = false;
+			p.StartInfo.RedirectStandardOutput = true;
+			p.StartInfo.RedirectStandardError = true;
+
+			p.EnableRaisingEvents = false;
+
+			var exitedCalledCounter = 0;
+			p.Exited += (object sender, EventArgs e) => {
+				exitedCalledCounter++;
+			};
+
+			p.Start ();
+			p.BeginErrorReadLine ();
+			p.BeginOutputReadLine ();
+			p.WaitForExit ();
+
+			Assert.AreEqual (0, exitedCalledCounter);
+		}
+
+		ProcessStartInfo GetCrossPlatformStartInfo ()
+		{
+			if (RunningOnUnix) {
+				string path;
+#if MONODROID
+				path = "/system/bin/ls";
+#else
+				path = "/bin/ls";
+#endif
+				return new ProcessStartInfo (path, "/");
+			} else
+				return new ProcessStartInfo ("help", "");
+		}
+#endif // MONO_FEATURE_PROCESS_START
+
 		[Test]
 		public void ProcessName_NotStarted ()
 		{
@@ -797,6 +903,7 @@ namespace MonoTests.System.Diagnostics
 			Assert.IsNull (e.InnerException, "IOE inner exception should be null");
 		}
 		
+#if MONO_FEATURE_PROCESS_START
 		[Test]
 		[NUnit.Framework.Category ("MobileNotWorking")]
 		public void ProcessName_AfterExit ()
@@ -827,6 +934,131 @@ namespace MonoTests.System.Diagnostics
 			
 			Assert.IsNull (e.InnerException, "IOE inner exception should be null");
 		}
-#endif
+#endif // MONO_FEATURE_PROCESS_START
+
+		[Test]
+		public void Handle_ThrowsOnNotStarted ()
+		{
+			Process p = new Process ();
+			try {
+				var x = p.Handle;
+				Assert.Fail ("Handle should throw for unstated procs, but returned " + x);
+			} catch (InvalidOperationException) {
+			}
+		}
+
+		[Test]
+		public void HasExitedCurrent () {
+			Assert.IsFalse (Process.GetCurrentProcess ().HasExited);
+		}
+
+#if MONO_FEATURE_PROCESS_START
+		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
+		public void DisposeWithDisposedStreams ()
+		{
+			var psi = GetCrossPlatformStartInfo ();
+			psi.RedirectStandardInput = true;
+			psi.RedirectStandardOutput = true;
+			psi.UseShellExecute = false;
+
+			var p = Process.Start (psi);
+			p.StandardInput.BaseStream.Dispose ();
+			p.StandardOutput.BaseStream.Dispose ();
+			p.Dispose ();
+		}
+
+		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
+		public void StandardInputWrite ()
+		{
+			var psi = GetCrossPlatformStartInfo ();
+			psi.RedirectStandardInput = true;
+			psi.RedirectStandardOutput = true;
+			psi.UseShellExecute = false;
+
+			using (var p = Process.Start (psi)) {
+				for (int i = 0; i < 1024 * 9; ++i)
+					p.StandardInput.Write ('x');
+			}
+		}
+#endif // MONO_FEATURE_PROCESS_START
+
+		[Test]
+		public void Modules () {
+			var modules = Process.GetCurrentProcess ().Modules;
+			foreach (var a in AppDomain.CurrentDomain.GetAssemblies ()) {
+				var found = false;
+				var name = a.GetName ();
+
+				StringBuilder sb = new StringBuilder ();
+				sb.AppendFormat ("Could not found: {0} {1}\n", name.Name, name.Version);
+				sb.AppendLine ("Looked in assemblies:");
+
+				foreach (var o in modules) {
+					var m = (ProcessModule) o;
+
+					sb.AppendFormat ("   {0} {1}.{2}.{3}\n", m.FileName.ToString (),
+							m.FileVersionInfo.FileMajorPart,
+							m.FileVersionInfo.FileMinorPart,
+							m.FileVersionInfo.FileBuildPart);
+
+					if (!m.FileName.StartsWith ("[In Memory] " + name.Name))
+						continue;
+
+					var fv = m.FileVersionInfo;
+					if (fv.FileBuildPart != name.Version.Build ||
+						fv.FileMinorPart != name.Version.Minor ||
+						fv.FileMajorPart != name.Version.Major)
+						continue;
+
+					found = true;
+				}
+
+				Assert.IsTrue (found, sb.ToString ());
+			}
+		}
+
+#if MONO_FEATURE_PROCESS_START
+		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
+		[ExpectedException (typeof (InvalidOperationException))]
+		public void TestDoubleBeginOutputReadLine ()
+		{
+			using (Process p = new Process ()) {
+				p.StartInfo = GetCrossPlatformStartInfo ();
+				p.StartInfo.UseShellExecute = false;
+				p.StartInfo.RedirectStandardOutput = true;
+				p.StartInfo.RedirectStandardError = true;
+
+				p.Start ();
+
+				p.BeginOutputReadLine ();
+				p.BeginOutputReadLine ();
+
+				Assert.Fail ();
+			}
+		}
+
+		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
+		[ExpectedException (typeof (InvalidOperationException))]
+		public void TestDoubleBeginErrorReadLine ()
+		{
+			using (Process p = new Process ()) {
+				p.StartInfo = GetCrossPlatformStartInfo ();
+				p.StartInfo.UseShellExecute = false;
+				p.StartInfo.RedirectStandardOutput = true;
+				p.StartInfo.RedirectStandardError = true;
+
+				p.Start ();
+
+				p.BeginErrorReadLine ();
+				p.BeginErrorReadLine ();
+
+				Assert.Fail ();
+			}
+		}
+#endif // MONO_FEATURE_PROCESS_START
 	}
 }

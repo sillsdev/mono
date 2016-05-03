@@ -44,16 +44,10 @@ using System.Web.Configuration;
 using System.Web.Management;
 using System.Web.UI;
 using System.Web.Util;
-#if MONOWEB_DEP
 using Mono.Web.Util;
-#endif
 using System.Threading;
-#if TARGET_J2EE
-using Mainsoft.Web;
-#else
 using System.CodeDom.Compiler;
 using System.Web.Compilation;
-#endif
 
 namespace System.Web
 {	
@@ -63,53 +57,6 @@ namespace System.Web
 	{
 		static bool domainUnloading;
 		static SplitOrderedList <string, string> registeredAssemblies;
-#if TARGET_J2EE
-		static QueueManager queue_manager { get { return _runtime._queue_manager; } }
-		static TraceManager trace_manager { get { return _runtime._trace_manager; } }
-		static Cache cache { get { return _runtime._cache; } }
-		static Cache internalCache { get { return _runtime._internalCache; } }
-		static WaitCallback do_RealProcessRequest;
-		
-		QueueManager _queue_manager;
-		TraceManager _trace_manager;
-		Cache _cache;
-		Cache _internalCache;
-
-		public HttpRuntime ()
-		{
-			WebConfigurationManager.Init ();
-			_queue_manager = new QueueManager ();
-			_trace_manager = new TraceManager ();
-			_cache = new Cache ();
-			_internalCache = new Cache();
-			_internalCache.DependencyCache = _cache;
-		}
-
-		static HttpRuntime _runtimeInstance {
-			get {
-				HttpRuntime runtime = (HttpRuntime) AppDomain.CurrentDomain.GetData ("HttpRuntime");
-				if (runtime == null)
-					lock (typeof (HttpRuntime)) {
-						runtime = (HttpRuntime) AppDomain.CurrentDomain.GetData ("HttpRuntime");
-						if (runtime == null) {
-							runtime = new HttpRuntime ();
-							AppDomain.CurrentDomain.SetData ("HttpRuntime", runtime);
-						}
-					}
-				return runtime;
-			}
-		}
-		static HttpRuntime _runtime
-		{
-			get
-			{
-				if (HttpContext.Current != null)
-					return HttpContext.Current.HttpRuntimeInstance;
-				else
-					return _runtimeInstance;
-			}
-		}
-#else
 		static QueueManager queue_manager;
 		static TraceManager trace_manager;
 		static Cache cache;
@@ -127,18 +74,14 @@ namespace System.Web
 		{
 
 		}
-#endif
 
 		static HttpRuntime ()
 		{
-#if !TARGET_J2EE
 			firstRun = true;
 
 			try {
 				WebConfigurationManager.Init ();
-#if MONOWEB_DEP
 				SettingsMappingManager.Init ();
-#endif
 				runtime_section = (HttpRuntimeSection) WebConfigurationManager.GetSection ("system.web/httpRuntime");
 			} catch (Exception ex) {
 				initialException = ex;
@@ -171,7 +114,6 @@ namespace System.Web
 			cache = new Cache ();
 			internalCache = new Cache ();
 			internalCache.DependencyCache = internalCache;
-#endif
 			do_RealProcessRequest = new WaitCallback (state => {
 				try {
 					RealProcessRequest (state);
@@ -330,7 +272,6 @@ namespace System.Web
 
 		public static bool UsingIntegratedPipeline { get { return false; } }
 
-#if NET_4_5
 		public static Version IISVersion {
 			get {
 				// Null means not hosted by IIS
@@ -343,7 +284,6 @@ namespace System.Web
 				return runtime_section.TargetFramework;
 			}
 		}
-#endif
 		
 		[SecurityPermission (SecurityAction.Demand, UnmanagedCode = true)]
 		public static void Close ()
@@ -365,7 +305,6 @@ namespace System.Web
 			return next;
 		}
 
-#if !TARGET_J2EE
 		static readonly string[] app_offline_files = {"app_offline.htm", "App_Offline.htm", "APP_OFFLINE.HTM"};
 		static string app_offline_file;
 		
@@ -472,7 +411,6 @@ namespace System.Web
 					SetOfflineMode (true, offlineFile);
 			}
 		}
-#endif
 		
 		static void RealProcessRequest (object o)
 		{
@@ -492,13 +430,6 @@ namespace System.Web
 		static void Process (HttpWorkerRequest req)
 		{
 			bool error = false;
-#if TARGET_J2EE
-			HttpContext context = HttpContext.Current;
-			if (context == null)
-				context = new HttpContext (req);
-			else
-				context.SetWorkerRequest (req);
-#else
 			if (firstRun) {
 				firstRun = false;
 				if (initialException != null) {
@@ -508,12 +439,9 @@ namespace System.Web
 				SetupOfflineWatch ();
 			}
 			HttpContext context = new HttpContext (req);
-#endif
 			HttpContext.Current = context;
-#if !TARGET_J2EE
 			if (AppIsOffline (context))
 				return;
-#endif
 			
 			//
 			// Get application instance (create or reuse an instance of the correct class)
@@ -540,26 +468,10 @@ namespace System.Web
 				// Ask application to service the request
 				//
 				
-#if TARGET_J2EE
-				IHttpAsyncHandler ihah = app;
-				if (context.Handler == null)
-					ihah.BeginProcessRequest (context, new AsyncCallback (request_processed), context);
-				else
-					app.Tick ();
-				//ihh.ProcessRequest (context);
-				IHttpExtendedHandler extHandler = context.Handler as IHttpExtendedHandler;
-				if (extHandler != null && !extHandler.IsCompleted)
-					return;
-				if (context.Error is UnifyRequestException)
-					return;
-
-				ihah.EndProcessRequest (null);
-#else
 				IHttpHandler ihh = app;
 //				IAsyncResult appiar = ihah.BeginProcessRequest (context, new AsyncCallback (request_processed), context);
 //				ihah.EndProcessRequest (appiar);
 				ihh.ProcessRequest (context);
-#endif
 
 				HttpApplicationFactory.Recycle (app);
 			}
@@ -592,26 +504,7 @@ namespace System.Web
 			RealProcessRequest (request);
 		}
 
-#if TARGET_J2EE
-		//
-		// Callback to be invoked by IHttpAsyncHandler.BeginProcessRequest
-		//
-		static void request_processed (IAsyncResult iar)
-		{
-			HttpContext context = (HttpContext) iar.AsyncState;
-
-			context.Request.ReleaseResources ();
-			context.Response.ReleaseResources ();
-		}
-#endif
 		
-#if TARGET_JVM
-		[MonoNotSupported ("UnloadAppDomain is not supported")]
-		public static void UnloadAppDomain ()
-		{
-			throw new NotImplementedException ("UnloadAppDomain is not supported");
-		}
-#else
 		//
 		// Called when we are shutting down or we need to reload an application
 		// that has been modified (touch global.asax) 
@@ -632,7 +525,6 @@ namespace System.Web
 				}
 			});
 		}
-#endif
 		//
 		// Shuts down the AppDomain
 		//
@@ -652,11 +544,7 @@ namespace System.Web
 
 		static void DoUnload ()
 		{
-#if TARGET_J2EE
-			// No unload support for appdomains under Grasshopper
-#else
 			AppDomain.Unload (AppDomain.CurrentDomain);
-#endif
 		}
 
 		static string content503 = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n" +
@@ -706,7 +594,6 @@ namespace System.Web
 			return null;
 		}
 		
-#if !TARGET_J2EE
 		static internal void WritePreservationFile (Assembly asm, string genericNameBase)
 		{
 			if (asm == null)
@@ -779,7 +666,6 @@ namespace System.Web
 				assemblyMappingEnabled = enable;
 			}
 		}
-#endif // #if !TARGET_J2EE
 		
 		internal static TraceManager TraceManager {
 			get {

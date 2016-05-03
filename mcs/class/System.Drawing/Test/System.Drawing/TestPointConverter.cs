@@ -63,9 +63,6 @@ namespace MonoTests.System.Drawing
 		}
 
 		[Test]
-#if TARGET_JVM
-		[NUnit.Framework.Category ("NotWorking")]
-#endif
 		public void TestCanConvertFrom ()
 		{
 			Assert.IsTrue (ptconv.CanConvertFrom (typeof (String)), "CCF#1");
@@ -97,9 +94,6 @@ namespace MonoTests.System.Drawing
 		}
 
 		[Test]
-#if TARGET_JVM
-		[NUnit.Framework.Category ("NotWorking")]
-#endif
 		public void TestConvertFrom ()
 		{
 			Assert.AreEqual (pt, (Point) ptconv.ConvertFrom (null, CultureInfo.InvariantCulture,
@@ -259,11 +253,7 @@ namespace MonoTests.System.Drawing
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentException))]
-#else
-		[ExpectedException (typeof (NullReferenceException))]
-#endif
 		public void TestCreateInstance_CaseSensitive ()
 		{
 			Hashtable ht = new Hashtable ();
@@ -280,9 +270,6 @@ namespace MonoTests.System.Drawing
 		}
 
 		[Test]
-#if TARGET_JVM
-		[NUnit.Framework.Category ("NotWorking")]
-#endif
 		public void TestGetProperties ()
 		{
 			Attribute [] attrs;
@@ -325,9 +312,6 @@ namespace MonoTests.System.Drawing
 		}
 
 		[Test]
-#if TARGET_JVM
-		[NUnit.Framework.Category ("NotWorking")]
-#endif
 		public void ConvertFromInvariantString_string_exc_2 ()
 		{
 			try {
@@ -341,9 +325,6 @@ namespace MonoTests.System.Drawing
 		}
 
 		[Test]
-#if TARGET_JVM
-		[NUnit.Framework.Category ("NotWorking")]
-#endif
 		public void ConvertFromString_string ()
 		{
 			// save current culture
@@ -367,9 +348,6 @@ namespace MonoTests.System.Drawing
 		}
 
 		[Test]
-#if TARGET_JVM
-		[NUnit.Framework.Category ("NotWorking")]
-#endif
 		public void ConvertFromString_string_exc_2 ()
 		{
 			try {

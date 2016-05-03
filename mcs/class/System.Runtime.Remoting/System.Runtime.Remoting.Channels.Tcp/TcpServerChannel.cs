@@ -56,9 +56,6 @@ namespace System.Runtime.Remoting.Channels.Tcp
 		
 		RemotingThreadPool threadPool;
 		
-#if TARGET_JVM
-		private volatile bool stopped = false;
-#endif
 
 		void Init (IServerChannelSinkProvider serverSinkProvider)
 		{
@@ -207,18 +204,14 @@ namespace System.Runtime.Remoting.Channels.Tcp
 		{
 			try
 			{
-#if !TARGET_JVM
 				while(true)
-#else
-				while(!stopped)
-#endif
 				{
 					Socket socket = listener.AcceptSocket ();
 					ClientConnection reader = new ClientConnection (this, socket, sink);
 					try {
 						if (!threadPool.RunThread (new ThreadStart (reader.ProcessMessages)))
 							socket.Close ();
-					} catch (Exception) 
+					} catch (Exception e) 
 					{
 #if DEBUG
 						Console.WriteLine("Exception caught in TcpServerChannel.WaitForConnections during start process message: {0} {1}", e.GetType(), e.Message);
@@ -226,7 +219,7 @@ namespace System.Runtime.Remoting.Channels.Tcp
 					}
 				}
 			}
-			catch (Exception)
+			catch (Exception e)
 			{
 #if DEBUG
 				Console.WriteLine("Exception caught in TcpServerChannel.WaitForConnections, stop channel's thread : {0} {1}", e.GetType(), e.Message);
@@ -236,9 +229,6 @@ namespace System.Runtime.Remoting.Channels.Tcp
 
 		public void StartListening (object data)
 		{
-#if TARGET_JVM
-			stopped = false;
-#endif 
 			listener = new TcpListener (bindAddress, port);
 			if (server_thread == null) 
 			{
@@ -261,16 +251,9 @@ namespace System.Runtime.Remoting.Channels.Tcp
 
 		public void StopListening (object data)
 		{
-#if TARGET_JVM
-			stopped = true;
-#endif 
 			if (server_thread == null) return;
 			
-#if !TARGET_JVM
 			server_thread.Abort ();
-#else
-			server_thread.Interrupt ();
-#endif
 			listener.Stop ();
 			threadPool.Free ();
 			server_thread.Join ();

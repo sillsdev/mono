@@ -5,7 +5,6 @@
 //  Ben Maurer (bmaurer@ximian.com)
 //
 
-#if NET_2_0
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -292,9 +291,6 @@ namespace MonoTests.System.Collections.Generic
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Category ("NotWorking")]
-#endif // TARGET_JVM
 		public void DeserializeTest ()
 		{
 			MemoryStream ms = new MemoryStream ();
@@ -344,4 +340,3 @@ namespace MonoTests.System.Collections.Generic
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b };
 	}
 }
-#endif

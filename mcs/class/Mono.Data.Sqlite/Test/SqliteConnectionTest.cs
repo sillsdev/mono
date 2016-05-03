@@ -44,7 +44,26 @@ namespace MonoTests.Mono.Data.Sqlite
                 readonly static string _connectionString = "URI=file://" + _uri + ", version=3";
                 SqliteConnection _conn = new SqliteConnection ();
 
-#if NET_2_0
+		[Test]
+		public void ReleaseDatabaseFileHandles ()
+		{
+			_conn.ConnectionString = _connectionString;
+			_conn.Open ();
+			
+			SqliteCommand cmd = _conn.CreateCommand ();
+			cmd.CommandText = "PRAGMA legacy_file_format;";
+			cmd.ExecuteScalar ();
+			
+			// close connection before the command
+			_conn.Dispose ();
+			
+			// then close the command
+			cmd.Dispose ();
+			
+			// the locks should be released, and we should be able to delete the database
+			File.Delete (_uri);
+		}
+
                 [Test]
                 [ExpectedException (typeof (ArgumentNullException))]
                 public void ConnectionStringTest_Null ()
@@ -65,29 +84,6 @@ namespace MonoTests.Mono.Data.Sqlite
                     	}
                 }
 
-#else
-                [Test]
-                [ExpectedException (typeof (InvalidOperationException))]
-                public void ConnectionStringTest_Empty ()
-                {
-                        _conn.ConnectionString = "";
-                }
-
-                [Test]
-                [ExpectedException (typeof (InvalidOperationException))]
-                public void ConnectionStringTest_NoURI ()
-                {
-                        _conn.ConnectionString = "version=3";
-                }
-
-		// In 2.0 _conn.Database always returns "main"
-                [Test]
-                public void ConnectionStringTest_IgnoreSpacesAndTrim ()
-                {
-                        _conn.ConnectionString = "URI=file://xyz      , ,,, ,, version=3";
-                        Assert.AreEqual ("xyz", _conn.Database, "#1 file path is wrong");
-                }
-#endif
 				// behavior has changed, I guess
                 //[Test]
                 [Ignore ("opening a connection should not create db! though, leave for now")]

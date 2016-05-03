@@ -4,7 +4,6 @@ include ../../build/rules.make
 export __SECURITY_BOOTSTRAP_DB=$(topdir)/class/lib/$(PROFILE)
 
 LIBRARY = System.dll
-LIBRARY_USE_INTERMEDIATE_FILE = yes
 
 ifneq (2.1, $(FRAMEWORK_VERSION))
 RESOURCE_FILES = \
@@ -23,25 +22,55 @@ TEST_RESOURCES = \
 TEST_MCS_FLAGS = -r:System.Drawing.dll -r:Mono.Security.dll -r:System.Data -r:System.Xml.dll -r:System.Core.dll -nowarn:618,672,219,67,169,612 \
 	$(foreach f, $(TEST_RESOURCES), -resource:$(f),$(notdir $(f)))
 
-ifneq (1, $(FRAMEWORK_VERSION_MAJOR))
-LIB_MCS_FLAGS = -nowarn:618 -d:CONFIGURATION_2_0 -unsafe $(RESOURCE_FILES:%=-resource:%)
+REFERENCE_SOURCES_FLAGS = -d:FEATURE_PAL,SYSTEM_NAMESPACE,MONO,PLATFORM_UNIX
+ifndef NO_PROCESS_START
+REFERENCE_SOURCES_FLAGS += -d:MONO_FEATURE_PROCESS_START
+TEST_MCS_FLAGS += -d:MONO_FEATURE_PROCESS_START
+endif
+
+LIB_MCS_FLAGS = -nowarn:618 -d:CONFIGURATION_2_0 $(REFERENCE_SOURCES_FLAGS) -unsafe $(RESOURCE_FILES:%=-resource:%)
 TEST_MCS_FLAGS += -r:System.Configuration
-PROFILE_ANY_MOBILE := $(filter monotouch monodroid xammac, $(PROFILE))
-NOT_SL := $(filter net_2_0 net_4_0 net_4_5 monotouch_runtime monodroid mobile xammac, $(PROFILE))
+
+ifndef NO_THREAD_ABORT
+REFERENCE_SOURCES_FLAGS += -d:MONO_FEATURE_THREAD_ABORT
+TEST_MCS_FLAGS += -d:MONO_FEATURE_THREAD_ABORT
 endif
-ifeq (2.1, $(FRAMEWORK_VERSION))
-LIB_MCS_FLAGS += -d:INSIDE_SYSTEM
-ifeq (moonlight_raw, $(PROFILE))
-LIB_MCS_FLAGS += -d:SECURITY_DEP
+
+ifndef NO_THREAD_SUSPEND_RESUME
+REFERENCE_SOURCES_FLAGS += -d:MONO_FEATURE_THREAD_SUSPEND_RESUME
+TEST_MCS_FLAGS += -d:MONO_FEATURE_THREAD_SUSPEND_RESUME
 endif
+
+RESOURCE_STRINGS = ../../../external/referencesource/System/System.txt
+
+#
+# MOBILE_PROFILE needs SECURITY_DEP
+#
+ifdef MOBILE_PROFILE
+LIB_MCS_FLAGS += -d:INSIDE_SYSTEM -d:SECURITY_DEP
+else
+EXTERN_ALIAS_FLAGS = -d:MONO_SECURITY_ALIAS -d:MONO_X509_ALIAS
+FINAL_MCS_FLAGS = -r:System.Configuration.dll -d:CONFIGURATION_DEP
 endif
-ifeq (monotouch, $(PROFILE))
-LIB_MCS_FLAGS += -d:SECURITY_DEP
+
+#
+# Flags used to build the secxml version of System.
+#
+ifeq (secxml/, $(intermediate))
+LOCAL_MCS_FLAGS = -lib:$(bare_libdir) 
+LIB_REFS += System.Xml MonoSecurity=Mono.Security
+LIB_MCS_FLAGS += -d:SECURITY_DEP -d:XML_DEP -r:PrebuiltSystem=$(bare_libdir)/System.dll $(EXTERN_ALIAS_FLAGS)
+endif
+
+#
+# Flags used to build the final version of System (when intermediate is not defined)
+#
+ifndef intermediate
+LIB_REFS += System.Xml MonoSecurity=Mono.Security
+LIB_MCS_FLAGS += -d:SECURITY_DEP -d:XML_DEP -r:PrebuiltSystem=$(secxml_libdir)/System.dll $(EXTERN_ALIAS_FLAGS) $(FINAL_MCS_FLAGS)
 endif
 
 EXTRA_DISTFILES = \
-	System.Text.RegularExpressions/notes.txt	\
-	System.ComponentModel.Design/Changelog		\
 	Test/test-config-file				\
 	Test/test-config-file-net-2.0			\
 	Test/System.Security.Cryptography.X509Certificates/pkits/ChangeLog	\
@@ -51,115 +80,74 @@ EXTRA_DISTFILES = \
 	$(RESOURCE_FILES)				\
 	$(TEST_RESOURCES)
 
-lib_file := $(wildcard ../lib/$(PROFILE)/System.dll)
-ifdef lib_file
-ifdef NOT_SL
-LIB_MCS_FLAGS += -r:PrebuiltSystem=$(lib_file)
-endif
-else
-USE_BOOT_COMPILE = yes
-endif
-
-ifdef USE_BOOT_COMPILE
-ifndef PROFILE_MCS_HAS_BOOTSTRAP_FALLBACK
-LIBRARY_COMPILE = $(BOOT_COMPILE)
-endif
-endif
-
-# Because System.dll, Mono.Security.dll System.Xml.dll have a cyclic dependency, we need a two-pass build.
-# 1st pass - build System.dll without System.Xml.dll or Mono.Security.dll or System.Configuration.dll references
-# 2nd pass - build System.dll with System.Xml.dll and Mono.Security.dll or System.Configuration.dll references
-
-CYCLIC_DEPS :=
-CYCLIC_DEP_FILES :=
-
-# define cyclic-dep
-# # Note the '$$' -- those are to be delayed till the eval
-# CYCLIC_DEPS += $1
-# ifndef USE_BOOT_COMPILE
-# FILE_$2 := $$(wildcard ../lib/$(PROFILE)/$1)
-# endif
-# ifdef FILE_$2
-# CYCLIC_DEP_FILES += $$(FILE_$2)
-# LIB_MCS_FLAGS += -d:$2 -r:$1
-# endif
-# endef
-
-ifneq (2.1, $(FRAMEWORK_VERSION))
-# $(eval $(call cyclic-dep,System.Xml.dll,XML_DEP))
-CYCLIC_DEPS += System.Xml.dll
-ifndef USE_BOOT_COMPILE
-FILE_XML_DEP := $(wildcard ../lib/$(PROFILE)/System.Xml.dll)
-endif
-ifdef FILE_XML_DEP
-CYCLIC_DEP_FILES += $(FILE_XML_DEP)
-LIB_MCS_FLAGS += -d:XML_DEP -r:System.Xml.dll
-endif
-
-endif
-
-ifdef NOT_SL
-# $(eval $(call cyclic-dep,Mono.Security.dll,SECURITY_DEP))
-CYCLIC_DEPS += Mono.Security.dll
-ifndef USE_BOOT_COMPILE
-FILE_SECURITY_DEP := $(wildcard ../lib/$(PROFILE)/Mono.Security.dll)
-endif
-ifdef FILE_SECURITY_DEP
-CYCLIC_DEP_FILES += $(FILE_SECURITY_DEP)
-LIB_MCS_FLAGS += -d:SECURITY_DEP -r:MonoSecurity=Mono.Security.dll
-endif
-
-ifndef PROFILE_ANY_MOBILE
-# $(eval $(call cyclic-dep,System.Configuration.dll,CONFIGURATION_DEP))
-CYCLIC_DEPS += System.Configuration.dll
-ifndef USE_BOOT_COMPILE
-FILE_CONFIGURATION_DEP := $(wildcard ../lib/$(PROFILE)/System.Configuration.dll)
-endif
-ifdef FILE_CONFIGURATION_DEP
-CYCLIC_DEP_FILES += $(FILE_CONFIGURATION_DEP)
-LIB_MCS_FLAGS += -d:CONFIGURATION_DEP -r:System.Configuration.dll
-endif
-endif
-
-endif
-
-MISSING_DEPS := $(filter-out $(notdir $(CYCLIC_DEP_FILES)), $(CYCLIC_DEPS))
-ifdef MISSING_DEPS
-NO_SIGN_ASSEMBLY = yes
-NO_INSTALL = yes
-all-local: handle-missing-deps
-.PHONY: handle-missing-deps
-handle-missing-deps:
-	@echo "** Warning: System.dll built without parts that depend on: $(MISSING_DEPS)"
-	@for f in $(MISSING_DEPS:%=../lib/$(PROFILE)/%); do \
-	  test ! -f $$f || { echo "   purging stale $$f"; rm -f $$f; }; done
-endif
-
 include ../../build/library.make
+
+system_library_deps := \
+	$(secxml_libdir)/System.dll 		\
+	$(the_libdir_base)System.Xml.dll	\
+	$(the_libdir_base)Mono.Security.dll	\
+	$(bare_libdir)/System.dll
+
+ifndef MOBILE_PROFILE
+system_library_deps += $(the_libdir_base)System.Configuration.dll	
+endif
+
+artifacts = $(system_library_deps) 			\
+	$(bare_libdir)/System.Xml.dll			\
+	$(the_libdir_base)Mono.Security.dll		\
+	$(the_libdir_base)System.Configuration.dll
+
+.NOTPARALLEL: $(system_library_deps)
+
+$(the_libdir_base)System.dll: $(system_library_deps) ../Mono.Security/Makefile
+
+ifeq (bare/,$(intermediate))
+build-bare:
+else
+$(bare_libdir)/System.dll:
+	$(MAKE) intermediate=bare/ $(bare_libdir)/System.dll
+endif
+
+ifneq (secxml/,$(intermediate))
+$(secxml_libdir)/System.dll: $(bare_libdir)/System.dll $(bare_libdir)/System.Xml.dll $(the_libdir_base)Mono.Security.dll $(bare_libdir)/System.dll
+	$(MAKE) intermediate=secxml/ $(secxml_libdir)/System.dll
+else
+build-sec:
+endif
+
+$(the_libdir_base)System.Xml.dll:
+	(cd ../System.XML; $(MAKE) $@)
+
+$(bare_libdir)/System.Xml.dll:
+	(cd ../System.XML; $(MAKE) $@)
+
+$(the_libdir_base)Mono.Security.dll: ../Mono.Security/Makefile
+	(cd ../Mono.Security; $(MAKE))
+
+$(the_libdir_base)System.Configuration.dll:
+	(cd ../System.Configuration; $(MAKE))
 
 $(build_lib): $(CYCLIC_DEP_FILES)
 
 $(test_lib): $(test_lib).config $(TEST_RESOURCES)
 
-ifeq (net_2_0, $(PROFILE))
-$(test_lib).config: Test/test-config-file-net-2.0
-	cp $< $@
-else
 $(test_lib).config: Test/test-config-file
 	cp $< $@
-endif
 
-CLEAN_FILES = $(test_lib).config
-
-# run the PKITS tests only if the data was installed/activated, otherwise ignore them
-ifeq (net_2_0, $(PROFILE))
-pkits_files := $(wildcard Test/System.Security.Cryptography.X509Certificates/pkits/hint)
-ifndef pkits_files
-TEST_HARNESS_EXCLUDES = -exclude=$(PLATFORM_TEST_HARNESS_EXCLUDES)NotWorking,ValueAdd,CAS,InetAccess,PKITS
-TEST_HARNESS_EXCLUDES_ONDOTNET = -exclude=$(PLATFORM_TEST_HARNESS_EXCLUDES)NotDotNet,CAS,PKITS
-endif
-endif
+CLEAN_FILES = $(test_lib).config $(bare_libdir)/System.dll $(secxml_libdir)/System.dll $(bare_libdir)/System.dll.mdb $(secxml_libdir)/System.dll.mdb
 
 # Helper target to run the perl regex test suite
 regex-check:
 	$(MAKE) check FIXTURE=System.Text.RegularExpressions.PerlTest
+
+#Debuging target
+fresh: clean
+	rm -rf ../../class/lib/$(PROFILE)/bare ../../class/lib/$(PROFILE)/bare/ $(system_library_deps)
+
+ifndef intermediate
+ifneq ($(PROFILE),basic)
+csproj-local:
+	$(MAKE) csproj-local intermediate=bare/
+	$(MAKE) csproj-local intermediate=secxml/
+endif
+endif

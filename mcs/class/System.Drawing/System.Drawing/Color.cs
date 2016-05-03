@@ -38,11 +38,8 @@ using System.Runtime.InteropServices;
 
 namespace System.Drawing 
 {
+#if !MONOTOUCH && !MONOMAC
 	[TypeConverter(typeof(ColorConverter))]
-#if ONLY_1_1
-	[ComVisible (true)]
-#endif
-#if !TARGET_JVM
 	[Editor ("System.Drawing.Design.ColorEditor, " + Consts.AssemblySystem_Drawing_Design, typeof (System.Drawing.Design.UITypeEditor))]
 #endif
 	[Serializable]
@@ -71,29 +68,6 @@ namespace System.Drawing
 		// however it's bad to keep a string (reference) in a struct
 		internal string name;
 // #endif
-#if TARGET_JVM
-		internal java.awt.Color NativeObject {
-			get {
-				return new java.awt.Color (R, G, B, A);
-			}
-		}
-
-		internal static Color FromArgbNamed (int alpha, int red, int green, int blue, string name, KnownColor knownColor)
-		{
-			Color color = FromArgb (alpha, red, green, blue);
-			color.state = (short) (ColorType.Known|ColorType.Named);
-			color.name = KnownColors.GetName (knownColor);
-			color.knownColor = (short) knownColor;
-			return color;
-		}
-
-		internal static Color FromArgbSystem (int alpha, int red, int green, int blue, string name, KnownColor knownColor)
-		{
-			Color color = FromArgbNamed (alpha, red, green, blue, name, knownColor);
-			color.state |= (short) ColorType.System;
-			return color;
-		}
-#endif
 
 		public string Name {
 			get {

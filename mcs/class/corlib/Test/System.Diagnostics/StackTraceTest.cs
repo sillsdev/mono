@@ -133,10 +133,6 @@ namespace MonoTests.System.Diagnostics {
 		}
 
 		[Test]
-#if !NET_2_0
-		// on MS .NET 1.x, ThreadState after Start() is Unstarted
-		[Category ("NotDotNet")]
-#endif
 		[ExpectedException (typeof (ThreadStateException))]
 		[Ignore ("Not supported in Mono")]
 		public void StackTrace_Thread_NotSuspended ()
@@ -146,6 +142,7 @@ namespace MonoTests.System.Diagnostics {
 			new StackTrace (t, true);
 		}
 
+#if MONO_FEATURE_THREAD_SUSPEND_RESUME
 		[Test]
 		[Ignore ("Not supported in Mono")]
 		public void StackTrace_Thread_Suspended ()
@@ -155,6 +152,7 @@ namespace MonoTests.System.Diagnostics {
 			t.Suspend ();
 			new StackTrace (t, true);
 		}
+#endif
 
 		[Test]
 		public void FrameCount ()
@@ -179,7 +177,6 @@ namespace MonoTests.System.Diagnostics {
 		{
 			Assert.AreEqual (frame, trace.GetFrame (0), "0");
 		}
-#if NET_2_0
 		[Test]
 		public void GetFrames ()
 		{
@@ -190,7 +187,6 @@ namespace MonoTests.System.Diagnostics {
 				Assert.AreEqual (sf [i], st.GetFrame (i), i.ToString ());
 			}
 		}
-#endif
 		[Test]
 		public void UnthrownException ()
 		{

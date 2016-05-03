@@ -1,7 +1,7 @@
 using System;
 
 //
-// Parser conditional and cast expression tests
+// parser conditional and cast expression tests
 //
 
 class A<T>
@@ -30,6 +30,18 @@ public class ConditionalParsing
 	
 	struct S
 	{
+	}
+
+	struct MyTestStruct : IDisposable
+	{
+		public void Dispose ()
+		{
+		}
+
+		public static implicit operator MyTestStruct (int i)
+		{
+			return new MyTestStruct ();
+		}
 	}
 	
 	void Test_1 (bool a)
@@ -124,8 +136,47 @@ public class ConditionalParsing
 		return arg ?? (Helper<int>);
 	}
 
+	void Test_16 ()
+	{
+		bool? b = Test (1, arg:2);
+	}
+
+	void Test_17 ()
+	{
+		{
+			using (MyTestStruct? mts = (int?) 1)
+			{
+			}
+		}
+	}
+
+	void Test_18 (bool b, Action a)
+	{
+		var e = b ? () => { } : a;
+	}
+
+	void Test_19 (int[,] table)
+	{
+		var x = 1 > 0  ? table[5, 1] : 0;
+	}
+
+	void Test_20 ()
+	{
+		var t = (Object)string.Empty;
+	}
+
+	void Test_21 ()
+	{
+		var t = (Int32)sbyte.MaxValue;
+	}
+
 	static void Helper<T> (T arg)
-	{		
+	{
+	}
+
+	static bool Test (object b, int arg)
+	{
+		return false;
 	}
 
 	public static void Main ()

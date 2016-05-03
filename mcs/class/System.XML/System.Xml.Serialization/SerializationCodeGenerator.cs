@@ -255,9 +255,7 @@ namespace System.Xml.Serialization
 					GenerateWriter (writerClassName, maps);
 				WriteLine ("");
 				
-#if NET_2_0
 				GenerateContract (maps);
-#endif
 
 				WriteLineUni ("}");
 				WriteLine ("");
@@ -295,7 +293,6 @@ namespace System.Xml.Serialization
 		// Contract generation
 		//
 		
-#if NET_2_0
 		public void GenerateContract (ArrayList generatedMaps)
 		{
 			// Write the base serializer
@@ -440,7 +437,6 @@ namespace System.Xml.Serialization
 			WriteLine ("");
 			WriteLine ("#endif");
 		}
-#endif
 
 
 		//*******************************************************
@@ -580,7 +576,7 @@ namespace System.Xml.Serialization
 				WriteLine (string.Empty);
 			}
 
-			WriteLine ("string " + GetGetEnumValueName (map) + " (" + map.TypeData.CSharpFullName + " val)");
+			WriteLine ("string " + GetGetEnumValueName (map) + " (" + GetTypeFullName (map.TypeData) + " val)");
 			WriteLineInd ("{");
 
 
@@ -593,19 +589,13 @@ namespace System.Xml.Serialization
 				// FromEnum actually covers this case too, but we save some cycles here
 				WriteLine ("if (val.ToString () == \"0\") return string.Empty;");
 				Write ("return FromEnum ((long) val, " + xmlNamesArray + ", " + valuesArray);
-#if NET_2_0
 				_writer.Write (", typeof (");
 				_writer.Write (map.TypeData.CSharpFullName);
 				_writer.Write (").FullName");
-#endif
 				_writer.Write (')'); // close FromEnum method call
 				WriteUni (";"); // end statement
 			} else {
-#if NET_2_0
 				WriteLine ("default: throw CreateInvalidEnumValueException ((long) val, typeof (" + map.TypeData.CSharpFullName + ").FullName);");
-#else
-				WriteLine ("default: return ((long)val).ToString(CultureInfo.InvariantCulture);");
-#endif
 			}
 			
 			WriteLineUni ("}");
@@ -616,7 +606,7 @@ namespace System.Xml.Serialization
 		
 		void GenerateWriteObject (XmlTypeMapping typeMap)
 		{
-			WriteLine ("void " + GetWriteObjectName (typeMap) + " (" + typeMap.TypeData.CSharpFullName + " ob, string element, string namesp, bool isNullable, bool needType, bool writeWrappingElem)");
+			WriteLine ("void " + GetWriteObjectName (typeMap) + " (" + GetTypeFullName (typeMap.TypeData) + " ob, string element, string namesp, bool isNullable, bool needType, bool writeWrappingElem)");
 			WriteLineInd ("{");
 			
 			PushHookContext ();
@@ -653,9 +643,9 @@ namespace System.Xml.Serialization
 			if (typeMap.TypeData.SchemaType == SchemaTypes.XmlNode)
 			{
 				if (_format == SerializationFormat.Literal)
-					WriteLine ("WriteElementLiteral (ob, \"\", \"\", true, false);");
+					WriteLine ("WriteElementLiteral (ob, \"\", \"\", true, " + GetLiteral(typeMap.IsAny) + ");");
 				else 
-					WriteLine ("WriteElementEncoded (ob, \"\", \"\", true, false);");
+					WriteLine ("WriteElementEncoded (ob, \"\", \"\", true, " + GetLiteral(typeMap.IsAny) + ");");
 					
 				GenerateEndHook ();
 				WriteLineUni ("}");
@@ -666,7 +656,7 @@ namespace System.Xml.Serialization
 
 			if (typeMap.TypeData.SchemaType == SchemaTypes.XmlSerializable)
 			{
-				WriteLine ("WriteSerializable (ob, element, namesp, isNullable);");
+				WriteLine ("WriteSerializable (ob, element, namesp, isNullable, " + GetLiteral(!typeMap.IsAny) + ");");
 				
 				GenerateEndHook ();
 				WriteLineUni ("}");
@@ -971,7 +961,7 @@ namespace System.Xml.Serialization
 		
 		void GenerateWriteAnyElementContent (XmlTypeMapMemberAnyElement member, string memberValue)
 		{
-			bool singleElement = (member.TypeData.Type == typeof (XmlElement));
+			bool singleElement = (member.TypeData.Type == typeof (XmlElement) || member.TypeData.Type == typeof (XmlNode));
 			string var, var2;
 			
 			var = GetObTempVar ();
@@ -1242,8 +1232,15 @@ namespace System.Xml.Serialization
 				else 
 					return mem + " != " + GetLiteral (member.DefaultValue);
 			}
-			else if (member.IsOptionalValueType)
-				return ob + ".@" + member.Name + "Specified";
+			else if (member.HasSpecified) {
+				var sb = new StringBuilder ();
+				sb.AppendFormat ("{0}.@{1}Specified", ob, member.Name);
+				if (member.HasShouldSerialize)
+					sb.AppendFormat (" && {0}.@ShouldSerialize{1} ()", ob, member.Name);
+				return sb.ToString ();
+			} else if (member.HasShouldSerialize)
+				return ob + ".@ShouldSerialize" + member.Name + " ()";
+
 			return null;
 		}
 
@@ -1371,9 +1368,11 @@ namespace System.Xml.Serialization
 						else
 							WriteLine ("return ReadXmlNode (false);");
 					} else {
-						WriteLineInd ("if (Reader.LocalName != " + GetLiteral (typeMap.ElementName) + " || Reader.NamespaceURI != " + GetLiteral (typeMap.Namespace) + ")");
-						WriteLine ("throw CreateUnknownNodeException();");
-						Unindent ();
+						if (!typeMap.IsAny) {
+							WriteLineInd ("if (Reader.LocalName != " + GetLiteral (typeMap.ElementName) + " || Reader.NamespaceURI != " + GetLiteral (typeMap.Namespace) + ")");
+							WriteLine ("throw CreateUnknownNodeException();");
+							Unindent ();
+						}
 
 						WriteLine ("return " + GetReadObjectCall (typeMap, GetLiteral(typeMap.IsNullable), "true") + ";");
 					}
@@ -1384,12 +1383,15 @@ namespace System.Xml.Serialization
 					WriteLine ("Reader.MoveToContent();");
 					WriteLine ("if (Reader.NodeType == System.Xml.XmlNodeType.Element) ");
 					WriteLineInd ("{");
-					WriteLineInd ("if (Reader.LocalName == " + GetLiteral(typeMap.ElementName) + " && Reader.NamespaceURI == " + GetLiteral (typeMap.Namespace) + ")");
+					if (!typeMap.IsAny)
+						WriteLineInd ("if (Reader.LocalName == " + GetLiteral(typeMap.ElementName) + " && Reader.NamespaceURI == " + GetLiteral (typeMap.Namespace) + ")");
 					WriteLine ("ob = ReadReferencedElement();");
 					Unindent ();
-					WriteLineInd ("else ");
-					WriteLine ("throw CreateUnknownNodeException();");
-					Unindent ();
+					if (!typeMap.IsAny) {
+						WriteLineInd ("else ");
+						WriteLine ("throw CreateUnknownNodeException();");
+						Unindent ();
+					}
 					WriteLineUni ("}");
 					WriteLineInd ("else ");
 					WriteLine ("UnknownNode(null);");
@@ -1489,7 +1491,7 @@ namespace System.Xml.Serialization
 		{
 			string isNullable;
 			if (_format == SerializationFormat.Literal) {
-				WriteLine ("public " + typeMap.TypeData.CSharpFullName + " " + GetReadObjectName (typeMap) + " (bool isNullable, bool checkType)");
+				WriteLine ("public " + GetTypeFullName(typeMap.TypeData) + " " + GetReadObjectName (typeMap) + " (bool isNullable, bool checkType)");
 				isNullable = "isNullable";
 			}
 			else {
@@ -1943,14 +1945,12 @@ namespace System.Xml.Serialization
 						{
 							XmlTypeMapMemberElement mem = (XmlTypeMapMemberElement) map.XmlTextCollector;
 							XmlTypeMapElementInfo info = (XmlTypeMapElementInfo) mem.ElementInfo [0];
+							string str = GetStrTempVar ();
+							WriteLine ("string " + str + " = Reader.ReadString();");
 							if (info.TypeData.Type == typeof (string))
-								GenerateSetMemberValue (mem, ob, "ReadString (" + GenerateGetMemberValue (mem, ob, isValueList) + ")", isValueList);
+								GenerateSetMemberValue (mem, ob, str, isValueList);
 							else {
-								WriteLineInd ("{");
-								string str = GetStrTempVar ();
-								WriteLine ("string " + str + " = Reader.ReadString();");
 								GenerateSetMemberValue (mem, ob, GenerateGetValueFromXmlString (str, info.TypeData, info.MappedType, info.IsNullable), isValueList);
-								WriteLineUni ("}");
 							}
 							GenerateEndHook ();
 						}
@@ -2132,7 +2132,7 @@ namespace System.Xml.Serialization
 			}
 			else {
 				WriteLine (ob + ".@" + member.Name + " = " + value + ";");
-				if (member.IsOptionalValueType) {
+				if (member.IsOptionalValueType && member.IsValueSpecifiedSettable ()) {
 					string val = initializingMember ? "false" : "true";
 					WriteLine (ob + "." + member.Name + "Specified = " + val + ";");
 				}
@@ -2466,10 +2466,14 @@ namespace System.Xml.Serialization
 			WriteLine ("Reader.MoveToContent ();");
 			WriteLine ("if (Reader.NodeType == XmlNodeType.Element)");
 			WriteLineInd ("{");
-			WriteLine ("if (Reader.LocalName == " + GetLiteral (typeMap.ElementName) + " && Reader.NamespaceURI == " + GetLiteral (typeMap.Namespace) + ")");
+			if (!typeMap.IsAny)
+				WriteLineInd ("if (Reader.LocalName == " + GetLiteral (typeMap.ElementName) + " && Reader.NamespaceURI == " + GetLiteral (typeMap.Namespace) + ")");
 			WriteLine (String.Format ("\treturn ({0}) ReadSerializable (({0}) Activator.CreateInstance(typeof({0}), true));", typeMap.TypeData.CSharpFullName));
-			WriteLine ("else");
-			WriteLine ("\tthrow CreateUnknownNodeException ();");
+			Unindent ();
+			if (!typeMap.IsAny) {
+				WriteLine ("else");
+				WriteLine ("\tthrow CreateUnknownNodeException ();");
+			}
 			WriteLineUni ("}");
 			WriteLine ("else UnknownNode (null);");
 			WriteLine ("");
@@ -2659,7 +2663,7 @@ namespace System.Xml.Serialization
 		
 		string GetRootTypeName ()
 		{
-			if (_typeMap is XmlTypeMapping) return ((XmlTypeMapping)_typeMap).TypeData.CSharpFullName;
+			if (_typeMap is XmlTypeMapping) return GetTypeFullName (((XmlTypeMapping)_typeMap).TypeData);
 			else return "object[]";
 		}
 
@@ -2769,10 +2773,7 @@ namespace System.Xml.Serialization
 
 		string GetCast (TypeData td, string val)
 		{
-			if (td.IsNullable && td.IsValueType)
-				return "((" + td.CSharpFullName + "?) " + val + ")";
-			else
-				return "((" + td.CSharpFullName + ") " + val + ")";
+			return "((" + GetTypeFullName (td) + ") " + val + ")";
 		}
 
 		string GetCast (Type td, string val)
@@ -2782,12 +2783,19 @@ namespace System.Xml.Serialization
 
 		string GetTypeOf (TypeData td)
 		{
-			return "typeof(" + td.CSharpFullName + ")";
+			return "typeof(" + GetTypeFullName (td) + ")";
 		}
 		
 		string GetTypeOf (Type td)
 		{
 			return "typeof(" + ToCSharpFullName (td) + ")";
+		}
+
+		string GetTypeFullName (TypeData td) {
+			if (td.IsNullable && td.IsValueType)
+				return td.CSharpFullName + "?";
+
+			return td.CSharpFullName;
 		}
 		
 		string GetLiteral (object ob)
@@ -2796,9 +2804,7 @@ namespace System.Xml.Serialization
 			if (ob is string) return "\"" + ob.ToString().Replace("\"","\"\"") + "\"";
 			if (ob is char) return (char) ob == '\'' ? "'\\''" : "'" + ob.ToString () + "'";
 			if (ob is DateTime) return "new DateTime (" + ((DateTime) ob).Ticks + ")";
-#if NET_2_0
 			if (ob is DateTimeOffset) return "new DateTimeOffset (" + ((DateTimeOffset) ob).Ticks + ")";
-#endif
 			if (ob is TimeSpan) return "new TimeSpan (" + ((TimeSpan) ob).Ticks + ")";
 			if (ob is bool) return ((bool)ob) ? "true" : "false";
 			if (ob is XmlQualifiedName) {
@@ -2907,9 +2913,7 @@ namespace System.Xml.Serialization
 		public string WriterClassName;
 		public string WriteMethodName;
 		public string Namespace;
-#if NET_2_0		
 		public string SerializerClassName;
-#endif		
 		public string BaseSerializerClassName;
 		public string ImplementationClassName;
 	}

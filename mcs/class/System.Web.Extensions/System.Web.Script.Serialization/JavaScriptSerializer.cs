@@ -66,11 +66,7 @@ namespace System.Web.Script.Serialization
 
 			ScriptingJsonSerializationSection section = (ScriptingJsonSerializationSection) ConfigurationManager.GetSection ("system.web.extensions/scripting/webServices/jsonSerialization");
 			if (section == null) {
-#if NET_3_5
 				_maxJsonLength = 2097152;
-#else
-				_maxJsonLength = 102400;
-#endif
 				_recursionLimit = 100;
 			} else {
 				_maxJsonLength = section.MaxJsonLength;
@@ -133,11 +129,7 @@ namespace System.Web.Script.Serialization
 			return (T) ConvertToType (obj, typeof (T));
 		}
 
-#if NET_4_0
 		public
-#else
-		internal
-#endif
 		object ConvertToType (object obj, Type targetType)
 		{
 			if (obj == null)
@@ -180,16 +172,20 @@ namespace System.Web.Script.Serialization
 				return c.ConvertFrom (obj);
 			}
 
-			/*
-			 * Take care of the special case whereas in JSON an empty string ("") really means 
-			 * an empty value 
-			 * (see: https://bugzilla.novell.com/show_bug.cgi?id=328836)
-			 */
-			if ((targetType.IsGenericType) && (targetType.GetGenericTypeDefinition() == typeof(Nullable<>)))
-			{
-				string s = obj as String;
-				if (String.IsNullOrEmpty(s))
+			if ((targetType.IsGenericType) && (targetType.GetGenericTypeDefinition () == typeof (Nullable<>))) {
+				if (obj is String) {
+					/*
+					 * Take care of the special case whereas in JSON an empty string ("") really means 
+					 * an empty value 
+					 * (see: https://bugzilla.novell.com/show_bug.cgi?id=328836)
+					 */
+					if(String.IsNullOrEmpty ((String)obj))
 						return null;
+				} else if (c.CanConvertFrom (typeof (string))) {
+					TypeConverter objConverter = TypeDescriptor.GetConverter (obj);
+					string s = objConverter.ConvertToInvariantString (obj);
+					return c.ConvertFromInvariantString (s);
+				}
 			}
 
 			return Convert.ChangeType (obj, targetType);
@@ -197,6 +193,14 @@ namespace System.Web.Script.Serialization
 
 		public T Deserialize<T> (string input) {
 			return ConvertToType<T> (DeserializeObjectInternal(input));
+		}
+
+		public object Deserialize (string input, Type targetType) {
+			object obj = DeserializeObjectInternal (input);
+
+			if (obj == null) return null;
+
+			return ConvertToType (obj, targetType);
 		}
 
 		static object Evaluate (object value) {

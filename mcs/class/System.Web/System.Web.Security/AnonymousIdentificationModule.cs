@@ -28,7 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.ComponentModel;
@@ -114,27 +113,7 @@ namespace System.Web.Security {
 			}
 		}
 
-#if TARGET_JVM
-		static AnonymousIdentificationSection Config
-		{
-			get
-			{
-				AnonymousIdentificationSection config = (AnonymousIdentificationSection) AppDomain.CurrentDomain.GetData ("Anonymous.Config");
-				if (config == null) {
-					lock (typeof (AnonymousIdentificationModule)) {
-						config = (AnonymousIdentificationSection) AppDomain.CurrentDomain.GetData ("Anonymous.Config");
-						if (config == null)
-							config = (AnonymousIdentificationSection) WebConfigurationManager.GetSection ("system.web/anonymousIdentification");
-						AppDomain.CurrentDomain.SetData ("Anonymous.Config", config);
-					}
-				}
-				return config;
-			}
-		}
-#else
 		static AnonymousIdentificationSection Config = (AnonymousIdentificationSection) WebConfigurationManager.GetSection ("system.web/anonymousIdentification");
-#endif
 	}
 }
-#endif
 

@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Drawing;
@@ -144,9 +143,6 @@ namespace MonoTests.System.Web.UI.WebControls
 
 		[Test]
 		[Category ("NunitWeb")]
-#if TARGET_JVM
-		[Ignore ("TD #7024")]
-#endif
 		public void ActiveStepIndex () {
 			new WebTest (PageInvoker.CreateOnLoad (ActiveStepIndex_Load)).Run ();
 		}
@@ -917,4 +913,3 @@ namespace MonoTests.System.Web.UI.WebControls
 	}
 }
 
-#endif

@@ -20,7 +20,6 @@ namespace MonoTests.System.Web.Compilation {
 
 	}
 
-#if NET_2_0
 	public class BindTestDataItem
 	{
 		int data;
@@ -42,7 +41,6 @@ namespace MonoTests.System.Web.Compilation {
 			return new List <BindTestDataItem> {new BindTestDataItem (0), new BindTestDataItem (1)};
 		}
 	}
-#endif
 	
 	[TestFixture]
 	public class TemplateControlCompilerTest
@@ -62,7 +60,6 @@ namespace MonoTests.System.Web.Compilation {
 			WebTest.CopyResource (GetType (), "DuplicateControlsInClientComment.aspx", "DuplicateControlsInClientComment.aspx");
 			WebTest.CopyResource (GetType (), "TagsNestedInClientTag.aspx", "TagsNestedInClientTag.aspx");
 			WebTest.CopyResource (GetType (), "ConditionalClientComments.aspx", "ConditionalClientComments.aspx");
-#if NET_2_0
 			WebTest.CopyResource (GetType (), "InvalidPropertyBind1.aspx", "InvalidPropertyBind1.aspx");
 			WebTest.CopyResource (GetType (), "InvalidPropertyBind2.aspx", "InvalidPropertyBind2.aspx");
 			WebTest.CopyResource (GetType (), "InvalidPropertyBind3.aspx", "InvalidPropertyBind3.aspx");
@@ -83,20 +80,16 @@ namespace MonoTests.System.Web.Compilation {
 			WebTest.CopyResource (GetType (), "NestedParserFileText.aspx", "NestedParserFileText.aspx");
 			WebTest.CopyResource (GetType (), "TagWithExpressionWithinAttribute.aspx", "TagWithExpressionWithinAttribute.aspx");
 			WebTest.CopyResource (GetType (), "EnumConverter_Bug578586.aspx", "EnumConverter_Bug578586.aspx");
-#endif
 		}
 		
         	[Test]
 		[NUnit.Framework.Category ("NunitWeb")]
-#if !TARGET_JVM
 		[NUnit.Framework.Category ("NotWorking")]
-#endif
 		public void ReadOnlyPropertyBindTest ()
 		{
 			new WebTest ("ReadOnlyPropertyBind.aspx").Run ();
 		}
 
-#if NET_2_0
 		// Test for bug #449970
 		[Test]
 		public void MasterPageContentPlaceHolderInTemplate ()
@@ -274,7 +267,6 @@ namespace MonoTests.System.Web.Compilation {
 
 			HtmlDiff.AssertAreEqual (originalHtml, renderedHtml, "#A1");
 		}
-#endif		
 		[Test (Description="Bug #323719")]
 		public void TagsNestedInClientTag ()
 		{

@@ -139,6 +139,45 @@ namespace System.ServiceModel.Description
 			return ret;
 		}
 
+		internal static Type GetContractAssignableToInterfaces(Type given, Type [] givenInterfaces)
+		{
+			if ((given != null) && (givenInterfaces.Count() < 1))
+				return null;
+			Dictionary<Type,int> interfaceGraph = new Dictionary<Type,int> ();
+			foreach (var smaller in givenInterfaces) {
+				interfaceGraph [smaller] = 0;
+				foreach (var bigger in givenInterfaces) {
+					if (smaller.IsAssignableFrom (bigger)) {
+						interfaceGraph [smaller]++;
+					}
+				}
+			}
+
+			List<Type> possibleInterfaces = new List<Type> ();
+			foreach (var node in interfaceGraph) {
+				if (node.Value == 1) {
+					possibleInterfaces.Add(node.Key);
+				}
+			}
+			// For this purpose a contract is a set of interfaces. it is necessary to find the interface representative of rest of the set. It will be assignable to all of 
+			// the others but can only be assigned to by itself. This will give it  count of ! in its slot in the interfaceGraph. To be a valid set there can be only one with a count of one
+			// in its slot.  More results in InvalidOperation exceptioni with ambigours error message, less means that the interface we want is the one passed in by the parameter given
+			// and by returning null we give the callign method permission to use it..
+			switch (possibleInterfaces.Count()) 
+			{
+				case 0:
+				break;
+				case 1:
+				return possibleInterfaces [0];
+				break;
+				default:
+				if (!given.IsInterface) 
+					throw new InvalidOperationException ("The contract type of " + given + " is ambiguous: can be either " + possibleInterfaces[0] + " or " + possibleInterfaces[1]);
+				break;
+			}
+			return null;
+		}
+
 		internal static ContractDescription GetContractInternal (Type givenContractType, Type givenServiceType, Type serviceTypeForCallback)
 		{
 			if (givenContractType == null)
@@ -153,16 +192,12 @@ namespace System.ServiceModel.Description
 				exactContractType = givenContractType;
 				sca = contracts [givenContractType];
 			} else {
-				foreach (Type t in contracts.Keys)
-					if (t.IsAssignableFrom(givenContractType)) {
-						if (t.IsAssignableFrom (exactContractType)) // exact = IDerived, t = IBase
-							continue;
-						if (sca != null && (exactContractType == null || !exactContractType.IsAssignableFrom (t))) // t = IDerived, exact = IBase
-							throw new InvalidOperationException ("The contract type of " + givenContractType + " is ambiguous: can be either " + exactContractType + " or " + t);
-						exactContractType = t;
-						sca = contracts [t];
-					}
+				Type[] contractTypes = contracts.Keys.ToArray() as Type [];
+				exactContractType = GetContractAssignableToInterfaces(givenContractType, contractTypes);
+				if (exactContractType != null)
+					sca = contracts[exactContractType];
 			}
+
 			if (exactContractType == null)
 				exactContractType = givenContractType;
 			if (sca == null) {
@@ -171,6 +206,7 @@ namespace System.ServiceModel.Description
 				else
 					return null; // no contract
 			}
+
 			string name = sca.Name ?? exactContractType.Name;
 			string ns = sca.Namespace ?? "http://tempuri.org/";
 
@@ -197,17 +233,18 @@ namespace System.ServiceModel.Description
 			 */
 
 			var inherited = new Collection<ContractDescription> ();
-			foreach (var it in cd.ContractType.GetInterfaces ()) {
+		var interfaces = cd.ContractType.GetInterfaces ();
+			foreach (var it in interfaces ) {
 				var icd = GetContractInternal (it, givenServiceType, null);
 				if (icd != null)
 					inherited.Add (icd);
 			}
 
 			foreach (var icd in inherited) {
-				foreach (var od in icd.Operations)
-					if (!cd.Operations.Any(o => o.Name == od.Name && o.SyncMethod == od.SyncMethod && 
-							       o.BeginMethod == od.BeginMethod && o.InCallbackContract == od.InCallbackContract))
+				foreach (var od in icd.Operations) {
+					if (!cd.Operations.Any (o => o.Name == od.Name && o.SyncMethod == od.SyncMethod && o.BeginMethod == od.BeginMethod && o.InCallbackContract == od.InCallbackContract))
 						cd.Operations.Add (od);
+				}
 			}
 
 			FillOperationsForInterface (cd, cd.ContractType, givenServiceType, false);
@@ -237,7 +274,6 @@ namespace System.ServiceModel.Description
 			
 			for (int i = 0; i < contractMethods.Length; ++i)
 			{
-
 				MethodInfo mi = contractMethods [i];
 				OperationContractAttribute oca = GetOperationContractAttribute (mi);
 				if (oca == null)
@@ -253,7 +289,7 @@ namespace System.ServiceModel.Description
 					if (GetOperationContractAttribute (end) != null)
 						throw new InvalidOperationException ("Async 'End' method must not have OperationContractAttribute. It is automatically treated as the EndMethod of the corresponding 'Begin' method.");
 				}
-				OperationDescription od = GetOrCreateOperation (cd, mi, serviceMethods [i], oca, end != null ? end.ReturnType : null, isCallback, givenServiceType);
+				OperationDescription od = GetOrCreateOperation (cd, mi, serviceMethods [i], oca, end, isCallback, givenServiceType);
 				if (end != null)
 					od.EndMethod = end;
 			}
@@ -286,7 +322,7 @@ namespace System.ServiceModel.Description
 		static OperationDescription GetOrCreateOperation (
 			ContractDescription cd, MethodInfo mi, MethodInfo serviceMethod,
 			OperationContractAttribute oca,
-			Type asyncReturnType,
+			MethodInfo endMethod,
 			bool isCallback,
 			Type givenServiceType)
 		{
@@ -311,7 +347,8 @@ namespace System.ServiceModel.Description
 
 				od.Messages.Add (GetMessage (od, mi, oca, true, isCallback, null));
 				if (!od.IsOneWay) {
-					var md = GetMessage (od, mi, oca, false, isCallback, asyncReturnType);
+					var asyncReturnType = endMethod != null ? endMethod.ReturnType : null;
+					var md = GetMessage (od, endMethod ?? mi, oca, false, isCallback, asyncReturnType);
 					od.Messages.Add (md);
 					var mpa = mi.ReturnParameter.GetCustomAttribute<MessageParameterAttribute> (true);
 					if (mpa != null) {
@@ -522,8 +559,12 @@ namespace System.ServiceModel.Description
 			int index = 0;
 			foreach (ParameterInfo pi in plist) {
 				// AsyncCallback and state are extraneous.
-				if (oca.AsyncPattern && pi.Position == plist.Length - 2)
-					break;
+				if (oca.AsyncPattern) {
+					if (isRequest && pi.Position == plist.Length - 2)
+						break;
+					if (!isRequest && pi.Position == plist.Length - 1)
+						break;
+				}
 
 				// They are ignored:
 				// - out parameter in request

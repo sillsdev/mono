@@ -23,7 +23,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using System;
 using System.Collections;
 using System.Data;
@@ -34,7 +33,7 @@ using System.Xml.Serialization;
 
 using NUnit.Framework;
 
-namespace Monotests_System.Data
+namespace MonoTests.System.Data
 {
 	[TestFixture]
 	public class DataTableTest5
@@ -1149,4 +1148,3 @@ namespace Monotests_System.Data
 		}
 	}
 }
-#endif

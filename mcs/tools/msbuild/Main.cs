@@ -36,7 +36,6 @@ using System.Xml.Schema;
 using System.Linq;
 using System.Collections.Generic;
 
-#if NET_2_0
 
 using System;
 using System.Collections;
@@ -159,17 +158,18 @@ namespace Mono.XBuild.CommandLine {
 				var projectInstances = new List<ProjectInstance> ();
 				if (string.Equals (Path.GetExtension (projectFile), ".sln", StringComparison.OrdinalIgnoreCase)) {
 					var parser = new SolutionParser ();
-					var root = ProjectRootElement.Create ();
+					var root = ProjectRootElement.Create (project_collection);
+					root.FullPath = projectFile;
 					parser.ParseSolution (projectFile, project_collection, root, LogWarning);
-					foreach (var p in project_collection.LoadedProjects)
-						projectInstances.Add (p.CreateProjectInstance ());
+					projectInstances.Add (new Project (root, parameters.Properties, parameters.ToolsVersion, project_collection).CreateProjectInstance ());
 				} else {
 					project = ProjectRootElement.Create (XmlReader.Create (projectFile, settings), project_collection);
+					project.FullPath = projectFile;
 					var pi = new ProjectInstance (project, parameters.Properties, parameters.ToolsVersion, project_collection);
 					projectInstances.Add (pi);
 				}
 				foreach (var projectInstance in projectInstances) {
-					var targets = parameters.Targets.Length == 0 ? projectInstance.DefaultTargets.ToArray () : parameters.Targets;
+					var targets = parameters.Targets.Length > 0 ? parameters.Targets : projectInstance.DefaultTargets.ToArray ();
 					result = projectInstance.Build (targets, parameters.Loggers.Count > 0 ? parameters.Loggers : project_collection.Loggers);
 					if (!result)
 						break;
@@ -358,4 +358,3 @@ namespace Mono.XBuild.CommandLine {
 
 }
 
-#endif

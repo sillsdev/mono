@@ -30,9 +30,7 @@ using System;
 using NUnit.Framework;
 using System.Threading;
 using System.Linq;
-#if NET_4_0
 using System.Threading.Tasks;
-#endif
 
 namespace MonoTests.System.Threading
 {
@@ -401,9 +399,14 @@ namespace MonoTests.System.Threading
 		{
 			var v = new ReaderWriterLockSlim ();
 			int local = 10;
+			int ready_count = 0;
+			int entered_count = 0;
+			const int thread_count = 10;
 
-			var r = from i in Enumerable.Range (1, 10) select new Thread (() => {
+			var r = from i in Enumerable.Range (1, thread_count) select new Thread (() => {
+				Interlocked.Increment (ref ready_count);
 				v.EnterReadLock ();
+				Interlocked.Increment (ref entered_count);
 
 				Assert.AreEqual (11, local);
 			});
@@ -415,12 +418,16 @@ namespace MonoTests.System.Threading
 				t.Start ();
 			}
 
-			Thread.Sleep (200);
+			while (ready_count != thread_count)
+				Thread.Sleep (10);
+
+			/* Extra up to 2s of sleep to ensure all threads got the chance to enter the lock */
+			for (int i = 0; i < 200 && v.WaitingReadCount != thread_count; ++i)
+				Thread.Sleep (10);
 			local = 11;
 
-			// FIXME: Don't rely on Thread.Sleep (200)
 			Assert.AreEqual (0, v.WaitingWriteCount, "in waiting write");
-			Assert.AreEqual (10, v.WaitingReadCount, "in waiting read");
+			Assert.AreEqual (thread_count, v.WaitingReadCount, "in waiting read");
 			Assert.AreEqual (0, v.WaitingUpgradeCount, "in waiting upgrade");
 			v.ExitWriteLock ();
 
@@ -442,7 +449,6 @@ namespace MonoTests.System.Threading
 			Assert.IsTrue (v.TryEnterWriteLock (100));
 			v.ExitWriteLock ();
 		}
-#if NET_4_0
 		[Test]
 		public void EnterWriteLockWhileInUpgradeAndOtherWaiting ()
 		{
@@ -466,7 +472,6 @@ namespace MonoTests.System.Threading
 
             Assert.IsTrue (task1.Wait (500));
 		}
-#endif
 		[Test]
 		public void RecursiveReadLockTest ()
 		{

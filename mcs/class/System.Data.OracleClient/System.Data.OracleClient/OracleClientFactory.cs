@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 namespace System.Data.OracleClient
 {
 	using System.Data;
@@ -71,11 +70,9 @@ namespace System.Data.OracleClient
 			return new OracleConnectionStringBuilder ();
 		}
 
-#if !TARGET_JVM
 		public override CodeAccessPermission CreatePermission (PermissionState state) {
 			return new OraclePermission (state);
 		}
-#endif
 
 		public override DbDataAdapter CreateDataAdapter () {
 			return new OracleDataAdapter ();
@@ -94,4 +91,3 @@ namespace System.Data.OracleClient
 		#endregion // public overrides
 	}
 }
-#endif // NET_2_0

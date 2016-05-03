@@ -24,9 +24,8 @@
 #include <mono/metadata/object-internals.h>
 #include <mono/metadata/class-internals.h>
 #include <mono/metadata/domain-internals.h>
-#include <mono/metadata/gc-internal.h>
+#include <mono/metadata/gc-internals.h>
 #include <mono/metadata/metadata.h>
-#include <mono/metadata/threadpool.h>
 
 #include <mono/metadata/console-io.h>
 #include <mono/metadata/exception.h>
@@ -45,8 +44,6 @@ MonoBoolean
 ves_icall_System_ConsoleDriver_Isatty (HANDLE handle)
 {
 	DWORD mode;
-
-	MONO_ARCH_SAVE_REGS;
 
 	return GetConsoleMode (handle, &mode) != 0;
 }

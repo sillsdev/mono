@@ -29,6 +29,7 @@
 //
 
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -39,6 +40,7 @@ namespace System.Net
 	{
 		enum State {
 			None,
+			PartialSize,
 			Body,
 			BodyFinished,
 			Trailer
@@ -113,13 +115,13 @@ namespace System.Net
 		{
 			int count = chunks.Count;
 			int nread = 0;
+
+			var chunksForRemoving = new List<Chunk>(count);
 			for (int i = 0; i < count; i++) {
 				Chunk chunk = (Chunk) chunks [i];
-				if (chunk == null)
-					continue;
 
 				if (chunk.Offset == chunk.Bytes.Length) {
-					chunks [i] = null;
+					chunksForRemoving.Add(chunk);
 					continue;
 				}
 				
@@ -127,6 +129,9 @@ namespace System.Net
 				if (nread == size)
 					break;
 			}
+
+			foreach (var chunk in chunksForRemoving)
+				chunks.Remove(chunk);
 
 			return nread;
 		}
@@ -139,9 +144,9 @@ namespace System.Net
 		
 		void InternalWrite (byte [] buffer, ref int offset, int size)
 		{
-			if (state == State.None) {
+			if (state == State.None || state == State.PartialSize) {
 				state = GetChunkSize (buffer, ref offset, size);
-				if (state == State.None)
+				if (state == State.PartialSize)
 					return;
 				
 				saved.Length = 0;
@@ -262,7 +267,7 @@ namespace System.Net
 					ThrowProtocolViolation ("Cannot parse chunk size.");
 				}
 
-				return State.None;
+				return State.PartialSize;
 			}
 
 			chunkRead = 0;

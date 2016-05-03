@@ -85,15 +85,7 @@ namespace System.Web
 		[ThreadStatic]
 		static Dictionary <string, IResourceProvider> resource_providers;
 		
-#if TARGET_JVM
-		const string app_global_res_key = "HttpContext.app_global_res_key";
-		internal static Assembly AppGlobalResourcesAssembly {
-			get { return (Assembly) AppDomain.CurrentDomain.GetData (app_global_res_key); }
-			set { AppDomain.CurrentDomain.SetData (app_global_res_key, value); }
-		}
-#else
 		internal static Assembly AppGlobalResourcesAssembly;
-#endif
 		ProfileBase profile = null;
 		LinkedList<IHttpHandler> handlers;
 
@@ -110,9 +102,7 @@ namespace System.Web
 			WorkerRequest = wr;
 			request = new HttpRequest (WorkerRequest, this);
 			response = new HttpResponse (WorkerRequest, this);
-#if NET_4_0
 			SessionStateBehavior = SessionStateBehavior.Default;
-#endif
 		}
 
 		public HttpContext (HttpRequest request, HttpResponse response)
@@ -121,9 +111,7 @@ namespace System.Web
 			this.response = response;
 			this.request.Context = this;
 			this.response.Context = this;
-#if NET_4_0
 			SessionStateBehavior = SessionStateBehavior.Default;
-#endif
 		}
 
 		internal bool IsProcessingInclude {
@@ -178,7 +166,6 @@ namespace System.Web
 		// The "Current" property is set just after we have constructed it with 
 		// the 'HttpContext (HttpWorkerRequest)' constructor.
 		//
-#if !TARGET_JVM // No remoting CallContext support in Grasshopper
 		public static HttpContext Current {
 			get {
 				return (HttpContext) CallContext.GetData ("c");
@@ -188,7 +175,6 @@ namespace System.Web
 				CallContext.SetData ("c", value);
 			}
 		}
-#endif
 
 		public Exception Error {
 			get {
@@ -228,11 +214,9 @@ namespace System.Web
 				return (cfg.Mode == CustomErrorMode.RemoteOnly) && !Request.IsLocal;
 			}
 		}
-#if !TARGET_JVM
 		public bool IsDebuggingEnabled {
 			get { return RuntimeHelpers.DebuggingEnabled; }
 		}
-#endif
 		public IDictionary Items {
 			get {
 				if (items == null)
@@ -648,12 +632,10 @@ namespace System.Web
 				req.QueryStringRaw = queryString;
 		}
 
-#if NET_4_0
 		public void SetSessionStateBehavior (SessionStateBehavior sessionStateBehavior)
 		{
 			SessionStateBehavior = sessionStateBehavior;
 		}
-#endif
 		
 #region internals
 		internal void SetSession (HttpSessionState state)
@@ -682,7 +664,6 @@ namespace System.Web
 
 			set {
 				config_timeout = value;
-#if !TARGET_J2EE
 				if (timer != null) {
 					TimeSpan remaining = value - (DateTime.UtcNow - time_stamp);
 					long remaining_ms = Math.Max ((long)remaining.TotalMilliseconds, 0);
@@ -693,18 +674,14 @@ namespace System.Web
 					
 					timer.Change (remaining_ms, (long)Timeout.Infinite);
 				}
-#endif
 			}
 		}
 
-#if NET_4_0
 		internal SessionStateBehavior SessionStateBehavior {
 			get;
 			private set;
 		}
-#endif
 		
-#if !TARGET_J2EE
 		void TimeoutReached(object state) {
 			HttpRuntime.QueuePendingRequest (false);
 			if (Interlocked.CompareExchange (ref timeout_possible, 0, 0) == 0) {
@@ -742,7 +719,6 @@ namespace System.Web
 		{
 			Interlocked.CompareExchange (ref timeout_possible, 0, 1);
 		}
-#endif
 #endregion
 	}
 	

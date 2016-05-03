@@ -77,13 +77,13 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 			Assert.AreEqual (DataflowMessageStatus.Postponed,
 				target.OfferMessage (header, 43, source, false));
 
-			Assert.AreEqual (42, block.Receive (TimeSpan.FromMilliseconds (100)));
+			Assert.AreEqual (42, block.Receive (TimeSpan.FromMilliseconds (1000)));
 
 			Assert.IsFalse (block.Completion.Wait (100));
 
 			Assert.IsTrue (source.WasConsumed (header));
 
-			Assert.AreEqual (43, block.Receive (TimeSpan.FromMilliseconds (100)));
+			Assert.AreEqual (43, block.Receive (TimeSpan.FromMilliseconds (1000)));
 
 			Assert.AreEqual (DataflowMessageStatus.Accepted,
 				target.OfferMessage (new DataflowMessageHeader (3), 44, source, false));
@@ -133,7 +133,7 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 
 			Assert.GreaterOrEqual (scheduler.ExecuteAll (), 1);
 
-			Assert.AreEqual (2, Thread.VolatileRead (ref n));
+			Assert.AreEqual (2, Volatile.Read (ref n));
 		}
 
 		[Test]
@@ -156,7 +156,7 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 
 			Assert.GreaterOrEqual (scheduler.ExecuteAll (), 1);
 
-			Assert.AreEqual (2, Thread.VolatileRead (ref n));
+			Assert.AreEqual (2, Volatile.Read (ref n));
 		}
 
 		int n;
@@ -181,7 +181,7 @@ namespace MonoTests.System.Threading.Tasks.Dataflow {
 
 			Assert.IsFalse (transform.Post (102));
 
-			Assert.AreEqual (10000, Thread.VolatileRead (ref n));
+			Assert.AreEqual (10000, Volatile.Read (ref n));
 		}
 
 		IEnumerable<int> ComputeResults ()

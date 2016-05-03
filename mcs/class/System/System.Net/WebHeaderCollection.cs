@@ -120,6 +120,14 @@ namespace System.Net
 		public WebHeaderCollection ()
 		{
 		}
+
+
+        internal WebHeaderCollection(WebHeaderCollectionType type)
+        {
+//            m_Type = type;
+//            if (type == WebHeaderCollectionType.HttpWebResponse)
+//                m_CommonHeaders = new string[s_CommonHeaderNames.Length - 1];  // Minus one for the sentinel.
+        }		
 		
 		protected WebHeaderCollection (SerializationInfo serializationInfo, 
 					       StreamingContext streamingContext)
@@ -198,8 +206,12 @@ namespace System.Net
 			if (split && IsMultiValue (header)) {
 				List<string> separated = null;
 				foreach (var value in values) {
-					if (value.IndexOf (',') < 0)
+					if (value.IndexOf (',') < 0) {
+						if (separated != null)
+							separated.Add (value);
+						
 						continue;
+					}
 
 					if (separated == null) {
 						separated = new List<string> (values.Length + 1);
@@ -340,13 +352,11 @@ namespace System.Net
 
 			return sb.Append("\r\n").ToString();
 		}
-#if !TARGET_JVM
 		void ISerializable.GetObjectData (SerializationInfo serializationInfo,
 						  StreamingContext streamingContext)
 		{
 			GetObjectData (serializationInfo, streamingContext);
 		}
-#endif
 		public override void GetObjectData (SerializationInfo serializationInfo, StreamingContext streamingContext)
 		{
 			int count = base.Count;
@@ -671,7 +681,7 @@ namespace System.Net
 				return;
 
 			if ((info & headerRestriction.Value) != 0)
-				throw new ArgumentException ("This header must be modified with the appropiate property.");
+				throw new ArgumentException ("This header must be modified with the appropriate property.");
 		}
 
 		void CheckHeaderConsistency (HeaderInfo value)

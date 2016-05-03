@@ -32,9 +32,7 @@ using System.ServiceModel.Channels;
 using System.ServiceModel.Description;
 using System.ServiceModel.Security;
 using System.ServiceModel.Security.Tokens;
-#if NET_4_0
 using System.ServiceModel.Configuration;
-#endif
 using System.Text;
 using System.Xml;
 
@@ -45,7 +43,8 @@ namespace System.ServiceModel
 		int max_conn;
 		OptionalReliableSession reliable_session;
 		NetTcpSecurity security;
-		XmlDictionaryReaderQuotas reader_quotas;
+		XmlDictionaryReaderQuotas reader_quotas
+			= new XmlDictionaryReaderQuotas ();
 		bool transaction_flow;
 		TransactionProtocol transaction_protocol;
 		TcpTransportBindingElement transport;
@@ -67,7 +66,6 @@ namespace System.ServiceModel
 			transport = new TcpTransportBindingElement ();
 		}
 
-#if NET_4_0
 		public NetTcpBinding (string configurationName)
 			: this ()
 		{
@@ -75,7 +73,6 @@ namespace System.ServiceModel
 			var el = bindingsSection.NetTcpBinding.Bindings [configurationName];
 			el.ApplyConfiguration (this);
 		}
-#endif
 
 		internal NetTcpBinding (TcpTransportBindingElement transport,
 		                        NetTcpSecurity security,
@@ -133,9 +130,7 @@ namespace System.ServiceModel
 
 		public NetTcpSecurity Security {
 			get { return security; }
-#if NET_4_0
 			set { security = value; }
-#endif
 		}
 
 		public EnvelopeVersion EnvelopeVersion {

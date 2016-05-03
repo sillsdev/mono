@@ -429,11 +429,9 @@ namespace MonoTests.System.Configuration {
 		{
 			SysConfig cfg = ConfigurationManager.OpenMachineConfiguration ();
 			Assert.IsTrue (cfg.Sections.Count > 0, "#1");
-#if !TARGET_JVM
 			ConfigurationSection s = cfg.SectionGroups ["system.net"].Sections ["connectionManagement"];
 			Assert.IsNotNull (s, "#2");
 			Assert.IsTrue (s is ConnectionManagementSection, "#3");
-#endif
 		}
 
 		[Test]
@@ -628,6 +626,24 @@ namespace MonoTests.System.Configuration {
 			Assert.IsFalse (String.IsNullOrEmpty (connString));
 			Assert.AreEqual ("Server=(local);Initial Catalog=someDb;User Id=someUser;Password=somePassword;Application Name=someAppName;Min Pool Size=5;Max Pool Size=500;Connect Timeout=10;Connection Lifetime=29;",
 			                 connString);
+		}
+
+		[Test]
+		public void BadConfig ()
+		{
+			string xml = @" badXml";
+
+			var file = Path.Combine (tempFolder, "badConfig.config");
+			File.WriteAllText (file, xml);
+
+			try {
+				var fileMap = new ConfigurationFileMap (file);
+				var configuration = ConfigurationManager.OpenMappedMachineConfiguration (fileMap);
+				Assert.Fail ("Exception ConfigurationErrorsException was expected.");
+			} catch (ConfigurationErrorsException e) {
+				Assert.AreEqual (file, e.Filename);
+			}
+
 		}
 	}
 }

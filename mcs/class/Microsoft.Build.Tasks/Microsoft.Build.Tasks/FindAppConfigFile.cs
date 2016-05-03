@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
 
 using System;
 using System.IO;
@@ -36,7 +35,7 @@ using Microsoft.Build.Utilities;
 
 namespace Microsoft.Build.Tasks {
 	//FIXME: This should be in v3.5 only
-	public sealed class FindAppConfigFile : TaskExtension {
+	public class FindAppConfigFile : TaskExtension {
 
 		public FindAppConfigFile ()
 		{
@@ -109,4 +108,3 @@ namespace Microsoft.Build.Tasks {
 	}
 }
 
-#endif

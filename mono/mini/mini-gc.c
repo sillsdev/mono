@@ -10,19 +10,36 @@
 
 #include "config.h"
 #include "mini-gc.h"
-#include <mono/metadata/gc-internal.h>
+#include <mono/metadata/gc-internals.h>
 
-//#if 0
-#if defined(MONO_ARCH_GC_MAPS_SUPPORTED)
+static gboolean
+get_provenance (StackFrameInfo *frame, MonoContext *ctx, gpointer data)
+{
+	MonoJitInfo *ji = frame->ji;
+	MonoMethod *method;
+	if (!ji)
+		return FALSE;
+	method = jinfo_get_method (ji);
+	if (method->wrapper_type != MONO_WRAPPER_NONE)
+		return FALSE;
+	*(gpointer *)data = method;
+	return TRUE;
+}
 
-#include <mono/metadata/gc-internal.h>
+static gpointer
+get_provenance_func (void)
+{
+	gpointer provenance = NULL;
+	mono_walk_stack (get_provenance, MONO_UNWIND_DEFAULT, (gpointer)&provenance);
+	return provenance;
+}
+
+#if 0
+//#if defined(MONO_ARCH_GC_MAPS_SUPPORTED)
+
+#include <mono/metadata/sgen-conf.h>
+#include <mono/metadata/gc-internals.h>
 #include <mono/utils/mono-counters.h>
-
-#if SIZEOF_VOID_P == 4
-typedef guint32 mword;
-#else
-typedef guint64 mword;
-#endif
 
 #define SIZEOF_SLOT ((int)sizeof (mgreg_t))
 
@@ -436,8 +453,20 @@ static int callee_saved_regs [] = { AMD64_RBP, AMD64_RBX, AMD64_R12, AMD64_R13, 
 static int callee_saved_regs [] = { X86_EBX, X86_ESI, X86_EDI };
 #elif defined(TARGET_ARM)
 static int callee_saved_regs [] = { ARMREG_V1, ARMREG_V2, ARMREG_V3, ARMREG_V4, ARMREG_V5, ARMREG_V7, ARMREG_FP };
+#elif defined(TARGET_ARM64)
+// FIXME:
+static int callee_saved_regs [] = { };
 #elif defined(TARGET_S390X)
 static int callee_saved_regs [] = { s390_r6, s390_r7, s390_r8, s390_r9, s390_r10, s390_r11, s390_r12, s390_r13, s390_r14 };
+#elif defined(TARGET_POWERPC64) && _CALL_ELF == 2
+static int callee_saved_regs [] = {
+  ppc_r13, ppc_r14, ppc_r15, ppc_r16,
+  ppc_r17, ppc_r18, ppc_r19, ppc_r20,
+  ppc_r21, ppc_r22, ppc_r23, ppc_r24,
+  ppc_r25, ppc_r26, ppc_r27, ppc_r28,
+  ppc_r29, ppc_r30, ppc_r31 };
+#elif defined(TARGET_POWERPC)
+static int callee_saved_regs [] = { ppc_r6, ppc_r7, ppc_r8, ppc_r9, ppc_r10, ppc_r11, ppc_r12, ppc_r13, ppc_r14 };
 #endif
 
 static guint32
@@ -568,7 +597,7 @@ thread_attach_func (void)
 	TlsData *tls;
 
 	tls = g_new0 (TlsData, 1);
-	tls->tid = GetCurrentThreadId ();
+	tls->tid = mono_native_thread_id_get ();
 	tls->info = mono_thread_info_current ();
 	stats.tlsdata_size += sizeof (TlsData);
 
@@ -593,21 +622,23 @@ thread_suspend_func (gpointer user_data, void *sigctx, MonoContext *ctx)
 		return;
 	}
 
-	if (tls->tid != GetCurrentThreadId ()) {
+	if (tls->tid != mono_native_thread_id_get ()) {
 		/* Happens on osx because threads are not suspended using signals */
+#ifndef TARGET_WIN32
 		gboolean res;
+#endif
 
 		g_assert (tls->info);
 #ifdef TARGET_WIN32
 		return;
 #else
-		res = mono_thread_state_init_from_handle (&tls->unwind_state, (MonoNativeThreadId)tls->tid, tls->info->native_handle);
+		res = mono_thread_state_init_from_handle (&tls->unwind_state, tls->info);
 #endif
 	} else {
 		tls->unwind_state.unwind_data [MONO_UNWIND_DATA_LMF] = mono_get_lmf ();
 		if (sigctx) {
 #ifdef MONO_ARCH_HAVE_SIGCTX_TO_MONOCTX
-			mono_arch_sigctx_to_monoctx (sigctx, &tls->unwind_state.ctx);
+			mono_sigctx_to_monoctx (sigctx, &tls->unwind_state.ctx);
 			tls->unwind_state.valid = TRUE;
 #else
 			tls->unwind_state.valid = FALSE;
@@ -790,6 +821,7 @@ conservative_pass (TlsData *tls, guint8 *stack_start, guint8 *stack_end)
 		ji = frame.ji;
 
 		// FIXME: For skipped frames, scan the param area of the parent frame conservatively ?
+		// FIXME: trampolines
 
 		if (frame.type == FRAME_TYPE_MANAGED_TO_NATIVE) {
 			/*
@@ -1103,7 +1135,7 @@ conservative_pass (TlsData *tls, guint8 *stack_start, guint8 *stack_end)
  * pass.
  */
 static void
-precise_pass (TlsData *tls, guint8 *stack_start, guint8 *stack_end)
+precise_pass (TlsData *tls, guint8 *stack_start, guint8 *stack_end, void *gc_data)
 {
 	int findex, i;
 	FrameInfo *fi;
@@ -1141,7 +1173,7 @@ precise_pass (TlsData *tls, guint8 *stack_start, guint8 *stack_end)
 					MonoObject *obj = *ptr;
 					if (obj) {
 						DEBUG (fprintf (logfile, "\tref %s0x%x(fp)=%p: %p ->", (guint8*)ptr >= (guint8*)fi->fp ? "" : "-", ABS ((int)((gssize)ptr - (gssize)fi->fp)), ptr, obj));
-						*ptr = mono_gc_scan_object (obj);
+						*ptr = mono_gc_scan_object (obj, gc_data);
 						DEBUG (fprintf (logfile, " %p.\n", *ptr));
 					} else {
 						DEBUG (fprintf (logfile, "\tref %s0x%x(fp)=%p: %p.\n", (guint8*)ptr >= (guint8*)fi->fp ? "" : "-", ABS ((int)((gssize)ptr - (gssize)fi->fp)), ptr, obj));
@@ -1182,7 +1214,7 @@ precise_pass (TlsData *tls, guint8 *stack_start, guint8 *stack_end)
 
 			if (obj) {
 				DEBUG (fprintf (logfile, "\treg %s saved at %p: %p ->", mono_arch_regname (fi->regs [i]), ptr, obj));
-				*ptr = mono_gc_scan_object (obj);
+				*ptr = mono_gc_scan_object (obj, gc_data);
 				DEBUG (fprintf (logfile, " %p.\n", *ptr));
 			} else {
 				DEBUG (fprintf (logfile, "\treg %s saved at %p: %p\n", mono_arch_regname (fi->regs [i]), ptr, obj));
@@ -1210,7 +1242,7 @@ precise_pass (TlsData *tls, guint8 *stack_start, guint8 *stack_end)
  * structure filled up by thread_suspend_func. 
  */
 static void
-thread_mark_func (gpointer user_data, guint8 *stack_start, guint8 *stack_end, gboolean precise)
+thread_mark_func (gpointer user_data, guint8 *stack_start, guint8 *stack_end, gboolean precise, void *gc_data)
 {
 	TlsData *tls = user_data;
 
@@ -1221,7 +1253,7 @@ thread_mark_func (gpointer user_data, guint8 *stack_start, guint8 *stack_end, gb
 	if (!precise)
 		conservative_pass (tls, stack_start, stack_end);
 	else
-		precise_pass (tls, stack_start, stack_end);
+		precise_pass (tls, stack_start, stack_end, gc_data);
 }
 
 #ifndef DISABLE_JIT
@@ -1647,7 +1679,7 @@ process_variables (MonoCompile *cfg)
 			int hreg;
 			GCSlotType slot_type;
 
-			t = mini_type_get_underlying_type (NULL, t);
+			t = mini_get_underlying_type (t);
 
 			hreg = ins->dreg;
 			g_assert (hreg < MONO_MAX_IREGS);
@@ -1655,7 +1687,7 @@ process_variables (MonoCompile *cfg)
 			if (byref)
 				slot_type = SLOT_PIN;
 			else
-				slot_type = mini_type_is_reference (cfg, t) ? SLOT_REF : SLOT_NOREF;
+				slot_type = mini_type_is_reference (t) ? SLOT_REF : SLOT_NOREF;
 
 			if (slot_type == SLOT_PIN) {
 				/* These have no live interval, be conservative */
@@ -1802,9 +1834,9 @@ process_variables (MonoCompile *cfg)
 		}
 #endif
 
-		t = mini_type_get_underlying_type (NULL, t);
+		t = mini_get_underlying_type (t);
 
-		if (!mini_type_is_reference (cfg, t)) {
+		if (!mini_type_is_reference (t)) {
 			set_slot_everywhere (gcfg, pos, SLOT_NOREF);
 			if (cfg->verbose_level > 1)
 				printf ("\tnoref%s at %s0x%x(fp) (R%d, slot = %d): %s\n", (is_arg ? " arg" : ""), ins->inst_offset < 0 ? "-" : "", (ins->inst_offset < 0) ? -(int)ins->inst_offset : (int)ins->inst_offset, vmv->vreg, pos, mono_type_full_name (ins->inst_vtype));
@@ -1866,7 +1898,11 @@ sp_offset_to_fp_offset (MonoCompile *cfg, int sp_offset)
 #elif defined(TARGET_X86)
 	/* The offset is computed from the sp at the start of the call sequence */
 	g_assert (cfg->frame_reg == X86_EBP);
+#ifdef MONO_X86_NO_PUSHES
+	return (- cfg->arch.sp_fp_offset + sp_offset);
+#else
 	return (- cfg->arch.sp_fp_offset - sp_offset);	
+#endif
 #else
 	NOT_IMPLEMENTED;
 	return -1;
@@ -1904,7 +1940,7 @@ process_param_area_slots (MonoCompile *cfg)
 			guint32 size;
 
 			if (MONO_TYPE_ISSTRUCT (t)) {
-				size = mini_type_stack_size_full (cfg->generic_sharing_context, t, &align, FALSE);
+				size = mini_type_stack_size_full (t, &align, FALSE);
 			} else {
 				size = sizeof (mgreg_t);
 			}
@@ -2018,7 +2054,7 @@ compute_frame_size (MonoCompile *cfg)
 
 		if (ins->opcode == OP_REGOFFSET) {
 			int size, size_in_slots;
-			size = mini_type_stack_size_full (cfg->generic_sharing_context, ins->inst_vtype, NULL, ins->backend.is_pinvoke);
+			size = mini_type_stack_size_full (ins->inst_vtype, NULL, ins->backend.is_pinvoke);
 			size_in_slots = ALIGN_TO (size, SIZEOF_SLOT) / SIZEOF_SLOT;
 
 			min_offset = MIN (min_offset, ins->inst_offset);
@@ -2053,7 +2089,11 @@ compute_frame_size (MonoCompile *cfg)
 #ifdef TARGET_AMD64
 	min_offset = MIN (min_offset, -cfg->arch.sp_fp_offset);
 #elif defined(TARGET_X86)
+#ifdef MONO_X86_NO_PUSHES
+	min_offset = MIN (min_offset, -cfg->arch.sp_fp_offset);
+#else
 	min_offset = MIN (min_offset, - (cfg->arch.sp_fp_offset + cfg->arch.param_area_size));
+#endif
 #elif defined(TARGET_ARM)
 	// FIXME:
 #elif defined(TARGET_s390X)
@@ -2475,6 +2515,7 @@ mini_gc_init (void)
 	cb.thread_suspend_func = thread_suspend_func;
 	/* Comment this out to disable precise stack marking */
 	cb.thread_mark_func = thread_mark_func;
+	cb.get_provenance_func = get_provenance_func;
 	mono_gc_set_gc_callbacks (&cb);
 
 	logfile = mono_gc_get_logfile ();
@@ -2534,6 +2575,10 @@ mini_gc_enable_gc_maps_for_aot (void)
 void
 mini_gc_init (void)
 {
+	MonoGCCallbacks cb;
+	memset (&cb, 0, sizeof (cb));
+	cb.get_provenance_func = get_provenance_func;
+	mono_gc_set_gc_callbacks (&cb);
 }
 
 #ifndef DISABLE_JIT

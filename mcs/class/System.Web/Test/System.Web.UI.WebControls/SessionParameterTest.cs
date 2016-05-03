@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.IO;
@@ -135,9 +134,7 @@ namespace MonoTests.System.Web.UI.WebControls
 
 		[Test]
 		[Category("NunitWeb")]
-#if !TARGET_JVM
 		[Category("NotWorking")]
-#endif
 		public void SessionParameter_Evaluate()
 		{
 			SessionParameterPoker sessionParam = new SessionParameterPoker("employee",TypeCode.String ,"id") ;
@@ -173,4 +170,3 @@ namespace MonoTests.System.Web.UI.WebControls
 
 	}
 }
-#endif

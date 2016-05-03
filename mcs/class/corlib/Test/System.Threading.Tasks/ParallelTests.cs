@@ -23,7 +23,6 @@
 //
 //
 
-#if NET_4_0
 
 using System;
 using System.Linq;
@@ -112,6 +111,16 @@ namespace MonoTests.System.Threading.Tasks
 				Assert.AreEqual (500, count, "#1");
 
 				Assert.That (queue, new CollectionEquivalentConstraint (e), "#2");
+			});
+		}
+
+		[Test]
+		public void ParallelForEachTestCaseWithIndex ()
+		{
+			var list = new List<int> { 0, 1, 2, 3, 4 };
+
+			Parallel.ForEach (list, (l, s, i) => {
+				Assert.AreEqual (l, i, "#1");
 			});
 		}
 
@@ -214,4 +223,3 @@ namespace MonoTests.System.Threading.Tasks
 		}
 	}
 }
-#endif

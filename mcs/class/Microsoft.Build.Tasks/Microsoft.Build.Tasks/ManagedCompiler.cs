@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
 
 using System;
 using System.Collections;
@@ -154,6 +153,15 @@ namespace Microsoft.Build.Tasks {
 			}
 			
 			return true;
+		}
+
+		protected internal virtual bool UseAlternateCommandLineToolToExecute ()
+		{
+			//
+			// If an alternate tool name or tool path was specified in the project file, then that tool is used 
+			// rather than the host compiler for integrated development environment (IDE) builds.
+			//
+			return !string.IsNullOrEmpty (ToolPath) || ToolName != ToolExe;
 		}
 
 		[MonoTODO]
@@ -309,4 +317,3 @@ namespace Microsoft.Build.Tasks {
 	}
 }
 
-#endif

@@ -73,7 +73,6 @@ namespace Mono.CSharp
 		public readonly TypeSpec[] OperatorsUnaryMutator;
 
 		public readonly TypeSpec[] BinaryPromotionsTypes;
-		public readonly TypeSpec[] SwitchUserTypes;
 
 		readonly BuiltinTypeSpec[] types;
 
@@ -125,7 +124,6 @@ namespace Mono.CSharp
 			OperatorsUnaryMutator = UnaryMutator.CreatePredefinedOperatorsTable (this);
 
 			BinaryPromotionsTypes = ConstantFold.CreateBinaryPromotionsTypes (this);
-			SwitchUserTypes = Switch.CreateSwitchUserTypes (this);
 
 			types = new BuiltinTypeSpec[] {
 				Object, ValueType, Attribute,
@@ -200,6 +198,7 @@ namespace Mono.CSharp
 		public readonly PredefinedType SecurityAction;
 		public readonly PredefinedType Dictionary;
 		public readonly PredefinedType Hashtable;
+		public readonly TypeSpec[] SwitchUserTypes;
 
 		//
 		// C# 3.0
@@ -233,6 +232,11 @@ namespace Mono.CSharp
 		public readonly PredefinedType IAsyncStateMachine;
 		public readonly PredefinedType INotifyCompletion;
 		public readonly PredefinedType ICriticalNotifyCompletion;
+
+		// C# 6.0
+		public readonly PredefinedType IFormattable;
+		public readonly PredefinedType FormattableString;
+		public readonly PredefinedType FormattableStringFactory;
 
 		public PredefinedTypes (ModuleContainer module)
 		{
@@ -287,6 +291,10 @@ namespace Mono.CSharp
 			INotifyCompletion = new PredefinedType (module, MemberKind.Interface, "System.Runtime.CompilerServices", "INotifyCompletion");
 			ICriticalNotifyCompletion = new PredefinedType (module, MemberKind.Interface, "System.Runtime.CompilerServices", "ICriticalNotifyCompletion");
 
+			IFormattable = new PredefinedType (module, MemberKind.Interface, "System", "IFormattable");
+			FormattableString = new PredefinedType (module, MemberKind.Class, "System", "FormattableString");
+			FormattableStringFactory = new PredefinedType (module, MemberKind.Class, "System.Runtime.CompilerServices", "FormattableStringFactory");
+
 			//
 			// Define types which are used for comparison. It does not matter
 			// if they don't exist as no error report is needed
@@ -321,6 +329,11 @@ namespace Mono.CSharp
 			Task.Define ();
 			if (TaskGeneric.Define ())
 				TaskGeneric.TypeSpec.IsGenericTask = true;
+
+			SwitchUserTypes = Switch.CreateSwitchUserTypes (module, Nullable.TypeSpec);
+
+			IFormattable.Define ();
+			FormattableString.Define ();
 		}
 	}
 

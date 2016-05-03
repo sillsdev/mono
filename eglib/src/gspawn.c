@@ -41,12 +41,20 @@
 #include <unistd.h>
 #endif
 
+#ifdef HAVE_SYS_SELECT_H
+#include <sys/select.h>
+#endif
+
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
+#endif
+
+#ifdef HAVE_SYS_RESOURCE_H
+#  include <sys/resource.h>
 #endif
 
 #ifdef G_OS_WIN32
@@ -66,13 +74,18 @@
 #define NO_INTR(var,cmd) do { (var) = (cmd); } while ((var) == -1 && errno == EINTR)
 #define CLOSE_PIPE(p) do { close (p [0]); close (p [1]); } while (0)
 
-#if defined(__APPLE__) && !defined (__arm__)
+#if defined(__APPLE__)
+#if defined (TARGET_OSX)
 /* Apple defines this in crt_externs.h but doesn't provide that header for 
  * arm-apple-darwin9.  We'll manually define the symbol on Apple as it does
  * in fact exist on all implementations (so far) 
  */
-gchar ***_NSGetEnviron();
+gchar ***_NSGetEnviron(void);
 #define environ (*_NSGetEnviron())
+#else
+static char *mono_environ[1] = { NULL };
+#define environ mono_environ
+#endif /* defined (TARGET_OSX) */
 #elif defined(_MSC_VER)
 /* MS defines this in stdlib.h */
 #else
@@ -209,6 +222,29 @@ write_all (int fd, const void *vbuf, size_t n)
 	return nwritten;
 }
 
+#ifndef G_OS_WIN32
+int
+eg_getdtablesize (void)
+{
+#ifdef HAVE_GETRLIMIT
+	struct rlimit limit;
+	int res;
+
+	res = getrlimit (RLIMIT_NOFILE, &limit);
+	g_assert (res == 0);
+	return limit.rlim_cur;
+#else
+	return getdtablesize ();
+#endif
+}
+#else
+int
+eg_getdtablesize (void)
+{
+	g_error ("Should not be called");
+}
+#endif
+
 gboolean
 g_spawn_command_line_sync (const gchar *command_line,
 				gchar **standard_output,
@@ -217,6 +253,9 @@ g_spawn_command_line_sync (const gchar *command_line,
 				GError **error)
 {
 #ifdef G_OS_WIN32
+#elif !defined (HAVE_FORK) || !defined (HAVE_EXECV)
+	fprintf (stderr, "g_spawn_command_line_sync not supported on this platform\n");
+	return FALSE;
 #else
 	pid_t pid;
 	gchar **argv;
@@ -252,7 +291,7 @@ g_spawn_command_line_sync (const gchar *command_line,
 			close (stderr_pipe [0]);
 			dup2 (stderr_pipe [1], STDERR_FILENO);
 		}
-		for (i = getdtablesize () - 1; i >= 3; i--)
+		for (i = eg_getdtablesize () - 1; i >= 3; i--)
 			close (i);
 
 		/* G_SPAWN_SEARCH_PATH is always enabled for g_spawn_command_line_sync */
@@ -313,6 +352,9 @@ g_spawn_async_with_pipes (const gchar *working_directory,
 			GError **error)
 {
 #ifdef G_OS_WIN32
+#elif !defined (HAVE_FORK) || !defined (HAVE_EXECVE)
+	fprintf (stderr, "g_spawn_async_with_pipes is not supported on this platform\n");
+	return FALSE;
 #else
 	pid_t pid;
 	int info_pipe [2];
@@ -413,7 +455,7 @@ g_spawn_async_with_pipes (const gchar *working_directory,
 			}
 
 			if ((flags & G_SPAWN_LEAVE_DESCRIPTORS_OPEN) != 0) {
-				for (i = getdtablesize () - 1; i >= 3; i--)
+				for (i = eg_getdtablesize () - 1; i >= 3; i--)
 					close (i);
 			}
 

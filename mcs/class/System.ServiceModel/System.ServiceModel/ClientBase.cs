@@ -129,7 +129,6 @@ namespace System.ServiceModel
 			Initialize (instance, binding, remoteAddress);
 		}
 
-#if NET_4_0
 		protected ClientBase (ServiceEndpoint endpoint)
 			: this (null, endpoint)
 		{
@@ -139,7 +138,6 @@ namespace System.ServiceModel
 			: this (instance, new ChannelFactory<TChannel> (endpoint))
 		{
 		}
-#endif
 
 		internal ClientBase (ChannelFactory<TChannel> factory)
 			: this (null, factory)
@@ -353,11 +351,7 @@ namespace System.ServiceModel
 			public object [] Results { get; private set; }
 		}
 
-#if NET_4_0
 		protected internal
-#else
-		internal
-#endif
 		class ChannelBase<T> : IClientChannel, IOutputChannel, IRequestChannel where T : class
 		{
 			ServiceEndpoint endpoint;
@@ -389,7 +383,7 @@ namespace System.ServiceModel
 				var od = cd.Operations.Find (methodName);
 				if (od == null)
 					throw new ArgumentException (String.Format ("Operation '{0}' not found in the service contract '{1}' in namespace '{2}'", methodName, cd.Name, cd.Namespace));
-				return Inner.Process (od.SyncMethod, methodName, args);
+				return Inner.Process (od.SyncMethod, methodName, args, OperationContext.Current);
 			}
 
 			protected IAsyncResult BeginInvoke (string methodName, object [] args, AsyncCallback callback, object state)

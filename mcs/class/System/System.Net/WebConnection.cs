@@ -28,25 +28,14 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if SECURITY_DEP
-
-#if MONOTOUCH
-using Mono.Security.Protocol.Tls;
-#else
-extern alias MonoSecurity;
-using MonoSecurity::Mono.Security.Protocol.Tls;
-#endif
-
-#endif
-
 using System.IO;
 using System.Collections;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Diagnostics;
+using Mono.Net.Security;
 
 namespace System.Net
 {
@@ -93,20 +82,13 @@ namespace System.Net
 		NtlmAuthState connect_ntlm_auth_state;
 		HttpWebRequest connect_request;
 
-		bool ssl;
-		bool certsAvailable;
 		Exception connect_exception;
 		static object classLock = new object ();
-		static Type sslStream;
-#if !MONOTOUCH
-		static PropertyInfo piClient;
-		static PropertyInfo piServer;
-		static PropertyInfo piTrustFailure;
-#endif
+		MonoTlsStream tlsStream;
 
-#if MONOTOUCH
+#if MONOTOUCH && !MONOTOUCH_TV && !MONOTOUCH_WATCH
 		[System.Runtime.InteropServices.DllImport ("__Internal")]
-		static extern void monotouch_start_wwan (string uri);
+		static extern void xamarin_start_wwan (string uri);
 #endif
 
 		internal ChunkStream ChunkStream {
@@ -170,15 +152,15 @@ namespace System.Net
 				IPHostEntry hostEntry = sPoint.HostEntry;
 
 				if (hostEntry == null) {
-#if MONOTOUCH
-					monotouch_start_wwan (sPoint.Address.ToString ());
+#if MONOTOUCH && !MONOTOUCH_TV && !MONOTOUCH_WATCH
+					xamarin_start_wwan (sPoint.Address.ToString ());
 					hostEntry = sPoint.HostEntry;
 					if (hostEntry == null) {
 #endif
 						status = sPoint.UsesProxy ? WebExceptionStatus.ProxyNameResolutionFailure :
 									    WebExceptionStatus.NameResolutionFailure;
 						return;
-#if MONOTOUCH
+#if MONOTOUCH && !MONOTOUCH_TV && !MONOTOUCH_WATCH
 					}
 #endif
 				}
@@ -234,34 +216,6 @@ namespace System.Net
 						}
 					}
 				}
-			}
-		}
-
-		static void EnsureSSLStreamAvailable ()
-		{
-			lock (classLock) {
-				if (sslStream != null)
-					return;
-
-#if NET_2_1 && SECURITY_DEP
-				sslStream = typeof (HttpsClientStream);
-#else
-				// HttpsClientStream is an internal glue class in Mono.Security.dll
-				sslStream = Type.GetType ("Mono.Security.Protocol.Tls.HttpsClientStream, " +
-							Consts.AssemblyMono_Security, false);
-
-				if (sslStream == null) {
-					string msg = "Missing Mono.Security.dll assembly. " +
-							"Support for SSL/TLS is unavailable.";
-
-					throw new NotSupportedException (msg);
-				}
-#endif
-#if !MONOTOUCH
-				piClient = sslStream.GetProperty ("SelectedClientCertificate");
-				piServer = sslStream.GetProperty ("ServerCertificate");
-				piTrustFailure = sslStream.GetProperty ("TrustFailure");
-#endif
 			}
 		}
 
@@ -356,8 +310,6 @@ namespace System.Net
 
 			byte [] buffer = new byte [1024];
 			MemoryStream ms = new MemoryStream ();
-			bool gotStatus = false;
-			WebHeaderCollection headers = null;
 
 			while (true) {
 				int n = stream.Read (buffer, 0, 1024);
@@ -369,7 +321,8 @@ namespace System.Net
 				ms.Write (buffer, 0, n);
 				int start = 0;
 				string str = null;
-				headers = new WebHeaderCollection ();
+				bool gotStatus = false;
+				WebHeaderCollection headers = new WebHeaderCollection ();
 				while (ReadLine (ms.GetBuffer (), ref start, (int) ms.Length, ref str)) {
 					if (str == null) {
 						int contentLen = 0;
@@ -399,13 +352,22 @@ namespace System.Net
 						continue;
 					}
 
-					int spaceidx = str.IndexOf (' ');
-					if (spaceidx == -1) {
+					string[] parts = str.Split (' ');
+					if (parts.Length < 2) {
 						HandleError (WebExceptionStatus.ServerProtocolViolation, null, "ReadHeaders2");
 						return null;
 					}
 
-					status = (int) UInt32.Parse (str.Substring (spaceidx + 1, 3));
+					if (String.Compare (parts [0], "HTTP/1.1", true) == 0)
+						Data.ProxyVersion = HttpVersion.Version11;
+					else if (String.Compare (parts [0], "HTTP/1.0", true) == 0)
+						Data.ProxyVersion = HttpVersion.Version10;
+					else {
+						HandleError (WebExceptionStatus.ServerProtocolViolation, null, "ReadHeaders2");
+						return null;
+					}
+
+					status = (int)UInt32.Parse (parts [1]);
 					gotStatus = true;
 				}
 			}
@@ -431,41 +393,33 @@ namespace System.Net
 				NetworkStream serverStream = new NetworkStream (socket, false);
 
 				if (request.Address.Scheme == Uri.UriSchemeHttps) {
-					ssl = true;
-					EnsureSSLStreamAvailable ();
-					if (!reused || nstream == null || nstream.GetType () != sslStream) {
+#if SECURITY_DEP
+					if (!reused || nstream == null || tlsStream == null) {
 						byte [] buffer = null;
 						if (sPoint.UseConnect) {
 							bool ok = CreateTunnel (request, sPoint.Address, serverStream, out buffer);
 							if (!ok)
 								return false;
 						}
-#if SECURITY_DEP
-#if MONOTOUCH
-						nstream = new HttpsClientStream (serverStream, request.ClientCertificates, request, buffer);
-#else
-						object[] args = new object [4] { serverStream,
-							request.ClientCertificates,
-							request, buffer};
-						nstream = (Stream) Activator.CreateInstance (sslStream, args);
-#endif
-						SslClientStream scs = (SslClientStream) nstream;
-						var helper = new ServicePointManager.ChainValidationHelper (request, request.Address.Host);
-						scs.ServerCertValidation2 += new CertificateValidationCallback2 (helper.ValidateChain);
-#endif
-						certsAvailable = false;
+						tlsStream = new MonoTlsStream (request, serverStream);
+						nstream = tlsStream.CreateStream (buffer);
 					}
 					// we also need to set ServicePoint.Certificate 
 					// and ServicePoint.ClientCertificate but this can
 					// only be done later (after handshake - which is
 					// done only after a read operation).
+#else
+					throw new NotSupportedException ();
+#endif
 				} else {
-					ssl = false;
 					nstream = serverStream;
 				}
-			} catch (Exception) {
-				if (!request.Aborted)
+			} catch (Exception ex) {
+				if (tlsStream != null)
+					status = tlsStream.ExceptionStatus;
+				else if (!request.Aborted)
 					status = WebExceptionStatus.ConnectFailure;
+				connect_exception = ex;
 				return false;
 			}
 
@@ -482,11 +436,7 @@ namespace System.Net
 
 			if (e == null) { // At least we now where it comes from
 				try {
-#if TARGET_JVM
-					throw new Exception ();
-#else
 					throw new Exception (new System.Diagnostics.StackTrace ().ToString ());
-#endif
 				} catch (Exception e2) {
 					e = e2;
 				}
@@ -617,21 +567,6 @@ namespace System.Net
 			if (method == "HEAD")
 				return false;
 			return (statusCode >= 200 && statusCode != 204 && statusCode != 304);
-		}
-
-		internal void GetCertificates (Stream stream) 
-		{
-			// here the SSL negotiation have been done
-#if SECURITY_DEP && MONOTOUCH
-			HttpsClientStream s = (stream as HttpsClientStream);
-			X509Certificate client = s.SelectedClientCertificate;
-			X509Certificate server = s.ServerCertificate;
-#else
-			X509Certificate client = (X509Certificate) piClient.GetValue (stream, null);
-			X509Certificate server = (X509Certificate) piServer.GetValue (stream, null);
-#endif
-			sPoint.SetCertificates (client, server);
-			certsAvailable = (server != null);
 		}
 
 		internal static void InitRead (object state)
@@ -841,6 +776,8 @@ namespace System.Net
 				string header = (sPoint.UsesProxy) ? "Proxy-Connection" : "Connection";
 				string cncHeader = (Data.Headers != null) ? Data.Headers [header] : null;
 				bool keepAlive = (Data.Version == HttpVersion.Version11 && this.keepAlive);
+				if (Data.ProxyVersion != null && Data.ProxyVersion != HttpVersion.Version11)
+					keepAlive = false;
 				if (cncHeader != null) {
 					cncHeader = cncHeader.ToLower ();
 					keepAlive = (this.keepAlive && cncHeader.IndexOf ("keep-alive", StringComparison.Ordinal) != -1);
@@ -1056,11 +993,10 @@ namespace System.Net
 
 		internal bool EndWrite (HttpWebRequest request, bool throwOnError, IAsyncResult result)
 		{
-			if (request.FinishedReading)
-				return true;
-
 			Stream s = null;
 			lock (this) {
+				if (status == WebExceptionStatus.RequestCanceled)
+					return true;
 				if (Data.request != request)
 					throw new ObjectDisposedException (typeof (NetworkStream).FullName);
 				if (nstream == null)
@@ -1134,9 +1070,6 @@ namespace System.Net
 
 			try {
 				s.Write (buffer, offset, size);
-				// here SSL handshake should have been done
-				if (ssl && !certsAvailable)
-					GetCertificates (s);
 			} catch (Exception e) {
 				err_msg = e.Message;
 				WebExceptionStatus wes = WebExceptionStatus.SendFailure;
@@ -1144,19 +1077,6 @@ namespace System.Net
 				if (e is WebException) {
 					HandleError (wes, e, msg);
 					return false;
-				}
-
-				// if SSL is in use then check for TrustFailure
-				if (ssl) {
-#if SECURITY_DEP && MONOTOUCH
-					HttpsClientStream https = (s as HttpsClientStream);
-					if (https.TrustFailure) {
-#else
-					if ((bool) piTrustFailure.GetValue (s , null)) {
-#endif
-						wes = WebExceptionStatus.TrustFailure;
-						msg = "Trust failure";
-					}
 				}
 
 				HandleError (wes, e, msg);

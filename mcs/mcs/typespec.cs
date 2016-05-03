@@ -295,6 +295,12 @@ namespace Mono.CSharp
 			}
 		}
 
+		public bool IsStructOrEnum {
+			get {
+				return (Kind & (MemberKind.Struct | MemberKind.Enum)) != 0;
+			}
+		}
+
 		public bool IsTypeBuilder {
 			get {
 #if STATIC
@@ -484,17 +490,22 @@ namespace Mono.CSharp
 		//
 		// Text representation of type used by documentation writer
 		//
-		public override string GetSignatureForDocumentation ()
+		public sealed override string GetSignatureForDocumentation ()
+		{
+			return GetSignatureForDocumentation (false);
+		}
+
+		public virtual string GetSignatureForDocumentation (bool explicitName)
 		{
 			StringBuilder sb = new StringBuilder ();
 			if (IsNested) {
-				sb.Append (DeclaringType.GetSignatureForDocumentation ());
-			} else {
-				sb.Append (MemberDefinition.Namespace);
+				sb.Append (DeclaringType.GetSignatureForDocumentation (explicitName));
+			} else if (MemberDefinition.Namespace != null) {
+				sb.Append (explicitName ? MemberDefinition.Namespace.Replace ('.', '#') : MemberDefinition.Namespace);
 			}
 
 			if (sb.Length != 0)
-				sb.Append (".");
+				sb.Append (explicitName ? "#" : ".");
 
 			sb.Append (Name);
 			if (Arity > 0) {
@@ -504,40 +515,13 @@ namespace Mono.CSharp
 				        if (i > 0)
 				            sb.Append (",");
 
-				        sb.Append (TypeArguments[i].GetSignatureForDocumentation ());
+						sb.Append (TypeArguments[i].GetSignatureForDocumentation (explicitName));
 				    }
 				    sb.Append ("}");
 				} else {
 					sb.Append ("`");
 					sb.Append (Arity.ToString ());
 				}
-			}
-
-			return sb.ToString ();
-		}
-
-		public string GetExplicitNameSignatureForDocumentation ()
-		{
-			StringBuilder sb = new StringBuilder ();
-			if (IsNested) {
-				sb.Append (DeclaringType.GetExplicitNameSignatureForDocumentation ());
-			} else if (MemberDefinition.Namespace != null) {
-				sb.Append (MemberDefinition.Namespace.Replace ('.', '#'));
-			}
-
-			if (sb.Length != 0)
-				sb.Append ("#");
-
-			sb.Append (Name);
-			if (Arity > 0) {
-				sb.Append ("{");
-				for (int i = 0; i < Arity; ++i) {
-					if (i > 0)
-						sb.Append (",");
-
-					sb.Append (TypeArguments[i].GetExplicitNameSignatureForDocumentation ());
-				}
-				sb.Append ("}");
 			}
 
 			return sb.ToString ();
@@ -645,6 +629,7 @@ namespace Mono.CSharp
 			case MemberKind.Struct:
 			case MemberKind.Enum:
 			case MemberKind.Void:
+			case MemberKind.PointerType:
 				return false;
 			case MemberKind.InternalCompilerType:
 				//
@@ -1439,6 +1424,7 @@ namespace Mono.CSharp
 		public static readonly InternalType FakeInternalType = new InternalType ("<fake$type>");
 		public static readonly InternalType Namespace = new InternalType ("<namespace>");
 		public static readonly InternalType ErrorType = new InternalType ("<error>");
+		public static readonly InternalType VarOutType = new InternalType ("var out");
 
 		readonly string name;
 
@@ -1641,6 +1627,11 @@ namespace Mono.CSharp
 
 		#endregion
 
+		public override void CheckObsoleteness (IMemberContext mc, Location loc)
+		{
+			Element.CheckObsoleteness (mc, loc);
+		}
+
 		public override ObsoleteAttribute GetAttributeObsolete ()
 		{
 			return Element.GetAttributeObsolete ();
@@ -1651,9 +1642,9 @@ namespace Mono.CSharp
 			return null;
 		}
 
-		public override string GetSignatureForDocumentation ()
+		public override string GetSignatureForDocumentation (bool explicitName)
 		{
-			return Element.GetSignatureForDocumentation () + GetPostfixSignature ();
+			return Element.GetSignatureForDocumentation (explicitName) + GetPostfixSignature ();
 		}
 
 		public override string GetSignatureForError ()
@@ -1886,29 +1877,33 @@ namespace Mono.CSharp
 			return sb.ToString ();
 		}
 
-		public override string GetSignatureForDocumentation ()
+		public override string GetSignatureForDocumentation (bool explicitName)
 		{
 			StringBuilder sb = new StringBuilder ();
-			GetElementSignatureForDocumentation (sb);
+			GetElementSignatureForDocumentation (sb, explicitName);
 			return sb.ToString ();
 		}
 
-		void GetElementSignatureForDocumentation (StringBuilder sb)
+		void GetElementSignatureForDocumentation (StringBuilder sb, bool explicitName)
 		{
 			var ac = Element as ArrayContainer;
 			if (ac == null)
-				sb.Append (Element.GetSignatureForDocumentation ());
+				sb.Append (Element.GetSignatureForDocumentation (explicitName));
 			else
-				ac.GetElementSignatureForDocumentation (sb);
+				ac.GetElementSignatureForDocumentation (sb, explicitName);
 
-			sb.Append ("[");
-			for (int i = 1; i < rank; i++) {
-				if (i == 1)
-					sb.Append ("0:");
+			if (explicitName) {
+				sb.Append (GetPostfixSignature (rank));
+			} else {
+				sb.Append ("[");
+				for (int i = 1; i < rank; i++) {
+					if (i == 1)
+						sb.Append ("0:");
 
-				sb.Append (",0:");
+					sb.Append (",0:");
+				}
+				sb.Append ("]");
 			}
-			sb.Append ("]");
 		}
 
 		public static ArrayContainer MakeType (ModuleContainer module, TypeSpec element)
@@ -1929,6 +1924,11 @@ namespace Mono.CSharp
 			}
 
 			return ac;
+		}
+
+		public override List<MissingTypeSpecReference> ResolveMissingDependencies (MemberSpec caller)
+		{
+			return Element.ResolveMissingDependencies (caller);
 		}
 	}
 

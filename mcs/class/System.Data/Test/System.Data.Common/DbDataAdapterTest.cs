@@ -44,7 +44,6 @@ namespace MonoTests.System.Data.Common
 	[TestFixture]
 	public class DbDataAdapterTest
 	{
-#if NET_2_0
 		[Test]
 		public void UpdateBatchSize ()
 		{
@@ -223,39 +222,47 @@ sqliteDataAdapter.Update (dataSet, "Primus");
                         dbConnection.Close();
                         dbConnection = null;
 		}
+
+		[Test]
+		[Category ("NotWorking")] // Requires newer sqlite than is on wrench
+		public void UpdateResetRowErrorCorrectly ()
+		{
+			const string connectionString = "URI = file::memory:; Version = 3";
+			using (var dbConnection = new SqliteConnection (connectionString)) {
+				dbConnection.Open ();
+
+				using (var cmd = dbConnection.CreateCommand ()) {
+					cmd.CommandText = "CREATE TABLE data (id PRIMARY KEY, name TEXT)";
+					cmd.ExecuteNonQuery ();
+				}
+
+
+				var ts = dbConnection.BeginTransaction ();
+				var da = new SqliteDataAdapter ("SELECT * FROM data", dbConnection);
+				var builder = new SqliteCommandBuilder (da);
+				da.UpdateCommand = builder.GetUpdateCommand ();
+				da.UpdateCommand.Transaction = ts;
+
+				var ds1 = new DataSet ();
+				da.Fill (ds1, "data");
+
+				var table = ds1.Tables [0];
+				var row = table.NewRow ();
+				row ["id"] = 10;
+				row ["name"] = "Bart";
+				table.Rows.Add (row);
+
+				var ds2 = ds1.GetChanges ();
+				da.Update (ds2, "data");
+				Assert.IsFalse (ds2.HasErrors);
+			}
+		}
 #endif
 
-#endif
 
 		class MyAdapter : DbDataAdapter
 		{
-#if ONLY_1_1
-			protected override RowUpdatedEventArgs CreateRowUpdatedEvent (DataRow dataRow, IDbCommand command,
-										     StatementType statementType,
-										     DataTableMapping tableMapping)
-			{
-				throw new NotImplementedException ();
-			}
 
-			protected override RowUpdatingEventArgs CreateRowUpdatingEvent (DataRow dataRow, IDbCommand command,
-										       StatementType statementType,
-										       DataTableMapping tableMapping)
-			{
-				throw new NotImplementedException ();
-			}
-
-			protected override void OnRowUpdated (RowUpdatedEventArgs value)
-			{
-				throw new NotImplementedException ();
-			}
-
-			protected override void OnRowUpdating (RowUpdatingEventArgs value)
-			{
-				throw new NotImplementedException ();
-			}
-#endif
-
-#if NET_2_0
 			public new int AddToBatch (IDbCommand command)
 			{
 				return base.AddToBatch (command);
@@ -290,7 +297,6 @@ sqliteDataAdapter.Update (dataSet, "Primus");
 			{
 				base.TerminateBatching ();
 			}
-#endif
 		}
 	}
 }

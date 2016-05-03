@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
 
 using System;
 using System.Text;
@@ -112,11 +111,10 @@ namespace Microsoft.Build.Utilities
 		}
 		
 		[MonoTODO]
-		public bool IsVerbosityAtLeast (LoggerVerbosity verbosity)
+		public bool IsVerbosityAtLeast (LoggerVerbosity checkVerbosity)
 		{
-			return (this.verbosity >= verbosity) ? true : false;
+			return this.verbosity >= checkVerbosity;
 		}
 	}
 }
 
-#endif

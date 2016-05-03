@@ -18,13 +18,10 @@ using System.Runtime.InteropServices;
 using NUnit.Framework;
 using System.Runtime.CompilerServices;
 
-#if NET_2_0
 using System.Collections.Generic;
-#endif
 
 namespace MonoTests.System.Reflection.Emit
 {
-#if NET_2_0
 	[TestFixture]
 	public class PointerTypeTest
 	{
@@ -526,14 +523,7 @@ namespace MonoTests.System.Reflection.Emit
 			Assert.IsFalse (ptr.IsGenericType, "#9");
 			Assert.IsFalse (ptr.IsGenericTypeDefinition, "#10");
 
-#if NET_4_0
 			Assert.AreEqual (TypeAttributes.Public, ptr.Attributes, "#11");
-#else
-			try {
-				var x = ptr.Attributes; //This is because GenericTypeParameterBuilder doesn't support Attributes 
-				Assert.Fail ("#11");
-			} catch (NotSupportedException) {}
-#endif
 
 			Assert.IsTrue (ptr.HasElementType, "#12");
 			Assert.IsTrue (ptr.IsPointer, "#13");
@@ -1037,14 +1027,7 @@ namespace MonoTests.System.Reflection.Emit
 			Assert.IsFalse (byref.IsGenericTypeDefinition, "#10");
 
 
-#if NET_4_0
 			Assert.AreEqual (TypeAttributes.Public, byref.Attributes, "#11");
-#else
-			try {
-				var x = byref.Attributes; //This is because GenericTypeParameterBuilder doesn't support Attributes 
-				Assert.Fail ("#11");
-			} catch (NotSupportedException) {}
-#endif
 
 			Assert.IsTrue (byref.HasElementType, "#12");
 			Assert.IsTrue (byref.IsByRef, "#13");
@@ -1666,14 +1649,7 @@ namespace MonoTests.System.Reflection.Emit
 			Assert.IsFalse (arr.IsGenericType, "#9");
 			Assert.IsFalse (arr.IsGenericTypeDefinition, "#10");
 
-#if NET_4_0
 			Assert.AreEqual (TypeAttributes.Public, arr.Attributes, "#11");
-#else
-			try {
-				var x = arr.Attributes; //This is because GenericTypeParameterBuilder doesn't support Attributes 
-				Assert.Fail ("#11");
-			} catch (NotSupportedException) {}
-#endif
 
 			Assert.IsTrue (arr.HasElementType, "#12");
 			Assert.IsTrue (arr.IsArray, "#13");
@@ -1745,5 +1721,4 @@ namespace MonoTests.System.Reflection.Emit
 		}
 
 	}
-#endif
 }

@@ -9,16 +9,18 @@
 //
 
 using System;
+using System.Diagnostics;
+using System.Linq;
 using System.Collections;
 using System.Threading;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Net;
 using System.Net.Sockets;
 using NUnit.Framework;
 using System.IO;
 
-#if NET_2_0
 using System.Collections.Generic;
-#endif
 
 namespace MonoTests.System.Net.Sockets
 {
@@ -71,13 +73,8 @@ namespace MonoTests.System.Net.Sockets
 				}
 				Assert.Fail ("#1");
 			} catch (SocketException ex) {
-#if !NET_2_0
-				// invalid argument
-				int expectedError = 10022;
-#else
 				// address incompatible with protocol
 				int expectedError = 10047;
-#endif
 				Assert.AreEqual (expectedError, ex.ErrorCode,
 						"#2");
 			}
@@ -130,7 +127,21 @@ namespace MonoTests.System.Net.Sockets
 						  ProtocolType.Tcp);
 			conn.Connect (ep);
 
-			Socket client = server.Accept();
+			Socket client = null;
+			var sw = Stopwatch.StartNew ();
+			while (sw.ElapsedMilliseconds < 100)
+			{
+				try {
+					client = server.Accept();
+					break;
+				}
+				catch (SocketException ex) {
+					if (ex.SocketErrorCode == SocketError.WouldBlock)
+						continue;
+					throw;
+				}
+			}
+			Assert.IsNotNull (client, "Couldn't accept a client connection within 100ms.");
 			bool client_block = client.Blocking;
 
 			client.Close();
@@ -205,11 +216,7 @@ namespace MonoTests.System.Net.Sockets
 			Assert.AreEqual (CFAConnected, false, "ConnectFail");
 		}
 		
-#if !TARGET_JVM
 		[Test]
-#if !NET_2_0
-		[ExpectedException (typeof (ArgumentException))]
-#endif
 		public void SetSocketOptionBoolean ()
 		{
 			IPEndPoint ep = new IPEndPoint (IPAddress.Loopback, 1);
@@ -220,7 +227,6 @@ namespace MonoTests.System.Net.Sockets
 				sock.Close ();
 			}
 		}
-#endif
 		[Test]
 		public void TestSelect1 ()
 		{
@@ -430,11 +436,7 @@ namespace MonoTests.System.Net.Sockets
 			Assert.AreEqual (hashcodeA, hashcodeB, "#1");
 			client.Close ();
 			int hashcodeC = client.GetHashCode ();
-#if NET_2_0
 			Assert.AreEqual (hashcodeB, hashcodeC, "#2");
-#else
-			Assert.IsFalse (hashcodeB == hashcodeC, "#2");
-#endif
 			server.Close ();
 		}
 
@@ -484,7 +486,6 @@ namespace MonoTests.System.Net.Sockets
 		}
 		
 
-#if NET_2_0
 		[Test]
 		public void SocketInformationCtor ()
 		{
@@ -1648,7 +1649,15 @@ namespace MonoTests.System.Net.Sockets
 		{
 			Socket sock = (Socket)asyncResult.AsyncState;
 			
-			sock.EndConnect (asyncResult);
+			try {
+				sock.EndConnect (asyncResult);
+			} catch (Exception e) {
+				Console.WriteLine ("BCCallback exception:");
+				Console.WriteLine (e);
+
+				throw;
+			}
+
 			BCConnected = true;
 			
 			BCCalledBack.Set ();
@@ -1783,9 +1792,13 @@ namespace MonoTests.System.Net.Sockets
 			/* Longer wait here, because the ms runtime
 			 * takes a lot longer to not connect
 			 */
-			if (BCCalledBack.WaitOne (10000, false) == false) {
+			/*
+			if (BCCalledBack.WaitOne (30000, false) == false) {
 				Assert.Fail ("BeginConnectMultiple wait failed");
 			}
+			*/
+
+			Assert.IsTrue (BCCalledBack.WaitOne (30000), "#0");
 			
 			Assert.AreEqual (true, BCConnected, "BeginConnectMultiple #1");
 			Assert.AreEqual (AddressFamily.InterNetwork, sock.RemoteEndPoint.AddressFamily, "BeginConnectMultiple #2");
@@ -2510,6 +2523,24 @@ namespace MonoTests.System.Net.Sockets
 		public void IOControl ()
 		{
 		}
+
+		[Test]
+		public void TestDefaultsDualMode ()
+		{
+			using (var socket = new Socket (AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp)){
+				Assert.IsTrue (socket.DualMode, "In Mono, DualMode must be true when constructing InterNetworkV6 sockets");
+			}
+
+			using (var socket = new Socket (SocketType.Stream, ProtocolType.Tcp)){
+				Assert.AreEqual (AddressFamily.InterNetworkV6, socket.AddressFamily, "When creating sockets of type stream/tcp, the address family should be InterNetworkV6");
+				Assert.IsTrue (socket.DualMode, "In Mono, DualMode must be true when constructing InterNetworkV6 sockets");
+
+				socket.DualMode = false;
+
+				Assert.IsFalse (socket.DualMode, "Setting of DualSocket should turn DualSockets off");
+			}
+			
+		}
 		
 		[Test]
 		public void ReceiveGeneric ()
@@ -2644,7 +2675,6 @@ namespace MonoTests.System.Net.Sockets
 				sock.Close ();
 			}
 		}
-#endif
 
 		static Socket CWRSocket;
 		static bool CWRReceiving = true;
@@ -2872,7 +2902,6 @@ namespace MonoTests.System.Net.Sockets
 			}
 		}
 
-#if NET_2_0
 		[Test] // Receive (Byte [], Int32, Int32, SocketFlags, out SocketError)
 		public void Receive5_Buffer_Null ()
 		{
@@ -3032,7 +3061,6 @@ namespace MonoTests.System.Net.Sockets
 				s.Close ();
 			}
 		}
-#endif
 
 		[Test] // ReceiveFrom (Byte [], ref EndPoint)
 		public void ReceiveFrom1_Buffer_Null ()
@@ -3164,7 +3192,7 @@ namespace MonoTests.System.Net.Sockets
 
 			EndPoint remoteEP = new IPEndPoint (IPAddress.Loopback, 8001);
 			try {
-				s.ReceiveFrom ((Byte []) null, -1, (SocketFlags) 666,
+				s.ReceiveFrom ((Byte []) null, 0, (SocketFlags) 666,
 					ref remoteEP);
 				Assert.Fail ("#1");
 			} catch (ArgumentNullException ex) {
@@ -3186,7 +3214,7 @@ namespace MonoTests.System.Net.Sockets
 			byte [] buffer = new byte [5];
 			EndPoint remoteEP = null;
 			try {
-				s.ReceiveFrom (buffer, -1, (SocketFlags) 666, ref remoteEP);
+				s.ReceiveFrom (buffer, buffer.Length, (SocketFlags) 666, ref remoteEP);
 				Assert.Fail ("#1");
 			} catch (ArgumentNullException ex) {
 				Assert.AreEqual (typeof (ArgumentNullException), ex.GetType (), "#2");
@@ -3330,7 +3358,7 @@ namespace MonoTests.System.Net.Sockets
 			EndPoint remoteEP = null;
 
 			try {
-				s.ReceiveFrom (buffer, -1, -1, (SocketFlags) 666, ref remoteEP);
+				s.ReceiveFrom (buffer, 0, buffer.Length, (SocketFlags) 666, ref remoteEP);
 				Assert.Fail ("#1");
 			} catch (ArgumentNullException ex) {
 				Assert.AreEqual (typeof (ArgumentNullException), ex.GetType (), "#2");
@@ -3466,8 +3494,55 @@ namespace MonoTests.System.Net.Sockets
 			ss.Close ();
 			s.Close ();
 		}
-		
-#if NET_2_0
+
+#if MONOTOUCH
+		// when the linker is enabled then reflection won't work and would throw an NRE
+		// this is also always true for iOS - so we do not need to poke internals
+		static bool SupportsPortReuse ()
+		{
+			return true;
+		}
+#else
+		static bool? supportsPortReuse;
+		static bool SupportsPortReuse ()
+		{
+			if (supportsPortReuse.HasValue)
+				return supportsPortReuse.Value;
+
+			supportsPortReuse = (bool) typeof (Socket).GetMethod ("SupportsPortReuse",
+					BindingFlags.Static | BindingFlags.NonPublic)
+					.Invoke (null, new object [] {});
+			return supportsPortReuse.Value;
+		}
+#endif
+
+		// Test case for bug #31557
+		[Test]
+		public void TcpDoubleBind ()
+		{
+			using (Socket s = new Socket (AddressFamily.InterNetwork,
+						SocketType.Stream, ProtocolType.Tcp))
+			using (Socket ss = new Socket (AddressFamily.InterNetwork,
+						SocketType.Stream, ProtocolType.Tcp)) {
+				s.SetSocketOption (SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+
+				s.Bind (new IPEndPoint (IPAddress.Any, 12345));
+				s.Listen(1);
+
+				ss.SetSocketOption (SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+
+				Exception ex = null;
+				try {
+					ss.Bind (new IPEndPoint (IPAddress.Any, 12345));
+					ss.Listen(1);
+				} catch (SocketException e) {
+					ex = e;
+				}
+
+				Assert.AreEqual (SupportsPortReuse (), ex == null);
+			}
+		}
+
 		[Test]
 		[Category ("NotOnMac")]
                 public void ConnectedProperty ()
@@ -3494,7 +3569,6 @@ namespace MonoTests.System.Net.Sockets
 				server.Close ();
 			}
 		}
-#endif
 
 		[Test] // GetSocketOption (SocketOptionLevel, SocketOptionName)
 		public void GetSocketOption1_Socket_Closed ()
@@ -3529,9 +3603,7 @@ namespace MonoTests.System.Net.Sockets
 					Assert.IsNull (ex.InnerException, "#4");
 					Assert.IsNotNull (ex.Message, "#5");
 					Assert.AreEqual (10014, ex.NativeErrorCode, "#6");
-#if NET_2_0
 					Assert.AreEqual (SocketError.Fault, ex.SocketErrorCode, "#7");
-#endif
 				}
 		}
 
@@ -3596,9 +3668,7 @@ namespace MonoTests.System.Net.Sockets
 					Assert.IsNull (ex.InnerException, "#4");
 					Assert.IsNotNull (ex.Message, "#5");
 					Assert.AreEqual (10014, ex.NativeErrorCode, "#6");
-#if NET_2_0
 					Assert.AreEqual (SocketError.Fault, ex.SocketErrorCode, "#7");
-#endif
 				}
 			}
 		}
@@ -3619,9 +3689,7 @@ namespace MonoTests.System.Net.Sockets
 					Assert.IsNull (ex.InnerException, "#4");
 					Assert.IsNotNull (ex.Message, "#5");
 					Assert.AreEqual (10014, ex.NativeErrorCode, "#6");
-#if NET_2_0
 					Assert.AreEqual (SocketError.Fault, ex.SocketErrorCode, "#7");
-#endif
 				}
 			}
 		}
@@ -3694,14 +3762,9 @@ namespace MonoTests.System.Net.Sockets
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
 					Assert.IsNotNull (ex.Message, "#4");
-#if NET_2_0
 					// The specified value is not a valid 'MulticastOption'
 					Assert.IsTrue (ex.Message.IndexOf ("'MulticastOption'") != -1, "#5:" + ex.Message);
 					Assert.AreEqual ("optionValue", ex.ParamName, "#6");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#5");
-					Assert.IsNull (ex.ParamName, "#6");
-#endif
 				}
 			}
 		}
@@ -3736,9 +3799,7 @@ namespace MonoTests.System.Net.Sockets
 				Assert.IsNull (ex.InnerException, "#4");
 				Assert.IsNotNull (ex.Message, "#5");
 				Assert.AreEqual (10022, ex.NativeErrorCode, "#6");
-#if NET_2_0
 				Assert.AreEqual (SocketError.InvalidArgument, ex.SocketErrorCode, "#7");
-#endif
 			} finally {
 				s.Close ();
 			}
@@ -3747,11 +3808,7 @@ namespace MonoTests.System.Net.Sockets
 		[Test] // SetSocketOption (SocketOptionLevel, SocketOptionName, Object)
 		public void SetSocketOption3_AddMembershipIPv6_IPv6MulticastOption ()
 		{
-#if NET_2_0
 			if (!Socket.OSSupportsIPv6)
-#else
-			if (!Socket.SupportsIPv6)
-#endif
 				Assert.Ignore ("IPv6 not enabled.");
 
 			IPAddress mcast_addr = IPAddress.Parse ("ff02::1");
@@ -3766,11 +3823,7 @@ namespace MonoTests.System.Net.Sockets
 		[Test] // SetSocketOption (SocketOptionLevel, SocketOptionName, Object)
 		public void SetSocketOption3_AddMembershipIPv6_MulticastOption ()
 		{
-#if NET_2_0
 			if (!Socket.OSSupportsIPv6)
-#else
-			if (!Socket.SupportsIPv6)
-#endif
 				Assert.Ignore ("IPv6 not enabled.");
 
 			IPAddress mcast_addr = IPAddress.Parse ("ff02::1");
@@ -3785,14 +3838,9 @@ namespace MonoTests.System.Net.Sockets
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
 					Assert.IsNotNull (ex.Message, "#4");
-#if NET_2_0
 					// The specified value is not a valid 'IPv6MulticastOption'
 					Assert.IsTrue (ex.Message.IndexOf ("'IPv6MulticastOption'") != -1, "#5:" + ex.Message);
 					Assert.AreEqual ("optionValue", ex.ParamName, "#6");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#5");
-					Assert.IsNull (ex.ParamName, "#6");
-#endif
 				}
 			}
 		}
@@ -3815,9 +3863,7 @@ namespace MonoTests.System.Net.Sockets
 				Assert.IsNull (ex.InnerException, "#4");
 				Assert.IsNotNull (ex.Message, "#5");
 				Assert.AreEqual (10022, ex.NativeErrorCode, "#6");
-#if NET_2_0
 				Assert.AreEqual (SocketError.InvalidArgument, ex.SocketErrorCode, "#7");
-#endif
 			} finally {
 				s.Close ();
 			}
@@ -3835,13 +3881,8 @@ namespace MonoTests.System.Net.Sockets
 					// The specified value is not valid
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
-#if NET_2_0
 					Assert.IsNotNull (ex.Message, "#4");
 					Assert.AreEqual ("optionValue", ex.ParamName, "#5");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#4");
-					Assert.IsNull (ex.ParamName, "#5");
-#endif
 				}
 			}
 		}
@@ -3858,13 +3899,8 @@ namespace MonoTests.System.Net.Sockets
 					// The specified value is not valid
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
-#if NET_2_0
 					Assert.IsNotNull (ex.Message, "#4");
 					Assert.AreEqual ("optionValue", ex.ParamName, "#5");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#4");
-					Assert.IsNull (ex.ParamName, "#5");
-#endif
 				}
 			}
 		}
@@ -3880,14 +3916,9 @@ namespace MonoTests.System.Net.Sockets
 				} catch (ArgumentException ex) {
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
-#if NET_2_0
 					// The specified value is not valid
 					Assert.IsNotNull (ex.Message, "#4");
 					Assert.AreEqual ("optionValue", ex.ParamName, "#5");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#4");
-					Assert.IsNull (ex.ParamName, "#5");
-#endif
 				}
 			}
 		}
@@ -3903,14 +3934,9 @@ namespace MonoTests.System.Net.Sockets
 				} catch (ArgumentException ex) {
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
-#if NET_2_0
 					// The specified value is not valid
 					Assert.IsNotNull (ex.Message, "#4");
 					Assert.AreEqual ("optionValue", ex.ParamName, "#5");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#4");
-					Assert.IsNull (ex.ParamName, "#5");
-#endif
 				}
 			}
 		}
@@ -3926,14 +3952,9 @@ namespace MonoTests.System.Net.Sockets
 				} catch (ArgumentException ex) {
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
-#if NET_2_0
 					// The specified value is not valid
 					Assert.IsNotNull (ex.Message, "#4");
 					Assert.AreEqual ("optionValue", ex.ParamName, "#5");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#4");
-					Assert.IsNull (ex.ParamName, "#5");
-#endif
 				}
 			}
 		}
@@ -3970,14 +3991,9 @@ namespace MonoTests.System.Net.Sockets
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
 					Assert.IsNotNull (ex.Message, "#4");
-#if NET_2_0
 					// The specified value is not a valid 'MulticastOption'
 					Assert.IsTrue (ex.Message.IndexOf ("'MulticastOption'") != -1, "#5:" + ex.Message);
 					Assert.AreEqual ("optionValue", ex.ParamName, "#6");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#5");
-					Assert.IsNull (ex.ParamName, "#6");
-#endif
 				}
 			}
 		}
@@ -4016,9 +4032,7 @@ namespace MonoTests.System.Net.Sockets
 				Assert.IsNull (ex.InnerException, "#4");
 				Assert.IsNotNull (ex.Message, "#5");
 				Assert.AreEqual (10022, ex.NativeErrorCode, "#6");
-#if NET_2_0
 				Assert.AreEqual (SocketError.InvalidArgument, ex.SocketErrorCode, "#7");
-#endif
 			} finally {
 				s.Close ();
 			}
@@ -4027,11 +4041,7 @@ namespace MonoTests.System.Net.Sockets
 		[Test] // SetSocketOption (SocketOptionLevel, SocketOptionName, Object)
 		public void SetSocketOption3_DropMembershipIPv6_IPv6MulticastOption ()
 		{
-#if NET_2_0
 			if (!Socket.OSSupportsIPv6)
-#else
-			if (!Socket.SupportsIPv6)
-#endif
 				Assert.Ignore ("IPv6 not enabled.");
 
 			using (Socket s = new Socket (AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp)) {
@@ -4049,11 +4059,7 @@ namespace MonoTests.System.Net.Sockets
 		[Test] // SetSocketOption (SocketOptionLevel, SocketOptionName, Object)
 		public void SetSocketOption3_DropMembershipIPv6_MulticastOption ()
 		{
-#if NET_2_0
 			if (!Socket.OSSupportsIPv6)
-#else
-			if (!Socket.SupportsIPv6)
-#endif
 				Assert.Ignore ("IPv6 not enabled.");
 
 			IPAddress mcast_addr = IPAddress.Parse ("ff02::1");
@@ -4070,14 +4076,9 @@ namespace MonoTests.System.Net.Sockets
 					Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
 					Assert.IsNull (ex.InnerException, "#3");
 					Assert.IsNotNull (ex.Message, "#4");
-#if NET_2_0
 					// The specified value is not a valid 'IPv6MulticastOption'
 					Assert.IsTrue (ex.Message.IndexOf ("'IPv6MulticastOption'") != -1, "#5:" + ex.Message);
 					Assert.AreEqual ("optionValue", ex.ParamName, "#6");
-#else
-					Assert.AreEqual ("optionValue", ex.Message, "#5");
-					Assert.IsNull (ex.ParamName, "#6");
-#endif
 				}
 			}
 		}
@@ -4100,9 +4101,7 @@ namespace MonoTests.System.Net.Sockets
 				Assert.IsNull (ex.InnerException, "#4");
 				Assert.IsNotNull (ex.Message, "#5");
 				Assert.AreEqual (10022, ex.NativeErrorCode, "#6");
-#if NET_2_0
 				Assert.AreEqual (SocketError.InvalidArgument, ex.SocketErrorCode, "#7");
-#endif
 			} finally {
 				s.Close ();
 			}
@@ -4329,12 +4328,62 @@ namespace MonoTests.System.Net.Sockets
 			}
 		}
 		
+		[Test]
+		public void ConnectToIPV4EndPointUsingDualModelSocket () {
+			using (var server = new Socket (SocketType.Stream, ProtocolType.Tcp))
+			using (var client = new Socket (SocketType.Stream, ProtocolType.Tcp)) {
+				var host = new IPEndPoint (IPAddress.Loopback, 0);
+					
+				server.Bind (host);
+				server.Listen (0);
+				
+				var ep = server.LocalEndPoint as IPEndPoint;
+				
+				client.Connect (ep);
+				client.Disconnect (true);
+				
+				client.Connect (IPAddress.Loopback, ep.Port);
+				client.Disconnect (true);
+				
+				client.Connect (new [] {IPAddress.Loopback}, ep.Port);
+				client.Disconnect (true);
+			}
+		}
+		
+		[Test]
+		public void BeginConnectToIPV4EndPointUsingDualModelSocket () {
+			using (var server = new Socket (SocketType.Stream, ProtocolType.Tcp))
+			using (var client = new Socket (SocketType.Stream, ProtocolType.Tcp)) {
+				var host = new IPEndPoint (IPAddress.Loopback, 0);
+					
+				server.Bind (host);
+				server.Listen (0);
+				
+				var ep = server.LocalEndPoint as IPEndPoint;
+				
+				BCCalledBack.Reset ();
+				var ar1 = client.BeginConnect (ep, BCCallback, client);
+				Assert.IsTrue (BCCalledBack.WaitOne (10000), "#1");
+				client.Disconnect (true);
+				
+				BCCalledBack.Reset ();
+				var ar2 = client.BeginConnect (IPAddress.Loopback, ep.Port, BCCallback, client);
+				Assert.IsTrue (BCCalledBack.WaitOne (10000), "#2");
+				client.Disconnect (true);
+				
+				BCCalledBack.Reset ();
+				var ar3 = client.BeginConnect (new [] {IPAddress.Loopback}, ep.Port, BCCallback, client);
+				Assert.IsTrue (BCCalledBack.WaitOne (10000), "#2");
+				client.Disconnect (true);
+			}
+		}
+
 		Socket StartSocketServer ()
 		{
 
 			Socket listenSocket = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 			
-			listenSocket.Bind (new IPEndPoint (IPAddress.Loopback, 8001));
+			listenSocket.Bind (new IPEndPoint (IPAddress.Loopback, 0));
 			listenSocket.Listen (1);
 
 			listenSocket.BeginAccept (new AsyncCallback (ReceiveCallback), listenSocket);
@@ -4351,6 +4400,19 @@ namespace MonoTests.System.Net.Sockets
  
 			client.Receive (bytes, bytes.Length, 0);
 			client.Close ();
+		}
+
+		[Test]
+		public void UdpMulticasTimeToLive ()
+		{
+			/* see https://bugzilla.xamarin.com/show_bug.cgi?id=36941 */
+
+			using (Socket socket = new Socket (AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)) {
+				IPEndPoint end_point = new IPEndPoint (IPAddress.Any, 11000);
+				socket.SetSocketOption (SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
+				socket.Bind (end_point);
+				socket.SetSocketOption (SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 19);
+			}
 		}
  	}
 }

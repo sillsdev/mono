@@ -25,7 +25,9 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-#if NET_4_0
+using System.Security.Cryptography;
+
+
 using System;
 using System.Text;
 using System.Web.Security;
@@ -166,6 +168,38 @@ namespace MonoTests.System.Web.Security
 				// Success
 			}
 		}
+
+#if NET_4_5
+		[Test]
+		public void Protect ()
+		{
+			AssertExtensions.Throws<ArgumentNullException> (() =>
+				MachineKey.Protect (null, null), 
+				"MachineKey.Protect not throwing an ArgumentNullException");
+
+			AssertExtensions.Throws<ArgumentNullException> (() => 
+				MachineKey.Protect (null, new [] { "test" }), 
+				"MachineKey.Protect not throwing an ArgumentNullException");
+
+			var testString = "asfgasd43tqrt4";
+			var validUsages = new [] { "usage1", "usage2" };
+			var oneUsage = new [] { "usage1" };
+			var invalidUsages = new [] { "usage1", "invalidUsage" };
+
+			var plainBytes = Encoding.ASCII.GetBytes (testString);
+			var encryptedBytes = MachineKey.Protect (plainBytes, validUsages);
+			var validDecryptedBytes = MachineKey.Unprotect (encryptedBytes, validUsages);
+
+			Assert.AreEqual (plainBytes, validDecryptedBytes, "Decryption didn't work");
+
+			AssertExtensions.Throws<CryptographicException> (() => 
+				MachineKey.Unprotect (encryptedBytes, invalidUsages), 
+				"Purposes not encrypting properly");
+
+			AssertExtensions.Throws<CryptographicException> (() => 
+				MachineKey.Unprotect (encryptedBytes, oneUsage), 
+				"Single purpose working when multiple supplied");
+		}
+#endif
 	}
 }
-#endif

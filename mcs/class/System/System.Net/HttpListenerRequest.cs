@@ -30,30 +30,19 @@
 
 #if SECURITY_DEP
 
-#if MONOTOUCH
-using Mono.Security.Protocol.Tls;
-#else
-extern alias MonoSecurity;
-using MonoSecurity::Mono.Security.Protocol.Tls;
-#endif
-
 using System.Collections;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-#if NET_4_0
 using System.Security.Authentication.ExtendedProtection;
-#endif
-#if NET_4_5
 using System.Threading.Tasks;
-#endif
+using System.Net;
 
 namespace System.Net {
 	public sealed class HttpListenerRequest
 	{
-#if NET_4_0
 		class Context : TransportContext
 		{
 			public override ChannelBinding GetChannelBinding (ChannelBindingKind kind)
@@ -61,7 +50,6 @@ namespace System.Net {
 				throw new NotImplementedException ();
 			}
 		}
-#endif
 
 		string [] accept_types;
 		Encoding content_encoding;
@@ -148,10 +136,10 @@ namespace System.Net {
 			foreach (string kv in components) {
 				int pos = kv.IndexOf ('=');
 				if (pos == -1) {
-					query_string.Add (null, HttpUtility.UrlDecode (kv));
+					query_string.Add (null, WebUtility.UrlDecode (kv));
 				} else {
-					string key = HttpUtility.UrlDecode (kv.Substring (0, pos));
-					string val = HttpUtility.UrlDecode (kv.Substring (pos + 1));
+					string key = WebUtility.UrlDecode (kv.Substring (0, pos));
+					string val = WebUtility.UrlDecode (kv.Substring (pos + 1));
 					
 					query_string.Add (key, val);
 				}
@@ -168,7 +156,7 @@ namespace System.Net {
 
 			string path;
 			Uri raw_uri = null;
-			if (Uri.MaybeUri (raw_url) && Uri.TryCreate (raw_url, UriKind.Absolute, out raw_uri))
+			if (Uri.MaybeUri (raw_url.ToLowerInvariant ()) && Uri.TryCreate (raw_url, UriKind.Absolute, out raw_uri))
 				path = raw_uri.PathAndQuery;
 			else
 				path = raw_url;
@@ -188,11 +176,16 @@ namespace System.Net {
 								host, LocalEndPoint.Port);
 
 			if (!Uri.TryCreate (base_uri + path, UriKind.Absolute, out url)){
-				context.ErrorMessage = "Invalid url: " + base_uri + path;
+				context.ErrorMessage = WebUtility.HtmlEncode ("Invalid url: " + base_uri + path);
 				return;
 			}
 
 			CreateQueryString (url.Query);
+
+			// Use reference source HttpListenerRequestUriBuilder to process url.
+			// Fixes #29927
+			url = HttpListenerRequestUriBuilder.GetRequestUri (raw_url, url.Scheme,
+								url.Authority, url.LocalPath, url.Query);
 
 			if (version >= HttpVersion.Version11) {
 				string t_encoding = Headers ["Transfer-Encoding"];
@@ -329,6 +322,9 @@ namespace System.Net {
 						return false;
 					if (InputStream.EndRead (ares) <= 0)
 						return true;
+				} catch (ObjectDisposedException e) {
+					input_stream = null;
+					return true;
 				} catch {
 					return false;
 				}
@@ -509,7 +505,6 @@ namespace System.Net {
 			return context.Connection.ClientCertificate;
 		}
 
-#if NET_4_0
 		[MonoTODO]
 		public string ServiceName {
 			get {
@@ -522,9 +517,7 @@ namespace System.Net {
 				return new Context ();
 			}
 		}
-#endif
 		
-#if NET_4_5
 		[MonoTODO]
 		public bool IsWebSocketRequest {
 			get {
@@ -536,7 +529,6 @@ namespace System.Net {
 		{
 			return Task<X509Certificate2>.Factory.FromAsync (BeginGetClientCertificate, EndGetClientCertificate, null);
 		}
-#endif
 	}
 }
 #endif

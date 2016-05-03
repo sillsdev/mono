@@ -65,6 +65,9 @@
     <Compile Include="AssemblyResolver.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="BabysitterSupport.cs">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="CoreExtensions.cs" />
     <Compile Include="CultureDetector.cs" />
     <Compile Include="ExtensionPoint.cs" />
@@ -175,6 +178,7 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="TextCapture.cs" />
+    <Compile Include="ThreadUtility.cs" />
     <Compile Include="ThreadedTestRunner.cs" />
     <Compile Include="Builders\AbstractFixtureBuilder.cs">
       <SubType>Code</SubType>

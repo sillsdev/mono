@@ -1,4 +1,3 @@
-#if NET_4_0
 // SemaphoreSlimTests.cs
 //
 // Copyright (c) 2008 Jérémie "Garuma" Laval
@@ -37,21 +36,23 @@ namespace MonoTests.System.Threading
 	public class SemaphoreSlimTests
 	{
 		SemaphoreSlim sem;
-		SemaphoreSlim semMax;
 		
 		[SetUp]
 		public void Setup()
 		{
-			sem = new SemaphoreSlim(5);
-			semMax = new SemaphoreSlim(5, 5);
+			sem = new SemaphoreSlim(5);			
 		}	
 		
 		[Test]
 		public void CurrentCountMaxTestCase()
 		{
-			semMax.Wait();
-			semMax.Release(3);
-			Assert.AreEqual(5, semMax.CurrentCount);
+			using (var semMax = new SemaphoreSlim(5, 5)) {
+				semMax.Wait();
+				try {
+					semMax.Release(3);
+					Assert.Fail ();
+				} catch (SemaphoreFullException) {}
+			}
 		}
 		
 		[Test]
@@ -90,4 +91,3 @@ namespace MonoTests.System.Threading
 		}
 	}
 }
-#endif

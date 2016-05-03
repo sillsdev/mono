@@ -125,6 +125,17 @@ namespace System.Net.Http.Headers
 			}
 		}
 
+		public static class Host
+		{
+			public static bool TryParse (string input, out string result)
+			{
+				result = input;
+
+				System.Uri dummy;
+				return System.Uri.TryCreate ("http://u@" + input + "/", UriKind.Absolute, out dummy);
+			}
+		}
+
 		public static class Int
 		{
 			public static bool TryParse (string input, out int result)
@@ -143,6 +154,8 @@ namespace System.Net.Http.Headers
 
 		public static class MD5
 		{
+			public new static readonly Func<object, string> ToString = l => Convert.ToBase64String ((byte[]) l);
+
 			public static bool TryParse (string input, out byte[] result)
 			{
 				try {

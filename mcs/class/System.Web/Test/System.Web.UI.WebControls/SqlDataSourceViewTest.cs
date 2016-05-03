@@ -28,7 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using NUnit.Framework;
 using System;
@@ -453,9 +452,7 @@ namespace MonoTests.System.Web.UI.WebControls
 				evaluateCount = 0;
 			}
 
-#if NET_4_0
 			internal
-#endif
 			protected override object Evaluate (HttpContext context, Control control) {
 				evaluateCount++;
 				return String.Format ("{0}{1}", DefaultValue, evaluateCount);
@@ -1087,4 +1084,3 @@ namespace MonoTests.System.Web.UI.WebControls
 
 }
 
-#endif

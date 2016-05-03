@@ -258,9 +258,7 @@ namespace Mono.ILASM {
                                 keywords ["modopt"] = new ILToken (Token.K_MODOPT, "modopt");
                                 keywords ["typedref"] = new ILToken (Token.K_TYPEDREF, "typedref");
                                 keywords ["property"] = new ILToken (Token.K_PROPERTY, "property");
-#if NET_2_0 || BOOTSTRAP_NET_2_0
                                 keywords ["type"] = new ILToken (Token.K_TYPE, "type");
-#endif
                                 keywords ["refany"] = new ILToken (Token.K_TYPEDREF, "typedref");
                                 keywords ["wchar"] = new ILToken (Token.K_WCHAR, "wchar");
                                 keywords ["char"] = new ILToken (Token.K_CHAR, "char");
@@ -319,6 +317,9 @@ namespace Mono.ILASM {
                                 keywords ["off"] = new ILToken (Token.K_OFF, "off");
 				keywords ["strict"] = new ILToken (Token.K_STRICT, "strict");
 				keywords ["forwarder"] = new ILToken (Token.K_FORWARDER, "forwarder");
+                                keywords ["legacy"] = new ILToken (Token.K_LEGACY, "legacy");
+                                keywords ["library"] = new ILToken (Token.K_LIBRARY, "library");
+                                keywords ["auto"] = new ILToken (Token.K_AUTO, "auto");
 
                                 return keywords;
                         }

@@ -27,7 +27,62 @@ public class IPAddressTest
 		   "1::", "1:0:0:0:0:0:0:0",
 		   "2:2::", "2:2:0:0:0:0:0:0",
 		   "7:7:7:7:7:7:7:0", "7:7:7:7:7:7:7:0",
-//		   "::1", "0:0:0:0:0:0:0:1", FIXME: ToString not working
+		   "::1", "0:0:0:0:0:0:0:1",
+		   "::2", "0:0:0:0:0:0:0:2",
+		   "::F", "0:0:0:0:0:0:0:F",
+		   "::10", "0:0:0:0:0:0:0:10",
+		   "::A0", "0:0:0:0:0:0:0:A0",
+		   "::F0", "0:0:0:0:0:0:0:F0",
+		   "::FF", "0:0:0:0:0:0:0:FF",
+		   "::0.1.0.0", "0:0:0:0:0:0:1:0",
+		   "::0.2.0.0", "0:0:0:0:0:0:2:0",
+		   "::0.15.0.0", "0:0:0:0:0:0:F:0",
+		   "::0.16.0.0", "0:0:0:0:0:0:10:0",
+		   "::0.160.0.0", "0:0:0:0:0:0:A0:0",
+		   "::0.240.0.0", "0:0:0:0:0:0:F0:0",
+		   "::0.255.0.0", "0:0:0:0:0:0:FF:0",
+		   "::1001", "0:0:0:0:0:0:0:1001",
+		   "::1002", "0:0:0:0:0:0:0:1002",
+		   "::100F", "0:0:0:0:0:0:0:100F",
+		   "::1010", "0:0:0:0:0:0:0:1010",
+		   "::10A0", "0:0:0:0:0:0:0:10A0",
+		   "::10F0", "0:0:0:0:0:0:0:10F0",
+		   "::10FF", "0:0:0:0:0:0:0:10FF",
+		   "::0.1.0.1", "0:0:0:0:0:0:1:1",
+		   "::0.2.0.2", "0:0:0:0:0:0:2:2",
+		   "::0.15.0.15", "0:0:0:0:0:0:F:F",
+		   "::0.16.0.16", "0:0:0:0:0:0:10:10",
+		   "::0.160.0.160", "0:0:0:0:0:0:A0:A0",
+		   "::0.240.0.240", "0:0:0:0:0:0:F0:F0",
+		   "::0.255.0.255", "0:0:0:0:0:0:FF:FF",
+		   "::FFFF:0:1", "0:0:0:0:0:FFFF:0:1",
+		   "::FFFF:0:2", "0:0:0:0:0:FFFF:0:2",
+		   "::FFFF:0:F", "0:0:0:0:0:FFFF:0:F",
+		   "::FFFF:0:10", "0:0:0:0:0:FFFF:0:10",
+		   "::FFFF:0:A0", "0:0:0:0:0:FFFF:0:A0",
+		   "::FFFF:0:F0", "0:0:0:0:0:FFFF:0:F0",
+		   "::FFFF:0:FF", "0:0:0:0:0:FFFF:0:FF",
+		   "::FFFF:0.1.0.0", "0:0:0:0:0:FFFF:1:0",
+		   "::FFFF:0.2.0.0", "0:0:0:0:0:FFFF:2:0",
+		   "::FFFF:0.15.0.0", "0:0:0:0:0:FFFF:F:0",
+		   "::FFFF:0.16.0.0", "0:0:0:0:0:FFFF:10:0",
+		   "::FFFF:0.160.0.0", "0:0:0:0:0:FFFF:A0:0",
+		   "::FFFF:0.240.0.0", "0:0:0:0:0:FFFF:F0:0",
+		   "::FFFF:0.255.0.0", "0:0:0:0:0:FFFF:FF:0",
+		   "::FFFF:0:1001", "0:0:0:0:0:FFFF:0:1001",
+		   "::FFFF:0:1002", "0:0:0:0:0:FFFF:0:1002",
+		   "::FFFF:0:100F", "0:0:0:0:0:FFFF:0:100F",
+		   "::FFFF:0:1010", "0:0:0:0:0:FFFF:0:1010",
+		   "::FFFF:0:10A0", "0:0:0:0:0:FFFF:0:10A0",
+		   "::FFFF:0:10F0", "0:0:0:0:0:FFFF:0:10F0",
+		   "::FFFF:0:10FF", "0:0:0:0:0:FFFF:0:10FF",
+		   "::FFFF:0.1.0.1", "0:0:0:0:0:FFFF:1:1",
+		   "::FFFF:0.2.0.2", "0:0:0:0:0:FFFF:2:2",
+		   "::FFFF:0.15.0.15", "0:0:0:0:0:FFFF:F:F",
+		   "::FFFF:0.16.0.16", "0:0:0:0:0:FFFF:10:10",
+		   "::FFFF:0.160.0.160", "0:0:0:0:0:FFFF:A0:A0",
+		   "::FFFF:0.240.0.240", "0:0:0:0:0:FFFF:F0:F0",
+		   "::FFFF:0.255.0.255", "0:0:0:0:0:FFFF:FF:FF",
 		   "0:7:7:7:7:7:7:7", "0:7:7:7:7:7:7:7",
 		   "E::1", "E:0:0:0:0:0:0:1",
 		   "E::2:2", "E:0:0:0:0:0:2:2",
@@ -48,6 +103,7 @@ public class IPAddressTest
 		   "::FFFF:192.168.0.1", "::FFFF:192.168.0.1",
 		   "::FFFF:0.168.0.1", "::FFFF:0.168.0.1",
 		   "::FFFF", "::0.0.255.255",
+		   "::EEEE:A00:1", "::EEEE:10.0.0.1",
 		   "::10.0.0.1", "::10.0.0.1",
 		   "1234::1234:0:0", "1234:0:0:0:0:1234:0:0",
 		   "1:0:1:0:1:0:1:0", "1:0:1:0:1:0:1:0",
@@ -64,6 +120,23 @@ public class IPAddressTest
 		   "11:22:33:44:55:66:77:8", "11:22:33:44:55:66:77:8",
 		   "0:0:7711:ab42:1230::", "::7711:ab42:1230:0:0:0",
 		   "fec0:0:0:ffff::1%1",
+	};
+
+	static string[] ipv6ParseWrong = new string[] {
+		   ":::4df",
+		   "4df:::",
+		   "0:::4df",
+		   "4df:::0",
+		   "::4df:::",
+		   "0::4df:::",
+		   " ::1",
+		   ":: 1",
+		   ":",
+		   "0:0:0:0:0:0:0:0:0",
+		   "0:0:0:0:0:0:0",
+		   "0FFFF::",
+		   "FFFF0::",
+		   "[::1",
 	};
 
 	static string[] ipv4ParseOk = new string[] {
@@ -87,7 +160,6 @@ public class IPAddressTest
 		"20.65535", "20.0.255.255",
 		"0313.027035210", "203.92.58.136", // bug #411920
 		"0313.0134.035210", "203.92.58.136", // too
-		"7848198702", "211.202.2.46", // too
 		"1434328179", "85.126.28.115", // too
 		"3397943208", "202.136.127.168", // too
 	};
@@ -113,8 +185,11 @@ public class IPAddressTest
 		"12.",
 		"12.1.2.",
 		"12...",
-		"  "
+		"  ",
+		"7848198702",
 	};
+
+	static byte [] ipv4MappedIPv6Prefix = new byte [] { 0,0, 0,0, 0,0, 0,0, 0,0, 0xFF,0xFF };
 
 	[Test]
 	public void PublicFields ()
@@ -343,9 +418,6 @@ public class IPAddressTest
 	}
 
 	[Test]
-#if TARGET_JVM
-	[Ignore ("TD BUG ID: 7213")]
-#endif
 	public void Constructor0_Address_Invalid ()
 	{
 		try {
@@ -400,9 +472,6 @@ public class IPAddressTest
 	}
 
 	[Test]
-#if TARGET_JVM
-	[Ignore ("TD BUG ID: 7213")]
-#endif
 	public void Constructor1_Address_4Byte ()
 	{
 		byte [] bytes = new byte [4] { 192, 202, 112, 37 };
@@ -546,14 +615,82 @@ public class IPAddressTest
 		Assert.IsFalse (IPAddress.Parse ("FE00::1").IsIPv6Multicast, "#3");
 	}
 
-#if NET_4_0
 	[Test]
 	public void IsIPv6Teredo ()
 	{
 		Assert.IsTrue (IPAddress.Parse ("2001::1").IsIPv6Teredo, "#1");
 		Assert.IsFalse (IPAddress.Parse ("2002::1").IsIPv6Teredo, "#2");
 	}
+
+	[Test]
+	public void ParseWrongV6 ()
+	{
+		if (!Socket.SupportsIPv6)
+			Assert.Ignore ("IPv6 must be enabled in machine.config");
+
+		for (int i = 0; i < ipv6ParseWrong.Length; i++) {
+			string ipAddress = ipv6ParseWrong [i];
+
+			try {
+				IPAddress ip = IPAddress.Parse (ipAddress);
+				Assert.Fail ("#1:" + i + " (" + ipAddress + ")");
+			} catch (FormatException ex) {
+				Assert.AreEqual (typeof (FormatException), ex.GetType (), "#2:" + i);
+				Assert.IsNull (ex.InnerException, "#3:" + i);
+				Assert.IsNotNull (ex.Message, "#4:" + i);
+			}
+		}
+	}
+
+#if NET_4_5
+
+	[Test]
+	public void MapToIPv6 ()
+	{
+		for (int i = 0; i < ipv4ParseOk.Length / 2; i++) {
+			IPAddress v4 = IPAddress.Parse (ipv4ParseOk [i * 2]);
+			byte [] v4bytes = v4.GetAddressBytes ();
+			IPAddress v6 = v4.MapToIPv6 ();
+			byte [] v6bytes = v6.GetAddressBytes ();
+			IPAddress v4back = v6.MapToIPv4 ();
+
+			Assert.IsTrue (StartsWith (v6bytes, ipv4MappedIPv6Prefix), "MapToIPv6 #" + i + ".1");
+			Assert.IsTrue (v6bytes [12] == v4bytes [0], "MapToIPv6 #" + i + ".2");
+			Assert.IsTrue (v6bytes [13] == v4bytes [1], "MapToIPv6 #" + i + ".3");
+			Assert.IsTrue (v6bytes [14] == v4bytes [2], "MapToIPv6 #" + i + ".4");
+			Assert.IsTrue (v6bytes [15] == v4bytes [3], "MapToIPv6 #" + i + ".5");
+			Assert.IsTrue (v4.Equals (v4back), "MapToIPv4 #" + i);
+		}
+
+		//TODO: Test using MapToIPv4/6 with anything other than IPv4/6 addresses.
+		//Currently it is not possible to do with the IPAddress implementation.
+	}
+
+	static bool StartsWith (byte [] a, byte [] b)
+	{
+		if (a.Length < b.Length)
+			return false;
+		for (int i = 0; i < b.Length; i++)
+		{
+			if (a [i] != b [i])
+				return false;
+		}
+		return true;
+	}
+
 #endif
+
+	[Test]
+	public void EqualsFromBytes ()
+	{
+		for (int i = 0; i < ipv4ParseOk.Length / 2; i++) {
+			IPAddress ip = IPAddress.Parse (ipv4ParseOk [i * 2]);
+			IPAddress ipFromBytes = new IPAddress (ip.GetAddressBytes ());
+			Assert.IsTrue (ip.Equals (ipFromBytes), "EqualsFromBytes #" + i);
+		}
+
+	}
+
 }
 }
 

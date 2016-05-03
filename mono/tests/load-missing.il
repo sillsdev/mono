@@ -11,6 +11,10 @@
 {
   .ver 0:0:0:0
 }
+.assembly extern notFoundAssembly
+{
+  .ver 0:0:0:0
+}
 
 .assembly 'load-missing'
 {
@@ -62,7 +66,7 @@
     }
 
     .method public hidebysig newslot virtual 
-            instance void  Invoke([t]Missing t) runtime managed
+            instance void  Invoke(class [t]Missing t) runtime managed
     {
     }
 
@@ -375,7 +379,7 @@
   {
     .maxstack 8
     ldstr "Hello"
-    call void class [mscorlib]System.String::Trim([mscorlib]MissingType)
+    call void class [mscorlib]System.String::Trim(class [mscorlib]MissingType)
     ret
   }
 
@@ -533,7 +537,7 @@
     IL_0001:  newobj     instance void LoadMissing::.ctor()
     IL_0006:  stloc.0
     IL_0007:  ldloc.0
-    IL_0008:  ldftn      instance void LoadMissing::delegate_target()
+    IL_0008:  ldftn      void LoadMissing::delegate_target()
     IL_000e:  newobj     instance void DelegateWithMissingArgument::.ctor(object,
                                                                           native int)
     IL_0013:  stloc.1
@@ -722,6 +726,12 @@
 
 .class public auto ansi beforefieldinit FieldWithMissingType
 {
-	.field  public [t]Missing BrokenField
+	.field  public class [t]Missing BrokenField
     .field  public static int32 WorkingField
+}
+
+.class public auto ansi beforefieldinit FieldWithMissingCustomAttribute
+{
+    .field	public object f
+    .custom	instance void class [notFoundAssembly]SomeAttribute::'.ctor'() = (01 00 00 00 ) // ....
 }

@@ -98,5 +98,32 @@ namespace MonoTests.EvaluatorTest
 			Evaluator.Run ("struct B { public string foo; public int bar; }");
 			Evaluator.Run ("B aStruct = new B { foo = \"foo\", bar = 1 };");
 		}
+
+		[Test]
+		public void NestedType ()
+		{
+			Evaluator.Run ("class A { class B { } }");
+			Evaluator.Run ("var x = new A ();");
+		}
+
+		[Test]
+		public void DelegateType ()
+		{
+			Evaluator.Run ("public delegate int D();");
+			Evaluator.Run ("D d = delegate () { return 7; };");
+			object res = Evaluator.Evaluate ("d();");
+			Assert.AreEqual (7, res);
+		}
+
+		[Test]
+		public void ClassWithAttribute ()
+		{
+			Evaluator.Run ("public class A : System.Attribute { }");
+			Evaluator.Run ("[A] public class B {}");
+			Evaluator.Run ("var attr = new B().GetType().GetCustomAttributes(false)[0];");
+
+			object res = Evaluator.Evaluate ("attr.GetType().Name;");
+			Assert.AreEqual ("A", res);
+		}
 	}
 }

@@ -57,8 +57,6 @@
 
 #define MONO_ARCH_CODE_ALIGNMENT 32
 
-#define MONO_ARCH_RETREG1 sparc_i0
-
 #ifdef SPARCV9
 #define MONO_SPARC_STACK_BIAS 2047
 #else
@@ -102,7 +100,6 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_EMULATE_LCONV_TO_R8_UN 1
 #define MONO_ARCH_EMULATE_FREM 1
 #define MONO_ARCH_NEED_DIV_CHECK 1
-#define MONO_ARCH_HAVE_IMT 1
 #define MONO_ARCH_IMT_REG sparc_g1
 #define MONO_ARCH_HAVE_DECOMPOSE_LONG_OPTS 1
 #define MONO_ARCH_HAVE_TLS_INIT 1
@@ -112,8 +109,6 @@ void mono_arch_tls_init (void);
 #ifdef SPARCV9
 #define MONO_ARCH_NO_EMULATE_LONG_SHIFT_OPS
 #endif
-
-#define MONO_ARCH_THIS_AS_FIRST_ARG 1
 
 #ifndef __GNUC__
 /* assume Sun compiler if not GCC */

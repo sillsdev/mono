@@ -66,18 +66,32 @@ namespace System.Net
 
 		public void Close ()
 		{
+			List<WebConnection> connectionsToClose = null;
+
 			//TODO: what do we do with the queue? Empty it out and abort the requests?
 			//TODO: abort requests or wait for them to finish
 			lock (sPoint) {
 				closing = true;
-				foreach (var cnc in connections) {
-					if (cnc.Connection == null)
-						continue;
-					cnc.Connection.Close (false);
-					cnc.Connection = null;
+				var iter = connections.First;
+				while (iter != null) {
+					var cnc = iter.Value.Connection;
+					var node = iter;
+					iter = iter.Next;
+
+					// Closing connections inside the lock leads to a deadlock.
+					if (connectionsToClose == null)
+						connectionsToClose = new List<WebConnection>();
+
+					connectionsToClose.Add (cnc);
+					connections.Remove (node);
+				}
+			}
+
+			if (connectionsToClose != null) {
+				foreach (var cnc in connectionsToClose) {
+					cnc.Close (false);
 					OnConnectionClosed ();
 				}
-				connections.Clear ();
 			}
 		}
 
@@ -120,7 +134,7 @@ namespace System.Net
 		ConnectionState FindIdleConnection ()
 		{
 			foreach (var cnc in connections) {
-				if (cnc.Busy  || cnc.Connection == null)
+				if (cnc.Busy)
 					continue;
 
 				connections.Remove (cnc);
@@ -140,7 +154,7 @@ namespace System.Net
 				return cnc.Connection;
 			}
 
-			if (sPoint.ConnectionLimit > connections.Count) {
+			if (sPoint.ConnectionLimit > connections.Count || connections.Count == 0) {
 				created = true;
 				cnc = new ConnectionState (this);
 				connections.AddFirst (cnc);
@@ -177,14 +191,11 @@ namespace System.Net
 				}
 
 				int count = 0;
-				for (var node = connections.First; node != null; node = node.Next) {
-					var cnc = node.Value;
-
-					if (cnc.Connection == null) {
-						connections.Remove (node);
-						OnConnectionClosed ();
-						continue;
-					}
+				var iter = connections.First;
+				while (iter != null) {
+					var cnc = iter.Value;
+					var node = iter;
+					iter = iter.Next;
 
 					++count;
 					if (cnc.Busy)
@@ -205,7 +216,7 @@ namespace System.Net
 					if (connectionsToClose == null)
 						connectionsToClose = new List<WebConnection> ();
 					connectionsToClose.Add (cnc.Connection);
-					cnc.Connection = null;
+					connections.Remove (node);
 				}
 
 				recycled = connections.Count == 0;
@@ -224,7 +235,10 @@ namespace System.Net
 		}
 
 		class ConnectionState : IWebConnectionState {
-			public WebConnection Connection;
+			public WebConnection Connection {
+				get;
+				private set;
+			}
 
 			public WebConnectionGroup Group {
 				get;

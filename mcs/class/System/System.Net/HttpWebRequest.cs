@@ -31,6 +31,15 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if SECURITY_DEP
+#if MONO_SECURITY_ALIAS
+extern alias MonoSecurity;
+using MonoSecurity::Mono.Security.Interface;
+#else
+using Mono.Security.Interface;
+#endif
+#endif
+
 using System;
 using System.Collections;
 using System.Configuration;
@@ -39,11 +48,13 @@ using System.IO;
 using System.Net;
 using System.Net.Cache;
 using System.Net.Sockets;
+using System.Net.Security;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
+using Mono.Net.Security;
 
 namespace System.Net 
 {
@@ -56,6 +67,7 @@ namespace System.Net
 		bool allowBuffering = true;
 		X509CertificateCollection certificates;
 		string connectionGroup;
+		bool haveContentLength;
 		long contentLength = -1;
 		HttpContinueDelegate continueDelegate;
 		CookieContainer cookieContainer;
@@ -100,6 +112,11 @@ namespace System.Net
 		int maxResponseHeadersLength;
 		static int defaultMaxResponseHeadersLength;
 		int readWriteTimeout = 300000; // ms
+		IMonoTlsProvider tlsProvider;
+#if SECURITY_DEP
+		MonoTlsSettings tlsSettings;
+#endif
+		ServerCertValidationCallback certValidationCallback;
 
 		enum NtlmAuthState {
 			None,
@@ -108,6 +125,9 @@ namespace System.Net
 		}
 		AuthorizationState auth_state, proxy_auth_state;
 		string host;
+
+		[NonSerialized]
+		internal Action<Stream> ResendContentFactory;
 
 		// Constructors
 		static HttpWebRequest ()
@@ -139,6 +159,15 @@ namespace System.Net
 			ThrowOnError = true;
 			ResetAuthorization ();
 		}
+
+#if SECURITY_DEP
+		internal HttpWebRequest (Uri uri, IMonoTlsProvider tlsProvider, MonoTlsSettings settings = null)
+			: this (uri)
+		{
+			this.tlsProvider = tlsProvider;
+			this.tlsSettings = settings;
+		}
+#endif
 		
 		[Obsolete ("Serialization is obsoleted for this type", false)]
 		protected HttpWebRequest (SerializationInfo serializationInfo, StreamingContext streamingContext) 
@@ -199,12 +228,13 @@ namespace System.Net
 			set { allowBuffering = value; }
 		}
 		
-#if NET_4_5
 		public virtual bool AllowReadStreamBuffering {
-			get { return allowBuffering; }
-			set { allowBuffering = value; }
+			get { return false; }
+			set {
+				if (value)
+					throw new InvalidOperationException ();
+			}
 		}
-#endif
 
 		static Exception GetMustImplement ()
 		{
@@ -224,25 +254,41 @@ namespace System.Net
 		
 		internal bool InternalAllowBuffering {
 			get {
-				return (allowBuffering && (method != "HEAD" && method != "GET" &&
-							method != "MKCOL" && method != "CONNECT" &&
-							method != "TRACE"));
+				return allowBuffering && MethodWithBuffer;
 			}
 		}
+
+		bool MethodWithBuffer {
+			get {
+				return method != "HEAD" && method != "GET" &&
+				method != "MKCOL" && method != "CONNECT" &&
+				method != "TRACE";
+			}
+		}
+
+		internal IMonoTlsProvider TlsProvider {
+			get { return tlsProvider; }
+		}
+
+#if SECURITY_DEP
+		internal MonoTlsSettings TlsSettings {
+			get { return tlsSettings; }
+		}
+#endif
 		
 		public X509CertificateCollection ClientCertificates {
 			get {
 				if (certificates == null)
 					certificates = new X509CertificateCollection ();
-
 				return certificates;
 			}
-			[MonoTODO]
 			set {
-				throw GetMustImplement ();
+				if (value == null)
+					throw new ArgumentNullException ("value");
+				certificates = value;
 			}
 		}
-		
+
 		public string Connection {
 			get { return webHeaders ["Connection"]; }
 			set {
@@ -277,6 +323,7 @@ namespace System.Net
 					throw new ArgumentOutOfRangeException ("value", "Content-Length must be >= 0");
 					
 				contentLength = value;
+				haveContentLength = true;
 			}
 		}
 		
@@ -302,9 +349,7 @@ namespace System.Net
 			set { continueDelegate = value; }
 		}
 		
-#if NET_4_5
 		virtual
-#endif
 		public CookieContainer CookieContainer {
 			get { return cookieContainer; }
 			set { cookieContainer = value; }
@@ -314,7 +359,6 @@ namespace System.Net
 			get { return credentials; }
 			set { credentials = value; }
 		}
-#if NET_4_0
 		public DateTime Date {
 			get {
 				string date = webHeaders ["Date"];
@@ -329,7 +373,6 @@ namespace System.Net
 					webHeaders.RemoveAndAdd ("Date", value.ToUniversalTime ().ToString ("r", CultureInfo.InvariantCulture));
 			}
 		}
-#endif
 
 #if !NET_2_1
 		[MonoTODO]
@@ -375,9 +418,7 @@ namespace System.Net
 			}
 		}
 		
-#if NET_4_5
 		virtual
-#endif
 		public bool HaveResponse {
 			get { return haveResponse; }
 		}
@@ -395,11 +436,7 @@ namespace System.Net
 			}
 		}
 		
-#if NET_4_0
 		public
-#else
-		internal
-#endif
 		string Host {
 			get {
 				if (host == null)
@@ -501,13 +538,11 @@ namespace System.Net
 			}
 		}
 		
-#if NET_4_5
 		[MonoTODO]
 		public int ContinueTimeout {
 			get { throw new NotImplementedException (); }
 			set { throw new NotImplementedException (); }
 		}
-#endif
 		
 		public string MediaType {
 			get { return mediaType; }
@@ -558,6 +593,7 @@ namespace System.Net
 				CheckRequestStarted ();
 				proxy = value;
 				servicePoint = null; // we may need a new one
+				GetServicePoint ();
 			}
 		}
 		
@@ -592,7 +628,6 @@ namespace System.Net
 		internal ServicePoint ServicePointNoLock {
 			get { return servicePoint; }
 		}
-#if NET_4_0
 		public virtual bool SupportsCookieContainer { 
 			get {
 				// The managed implementation supports the cookie container
@@ -600,7 +635,6 @@ namespace System.Net
 				return true;
 			}
 		}
-#endif
 		public override int Timeout { 
 			get { return timeout; }
 			set {
@@ -668,7 +702,26 @@ namespace System.Net
 		internal bool ProxyQuery {
 			get { return servicePoint.UsesProxy && !servicePoint.UseConnect; }
 		}
-		
+
+		internal ServerCertValidationCallback ServerCertValidationCallback {
+			get { return certValidationCallback; }
+		}
+
+		public RemoteCertificateValidationCallback ServerCertificateValidationCallback {
+			get {
+				if (certValidationCallback == null)
+					return null;
+				return certValidationCallback.ValidationCallback;
+			}
+			set
+			{
+				if (value == null)
+					certValidationCallback = null;
+				else
+					certValidationCallback = new ServerCertValidationCallback (value);
+			}
+		}
+
 		// Methods
 		
 		internal ServicePoint GetServicePoint ()
@@ -702,31 +755,19 @@ namespace System.Net
 		{
 			AddRange (rangeSpecifier, (long) from, (long) to);
 		}
-#if NET_4_0
 		public
-#else
-		internal
-#endif
 		void AddRange (long range)
 		{
 			AddRange ("bytes", (long) range);
 		}
 
-#if NET_4_0
 		public
-#else
-		internal
-#endif
 		void AddRange (long from, long to)
 		{
 			AddRange ("bytes", from, to);
 		}
 
-#if NET_4_0
 		public
-#else
-		internal
-#endif
 		void AddRange (string rangeSpecifier, long range)
 		{
 			if (rangeSpecifier == null)
@@ -752,11 +793,7 @@ namespace System.Net
 			webHeaders.RemoveAndAdd ("Range", r);
 		}
 
-#if NET_4_0
 		public
-#else
-		internal
-#endif
 		void AddRange (string rangeSpecifier, long from, long to)
 		{
 			if (rangeSpecifier == null)
@@ -863,29 +900,24 @@ namespace System.Net
 			return EndGetRequestStream (asyncResult);
 		}
 
-		WebAsyncResult CheckIfForceWrite (AsyncCallback callback, object state)
+		bool CheckIfForceWrite (SimpleAsyncResult result)
 		{
 			if (writeStream == null || writeStream.RequestWritten || !InternalAllowBuffering)
-				return null;
-#if NET_4_0
+				return false;
 			if (contentLength < 0 && writeStream.CanWrite == true && writeStream.WriteBufferLength < 0)
-				return null;
+				return false;
 
 			if (contentLength < 0 && writeStream.WriteBufferLength >= 0)
 				InternalContentLength = writeStream.WriteBufferLength;
-#else
-			if (contentLength < 0 && writeStream.CanWrite == true)
-				return null;
-#endif
 
 			// This will write the POST/PUT if the write stream already has the expected
 			// amount of bytes in it (ContentLength) (bug #77753) or if the write stream
 			// contains data and it has been closed already (xamarin bug #1512).
 
 			if (writeStream.WriteBufferLength == contentLength || (contentLength == -1 && writeStream.CanWrite == false))
-				return writeStream.WriteRequestAsync (callback, state);
+				return writeStream.WriteRequestAsync (result);
 
-			return null;
+			return false;
 		}
 
 		public override IAsyncResult BeginGetResponse (AsyncCallback callback, object state)
@@ -912,59 +944,47 @@ namespace System.Net
 			WebAsyncResult aread = asyncRead;
 			initialMethod = method;
 
-			aread.InnerAsyncResult = CheckIfForceWrite (GetResponseAsyncCB, aread);
-			if (aread.InnerAsyncResult == null)
-				GetResponseAsyncCB2 (aread);
-			else
-				Monitor.Exit (locker);
-			return aread;
-		}
+			SimpleAsyncResult.RunWithLock (locker, CheckIfForceWrite, inner => {
+				var synch = inner.CompletedSynchronously;
 
-		void GetResponseAsyncCB (IAsyncResult ar)
-		{
-			var result = (WebAsyncResult)ar;
-			var innerResult = (WebAsyncResult)result.InnerAsyncResult;
-			result.InnerAsyncResult = null;
-
-			if (innerResult != null && innerResult.GotException) {
-				asyncRead.SetCompleted (true, innerResult.Exception);
-				asyncRead.DoCallback ();
-				return;
-			}
-
-			Monitor.Enter (locker);
-			GetResponseAsyncCB2 ((WebAsyncResult)ar);
-		}
-
-		void GetResponseAsyncCB2 (WebAsyncResult aread)
-		{
-			if (haveResponse) {
-				Exception saved = saved_exc;
-				if (webResponse != null) {
-					Monitor.Exit (locker);
-					if (saved == null) {
-						aread.SetCompleted (true, webResponse);
-					} else {
-						aread.SetCompleted (true, saved);
-					}
-					aread.DoCallback ();
-					return;
-				} else if (saved != null) {
-					Monitor.Exit (locker);
-					aread.SetCompleted (true, saved);
+				if (inner.GotException) {
+					aread.SetCompleted (synch, inner.Exception);
 					aread.DoCallback ();
 					return;
 				}
-			}
 
-			if (!requestSent) {
-				requestSent = true;
-				redirects = 0;
-				servicePoint = GetServicePoint ();
-				abortHandler = servicePoint.SendRequest (this, connectionGroup);
-			}
+				if (haveResponse) {
+					Exception saved = saved_exc;
+					if (webResponse != null) {
+						if (saved == null) {
+							aread.SetCompleted (synch, webResponse);
+						} else {
+							aread.SetCompleted (synch, saved);
+						}
+						aread.DoCallback ();
+						return;
+					} else if (saved != null) {
+						aread.SetCompleted (synch, saved);
+						aread.DoCallback ();
+						return;
+					}
+				}
 
-			Monitor.Exit (locker);
+				if (requestSent)
+					return;
+
+				try {
+					requestSent = true;
+					redirects = 0;
+					servicePoint = GetServicePoint ();
+					abortHandler = servicePoint.SendRequest (this, connectionGroup);
+				} catch (Exception ex) {
+					aread.SetCompleted (synch, ex);
+					aread.DoCallback ();
+				}
+			});
+
+			return aread;
 		}
 
 		public override WebResponse EndGetResponse (IAsyncResult asyncResult)
@@ -987,13 +1007,11 @@ namespace System.Net
 			return result.Response;
 		}
 		
-#if NET_3_5
 		public Stream EndGetRequestStream (IAsyncResult asyncResult, out TransportContext transportContext)
 		{
 			transportContext = null;
 			return EndGetRequestStream (asyncResult);
 		}
-#endif
 
 		public override WebResponse GetResponse()
 		{
@@ -1109,8 +1127,15 @@ namespace System.Net
 			if (continueDelegate != null)
 				continueDelegate (statusCode, headers);
 		}
+
+		void RewriteRedirectToGet ()
+		{
+			method = "GET";
+			webHeaders.RemoveInternal ("Transfer-Encoding");
+			sendChunked = false;
+		}
 		
-		bool Redirect (WebAsyncResult result, HttpStatusCode code)
+		bool Redirect (WebAsyncResult result, HttpStatusCode code, WebResponse response)
 		{
 			redirects++;
 			Exception e = null;
@@ -1122,12 +1147,12 @@ namespace System.Net
 			case HttpStatusCode.MovedPermanently: // 301
 			case HttpStatusCode.Redirect: // 302
 				if (method == "POST")
-					method = "GET";
+					RewriteRedirectToGet ();
 				break;
 			case HttpStatusCode.TemporaryRedirect: // 307
 				break;
 			case HttpStatusCode.SeeOther: //303
-				method = "GET";
+				RewriteRedirectToGet ();
 				break;
 			case HttpStatusCode.NotModified: // 304
 				return false;
@@ -1140,12 +1165,15 @@ namespace System.Net
 				break;
 			}
 
+			if (method != "GET" && !InternalAllowBuffering && (writeStream.WriteBufferLength > 0 || contentLength > 0))
+				e = new WebException ("The request requires buffering data to succeed.", null, WebExceptionStatus.ProtocolError, webResponse);
+
 			if (e != null)
 				throw e;
 
-			contentLength = -1;
-			//bodyBufferLength = 0;
-			//bodyBuffer = null;
+			if (AllowWriteStreamBuffering || method == "GET")
+				contentLength = -1;
+
 			uriString = webResponse.Headers ["Location"];
 
 			if (uriString == null)
@@ -1175,12 +1203,15 @@ namespace System.Net
 			} else if (contentLength != -1) {
 				if (auth_state.NtlmAuthState == NtlmAuthState.Challenge || proxy_auth_state.NtlmAuthState == NtlmAuthState.Challenge) {
 					// We don't send any body with the NTLM Challenge request.
-					webHeaders.SetInternal ("Content-Length", "0");
+					if (haveContentLength || gotRequestStream || contentLength > 0)
+						webHeaders.SetInternal ("Content-Length", "0");
+					else
+						webHeaders.RemoveInternal ("Content-Length");
 				} else {
 					if (contentLength > 0)
 						continue100 = true;
 
-					if (gotRequestStream || contentLength > 0)
+					if (haveContentLength || gotRequestStream || contentLength > 0)
 						webHeaders.SetInternal ("Content-Length", contentLength.ToString ());
 				}
 				webHeaders.RemoveInternal ("Transfer-Encoding");
@@ -1310,69 +1341,57 @@ namespace System.Net
 				writeStream.SendChunked = false;
 			}
 
-			try {
-				var result = writeStream.SetHeadersAsync (false, SetWriteStreamCB, null);
-				if (result == null)
-					SetWriteStreamCB (null);
-			} catch (Exception exc) {
-				SetWriteStreamErrorCB (exc);
-			}
+			writeStream.SetHeadersAsync (false, result => {
+				if (result.GotException) {
+					SetWriteStreamError (result.Exception);
+					return;
+				}
+
+				haveRequest = true;
+
+				SetWriteStreamInner (inner => {
+					if (inner.GotException) {
+						SetWriteStreamError (inner.Exception);
+						return;
+					}
+
+					if (asyncWrite != null) {
+						asyncWrite.SetCompleted (inner.CompletedSynchronously, writeStream);
+						asyncWrite.DoCallback ();
+						asyncWrite = null;
+					}
+				});
+			});
 		}
 
-		void SetWriteStreamErrorCB (Exception exc)
+		void SetWriteStreamInner (SimpleAsyncCallback callback)
+		{
+			SimpleAsyncResult.Run (result => {
+				if (bodyBuffer != null) {
+					// The body has been written and buffered. The request "user"
+					// won't write it again, so we must do it.
+					if (auth_state.NtlmAuthState != NtlmAuthState.Challenge && proxy_auth_state.NtlmAuthState != NtlmAuthState.Challenge) {
+						// FIXME: this is a blocking call on the thread pool that could lead to thread pool exhaustion
+						writeStream.Write (bodyBuffer, 0, bodyBufferLength);
+						bodyBuffer = null;
+						writeStream.Close ();
+					}
+				} else if (MethodWithBuffer) {
+					if (getResponseCalled && !writeStream.RequestWritten)
+						return writeStream.WriteRequestAsync (result);
+				}
+
+				return false;
+			}, callback);
+		}
+
+		void SetWriteStreamError (Exception exc)
 		{
 			WebException wexc = exc as WebException;
 			if (wexc != null)
 				SetWriteStreamError (wexc.Status, wexc);
 			else
 				SetWriteStreamError (WebExceptionStatus.SendFailure, exc);
-		}
-
-		void SetWriteStreamCB (IAsyncResult ar)
-		{
-			WebAsyncResult result = ar as WebAsyncResult;
-
-			if (result != null && result.Exception != null) {
-				SetWriteStreamErrorCB (result.Exception);
-				return;
-			}
-		
-			haveRequest = true;
-
-			WebAsyncResult writeRequestResult = null;
-
-			if (bodyBuffer != null) {
-				// The body has been written and buffered. The request "user"
-				// won't write it again, so we must do it.
-				if (auth_state.NtlmAuthState != NtlmAuthState.Challenge && proxy_auth_state.NtlmAuthState != NtlmAuthState.Challenge) {
-					// FIXME: this is a blocking call on the thread pool that could lead to thread pool exhaustion
-					writeStream.Write (bodyBuffer, 0, bodyBufferLength);
-					bodyBuffer = null;
-					writeStream.Close ();
-				}
-			} else if (method != "HEAD" && method != "GET" && method != "MKCOL" && method != "CONNECT" &&
-					method != "TRACE") {
-				if (getResponseCalled && !writeStream.RequestWritten)
-					writeRequestResult = writeStream.WriteRequestAsync (SetWriteStreamCB2, null);
-			}
-
-			if (writeRequestResult == null)
-				SetWriteStreamCB2 (null);
-		}
-
-		void SetWriteStreamCB2 (IAsyncResult ar)
-		{
-			var result = (WebAsyncResult)ar;
-			if (result != null && result.GotException) {
-				SetWriteStreamErrorCB (result.Exception);
-				return;
-			}
-
-			if (asyncWrite != null) {
-				asyncWrite.SetCompleted (false, writeStream);
-				asyncWrite.DoCallback ();
-				asyncWrite = null;
-			}
 		}
 
 		internal void SetResponseError (WebExceptionStatus status, Exception e, string where)
@@ -1518,6 +1537,11 @@ namespace System.Net
 						r.SetCompleted (false, webResponse);
 						r.DoCallback ();
 					} else {
+						if (sendChunked) {
+							sendChunked = false;
+							webHeaders.RemoveInternal ("Transfer-Encoding");
+						}
+
 						if (webResponse != null) {
 							if (HandleNtlmAuth (r))
 								return;
@@ -1651,16 +1675,28 @@ namespace System.Net
 					(ProxyQuery && !proxy_auth_state.IsCompleted && code == HttpStatusCode.ProxyAuthenticationRequired)) {
 					if (!usedPreAuth && CheckAuthorization (webResponse, code)) {
 						// Keep the written body, so it can be rewritten in the retry
-						if (InternalAllowBuffering) {
-							// NTLM: This is to avoid sending data in the 'challenge' request
-							// We save it in the first request (first 401), don't send anything
-							// in the challenge request and send it in the response request along
-							// with the buffers kept form the first request.
-							if (auth_state.NtlmAuthState == NtlmAuthState.Challenge || proxy_auth_state.NtlmAuthState == NtlmAuthState.Challenge) {
-								bodyBuffer = writeStream.WriteBuffer;
-								bodyBufferLength = writeStream.WriteBufferLength;
+						if (MethodWithBuffer) {
+							if (AllowWriteStreamBuffering) {
+								if (writeStream.WriteBufferLength > 0) {
+									bodyBuffer = writeStream.WriteBuffer;
+									bodyBufferLength = writeStream.WriteBufferLength;
+								}
+
+								return true;
 							}
-							return true;
+
+							//
+							// Buffering is not allowed but we have alternative way to get same content (we
+							// need to resent it due to NTLM Authentication).
+					 		//
+							if (ResendContentFactory != null) {
+								using (var ms = new MemoryStream ()) {
+									ResendContentFactory (ms);
+									bodyBuffer = ms.ToArray ();
+									bodyBufferLength = bodyBuffer.Length;
+								}
+								return true;
+							}
 						} else if (method != "PUT" && method != "POST") {
 							bodyBuffer = null;
 							return true;
@@ -1703,7 +1739,7 @@ namespace System.Net
 				bool b = false;
 				int c = (int) code;
 				if (allowAutoRedirect && c >= 300) {
-					b = Redirect (result, code);
+					b = Redirect (result, code, webResponse);
 					if (InternalAllowBuffering && writeStream.WriteBufferLength > 0) {
 						bodyBuffer = writeStream.WriteBuffer;
 						bodyBufferLength = writeStream.WriteBufferLength;

@@ -27,7 +27,6 @@ namespace MonoTests.System.Reflection.Emit
 	{
 		AssemblyBuilder assembly;
 		ModuleBuilder module;
-		int typeCount;
 		static string ASSEMBLY_NAME = "MonoTests.System.Reflection.Emit.TypeBuilderTest";
 
 		[SetUp]
@@ -46,7 +45,6 @@ namespace MonoTests.System.Reflection.Emit
 					assemblyName, mode, Path.GetTempPath ());
 
 			module = assembly.DefineDynamicModule ("module1");
-			typeCount = 0;
 		}
 
 		[Test]
@@ -79,14 +77,7 @@ namespace MonoTests.System.Reflection.Emit
 				Assert.Fail ("#11");
 			} catch (NotSupportedException) {}
 
-#if NET_4_0
 			Assert.AreEqual (TypeAttributes.Public, gparam.Attributes, "#12");
-#else
-			try {
-					var x = gparam.Attributes;
-					Assert.Fail ("#12");
-			} catch (NotSupportedException) {}
-#endif
 			Assert.IsFalse (gparam.HasElementType, "#13");
 			Assert.IsFalse (gparam.IsArray, "#14");
 			Assert.IsFalse (gparam.IsByRef, "#15");
@@ -351,9 +342,6 @@ namespace MonoTests.System.Reflection.Emit
 			Assert.IsFalse (gparam.IsGenericTypeDefinition, "#10");
 		}
 
-#if !NET_4_0
-		[Category ("NotDotNet")]
-#endif
 		[Test]
 		// CompilerContext no longer supported
 		[Category ("NotWorking")]

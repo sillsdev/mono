@@ -2,7 +2,7 @@
 // Authors
 //    Sebastien Pouliot  <sebastien@xamarin.com>
 //
-// Copyright 2013 Xamarin Inc. http://www.xamarin.com
+// Copyright 2013-2014 Xamarin Inc. http://www.xamarin.com
 // 
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -25,6 +25,8 @@
 //
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
@@ -41,10 +43,110 @@ namespace Xamarin.ApiDiff {
 			get { return "field"; }
 		}
 
+		void RenderFieldAttributes (FieldAttributes source, FieldAttributes target, ApiChange change)
+		{
+			var srcNotSerialized = (source & FieldAttributes.NotSerialized) == FieldAttributes.NotSerialized;
+			var tgtNotSerialized = (target & FieldAttributes.NotSerialized) == FieldAttributes.NotSerialized;
+			if (srcNotSerialized != tgtNotSerialized) {
+				// this is not a breaking change, so only render it if it changed.
+				if (srcNotSerialized) {
+					change.AppendRemoved ("[NonSerialized]\n");
+				} else {
+					change.AppendAdded ("[NonSerialized]\n");
+				}
+			}
+
+			// the visibility values are the same for MethodAttributes and FieldAttributes, so just use the same method.
+			RenderVisibility ((MethodAttributes) source, (MethodAttributes) target, change);
+			// same for the static flag
+			RenderStatic ((MethodAttributes) source, (MethodAttributes) target, change);
+
+			var srcLiteral = (source & FieldAttributes.Literal) != 0;
+			var tgtLiteral = (target & FieldAttributes.Literal) != 0;
+
+			if (srcLiteral) {
+				if (tgtLiteral) {
+					change.Append ("const ");
+				} else {
+					change.AppendRemoved ("const", true).Append (" ");
+				}
+			} else if (tgtLiteral) {
+				change.AppendAdded ("const", true).Append (" ");
+			}
+
+			var srcInitOnly = (source & FieldAttributes.InitOnly) != 0;
+			var tgtInitOnly = (target & FieldAttributes.InitOnly) != 0;
+			if (srcInitOnly) {
+				if (tgtInitOnly) {
+					change.Append ("readonly ");
+				} else {
+					change.AppendRemoved ("readonly", false).Append (" ");
+				}
+			} else if (tgtInitOnly) {
+				change.AppendAdded ("readonly", true).Append (" ");
+			}
+		}
+
+		public override bool Equals (XElement source, XElement target, ApiChanges changes)
+		{
+			if (base.Equals (source, target, changes))
+				return true;
+
+			var name = source.GetAttribute ("name");
+			var srcValue = source.GetAttribute ("value");
+			var tgtValue = target.GetAttribute ("value");
+			var change = new ApiChange ();
+			change.Header = "Modified " + GroupName;
+
+			if (State.BaseType == "System.Enum") {
+				change.Append (name).Append (" = ");
+				if (srcValue != tgtValue) {
+					change.AppendModified (srcValue, tgtValue, true);
+				} else {
+					change.Append (srcValue);
+				}
+			} else {
+				RenderFieldAttributes (source.GetFieldAttributes (), target.GetFieldAttributes (), change);
+
+				var srcType = source.GetTypeName ("fieldtype");
+				var tgtType = target.GetTypeName ("fieldtype");
+
+				if (srcType != tgtType) {
+					change.AppendModified (srcType, tgtType, true);
+				} else {
+					change.Append (srcType);
+				}
+				change.Append (" ");
+				change.Append (name);
+
+				if (srcType == "string" && srcValue != null)
+					srcValue = "\"" + srcValue + "\"";
+
+				if (tgtType == "string" && tgtValue != null)
+					tgtValue = "\"" + tgtValue + "\"";
+
+				if (srcValue != tgtValue) {
+					change.Append (" = ");
+					if (srcValue == null)
+						srcValue = "null";
+					if (tgtValue == null)
+						tgtValue = "null";
+					change.AppendModified (srcValue, tgtValue, true);
+				} else if (srcValue != null) {
+					change.Append (" = ");
+					change.Append (srcValue);
+				}
+				change.Append (";");
+			}
+
+			changes.Add (source, target, change);
+
+			return false;
+		}
+
 		public override string GetDescription (XElement e)
 		{
-			var sb = GetObsoleteMessage (e);
-			bool obsolete = sb.Length > 0;
+			var sb = new StringBuilder ();
 
 			string name = e.GetAttribute ("name");
 			string value = e.GetAttribute ("value");
@@ -71,30 +173,39 @@ namespace Xamarin.ApiDiff {
 				string ftype = e.GetTypeName ("fieldtype");
 				sb.Append (ftype).Append (' ');
 				sb.Append (name);
-				if (ftype == "string")
-					sb.Append (" = \"").Append (e.Attribute ("value").Value).Append ('"');
+				if (ftype == "string" && e.Attribute ("value") != null) {
+					if (value == null)
+						sb.Append (" = null");
+					else
+						sb.Append (" = \"").Append (value).Append ('"');
+				}
 				sb.Append (';');
 			}
 
-			if (obsolete)
-				sb.AppendLine (); // more readable output
 			return sb.ToString ();
 		}
 
-		public override void BeforeAdding ()
+		public override void BeforeAdding (IEnumerable<XElement> list)
 		{
-			if (State.BaseType == "System.Enum")
-				Output.WriteLine ("<p>Added values:</p><pre>");
-			else
-				base.BeforeAdding ();
+			first = true;
+			if (State.BaseType == "System.Enum") {
+				Output.WriteLine ("<div>");
+				Output.WriteLine ("<p>Added value{0}:</p>", list.Count () > 1 ? "s" : String.Empty);
+				Output.WriteLine ("<pre class='added' data-is-non-breaking>");
+			} else {
+				base.BeforeAdding (list);
+			}
 		}
 
-		public override void BeforeRemoving ()
+		public override void BeforeRemoving (IEnumerable<XElement> list)
 		{
-			if (State.BaseType == "System.Enum")
-				Output.WriteLine ("<p>Removed values:</p><pre>");
-			else
-				base.BeforeRemoving ();
+			first = true;
+			if (State.BaseType == "System.Enum") {
+				Output.WriteLine ("<p>Removed value{0}:</p>", list.Count () > 1 ? "s" : String.Empty);
+				Output.WriteLine ("<pre class='removed' data-is-breaking>");
+			} else {
+				base.BeforeRemoving (list);
+			}
 		}
 	}
 }

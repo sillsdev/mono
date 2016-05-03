@@ -24,14 +24,14 @@ using System.Runtime.CompilerServices;
  * the IL code looks.
  */
 
-#if MOBILE
+#if __MOBILE__
 class ExceptionTests
 #else
 class Tests
 #endif
 {
 
-#if !MOBILE
+#if !__MOBILE__
 	public static int Main (string[] args) {
 		return TestDriver.RunTests (typeof (Tests), args);
 	}
@@ -1516,6 +1516,71 @@ class Tests
 		return 0;
 	}
 
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void dummy () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static int div_zero_llvm_inner (int i) {
+		try {
+			// This call make use avoid the 'handler without invoke' restriction in the llvm backend
+			dummy ();
+			return 5 / i;
+		} catch (Exception ex) {
+			return 0;
+		}
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static long div_zero_llvm_inner_long (long l) {
+		try {
+			dummy ();
+			return (long)5 / l;
+		} catch (Exception ex) {
+			return 0;
+		}
+	}
+
+	public static int test_0_div_zero_llvm () {
+	    long r = div_zero_llvm_inner (0);
+		if (r != 0)
+			return 1;
+	    r = div_zero_llvm_inner_long (0);
+		if (r != 0)
+			return 2;
+		return 0;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static int div_overflow_llvm_inner (int i) {
+		try {
+			dummy ();
+			return Int32.MinValue / i;
+		} catch (Exception ex) {
+			return 0;
+		}
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static long div_overflow_llvm_inner_long (long l) {
+		try {
+			dummy ();
+			return Int64.MinValue / l;
+		} catch (Exception ex) {
+			return 0;
+		}
+	}
+
+	public static int test_0_div_overflow_llvm () {
+		long r = div_overflow_llvm_inner (-1);
+		if (r != 0)
+			return 1;
+		r = div_overflow_llvm_inner_long ((long)-1);
+		if (r != 0)
+			return 2;
+		return 0;
+	}
+
 	public static int return_55 () {
 		return 55;
 	}
@@ -2241,24 +2306,24 @@ class Tests
 		return 2;
 	}
 
-	/* MarshalByRefObject prevents the methods from being inlined */
-	class ThrowClass : MarshalByRefObject {
-		public static void rethrow1 () {
-			throw new Exception ();
-		}
-
-		public static void rethrow2 () {
-			rethrow1 ();
-			/* This disables tailcall opts */
-			Console.WriteLine ();
-		}
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void rethrow1 () {
+		throw new Exception ();
 	}
 
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void rethrow2 () {
+		rethrow1 ();
+		/* This disables tailcall opts */
+		Console.WriteLine ();
+	}
+
+	[Category ("!BITCODE")]
 	public static int test_0_rethrow_stacktrace () {
 		// Check that rethrowing an exception preserves the original stack trace
 		try {
 			try {
-				ThrowClass.rethrow2 ();
+				rethrow2 ();
 			}
 			catch (Exception ex) {
 				// Check that each catch clause has its own exception variable
@@ -2525,7 +2590,7 @@ class Tests
 	public static int test_0_lmf_filter () {
 		try {
 			// The invoke calls a runtime-invoke wrapper which has a filter clause
-#if MOBILE
+#if __MOBILE__
 			typeof (ExceptionTests).GetMethod ("lmf_filter").Invoke (null, new object [] { });
 #else
 			typeof (Tests).GetMethod ("lmf_filter").Invoke (null, new object [] { });
@@ -2731,9 +2796,58 @@ class Tests
 		}
 		return 1;
 	}
+
+	static bool finally_called = false;
+
+	static void regress_30472 (int a, int b) {
+			checked {
+				try {
+					int sum = a + b;
+				} finally {
+					finally_called = true;
+				}
+            }
+		}
+
+	public static int test_0_regress_30472 () {
+		finally_called = false;
+		try {
+		    regress_30472 (Int32.MaxValue - 1, 2);
+		} catch (Exception ex) {
+		}
+		return finally_called ? 0 : 1;
+	}
+
+	static int array_len_1 = 1;
+
+	public static int test_0_bounds_check_negative_constant () {
+		try {
+			byte[] arr = new byte [array_len_1];
+			byte b = arr [-1];
+			return 1;
+		} catch {
+		}
+		try {
+			byte[] arr = new byte [array_len_1];
+			arr [-1] = 1;
+			return 2;
+		} catch {
+		}
+		return 0;
+	}
+
+	public static int test_0_string_bounds_check_negative_constant () {
+		try {
+			string s = "A";
+			char c = s [-1];
+			return 1;
+		} catch {
+		}
+		return 0;
+	}
 }
 
-#if !MOBILE
+#if !__MOBILE__
 class ExceptionTests : Tests
 {
 }

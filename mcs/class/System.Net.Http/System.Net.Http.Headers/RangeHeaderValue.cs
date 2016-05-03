@@ -123,11 +123,11 @@ namespace System.Net.Http.Headers
 
 			bool token_read;
 			do {
-				int? from = null, to = null;
-				int number;
+				long? from = null, to = null;
+				long number;
 				token_read = false;
 
-				t = lexer.Scan ();
+				t = lexer.Scan (recognizeDash: true);
 				switch (t.Kind) {
 				case Token.Type.SeparatorDash:
 					t = lexer.Scan ();
@@ -139,16 +139,15 @@ namespace System.Net.Http.Headers
 				case Token.Type.Token:
 					string s = lexer.GetStringValue (t);
 					var values = s.Split (new [] { '-' }, StringSplitOptions.RemoveEmptyEntries);
-					if (!int.TryParse (values[0], out number))
+					if (!Parser.Long.TryParse (values[0], out number))
 						return false;
 
 					switch (values.Length) {
 					case 1:
-						t = lexer.Scan ();
+						t = lexer.Scan (recognizeDash: true);
+						from = number;
 						switch (t.Kind) {
 						case Token.Type.SeparatorDash:
-							from = number;
-
 							t = lexer.Scan ();
 							if (t != Token.Type.Token) {
 								token_read = true;
@@ -163,6 +162,15 @@ namespace System.Net.Http.Headers
 								return false;
 
 							break;
+						case Token.Type.End:
+							if (s.Length > 0 && s [s.Length - 1] != '-')
+								return false;
+
+							token_read = true;
+							break;
+						case Token.Type.SeparatorComma:
+							token_read = true;
+							break;
 						default:
 							return false;
 						}
@@ -170,7 +178,7 @@ namespace System.Net.Http.Headers
 					case 2:
 						from = number;
 
-						if (!int.TryParse (values[1], out number))
+						if (!Parser.Long.TryParse (values[1], out number))
 							return false;
 
 						to = number;

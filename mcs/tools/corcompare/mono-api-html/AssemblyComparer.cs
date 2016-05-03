@@ -25,6 +25,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.Xml.Linq;
 
 namespace Xamarin.ApiDiff {
@@ -56,12 +57,12 @@ namespace Xamarin.ApiDiff {
 			State.Assembly = current.GetAttribute ("name");
 		}
 
-		public override void Added (XElement target)
+		public override void Added (XElement target, bool wasParentAdded)
 		{
 			// one assembly per xml file
 		}
 
-		public override void Modified (XElement source, XElement target)
+		public override void Modified (XElement source, XElement target, ApiChanges diff)
 		{
 			SourceAssembly = source.GetAttribute ("name");
 			TargetAssembly = target.GetAttribute ("name");

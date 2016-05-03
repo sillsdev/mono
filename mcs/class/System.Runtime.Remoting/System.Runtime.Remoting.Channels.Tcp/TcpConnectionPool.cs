@@ -65,10 +65,8 @@ namespace System.Runtime.Remoting.Channels.Tcp
 
 		public static void Shutdown ()
 		{
-#if !TARGET_JVM
 			if (_poolThread != null)
 				_poolThread.Abort();
-#endif
 		}
 
 		public static int MaxOpenConnections
@@ -127,12 +125,7 @@ namespace System.Runtime.Remoting.Channels.Tcp
 			// Avoid excessive waiting for data by the tcp stack in linux.
 			// We can't safely use SetSocketOption for both runtimes because
 			// it would break 2.0 TcpClient's property cache.
-#if NET_2_0
 			Client.NoDelay = true;
-#else
-			Client.SetSocketOption (SocketOptionLevel.Tcp,
-						SocketOptionName.NoDelay, 1);
-#endif
 		}
 		
 		public bool IsAlive

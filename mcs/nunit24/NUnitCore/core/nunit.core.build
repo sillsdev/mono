@@ -11,6 +11,7 @@
         <include name="AssemblyInfo.cs"/>
         <include name="AssemblyReader.cs"/>
         <include name="AssemblyResolver.cs"/>
+        <include name="BabysitterSupport.cs"/>
         <include name="CoreExtensions.cs"/>
         <include name="CultureDetector.cs"/>
         <include name="DirectorySwapper.cs"/>
@@ -56,6 +57,7 @@
         <include name="TestSuite.cs"/>
         <include name="TestSuiteBuilder.cs"/>
         <include name="TextCapture.cs"/>
+        <include name="ThreadUtility.cs"/>
         <include name="ThreadedTestRunner.cs"/>
         <include name="Builders/AbstractFixtureBuilder.cs"/>
         <include name="Builders/AbstractTestCaseBuilder.cs"/>

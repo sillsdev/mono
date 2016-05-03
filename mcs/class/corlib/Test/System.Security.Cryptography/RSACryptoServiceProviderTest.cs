@@ -93,9 +93,7 @@ public class RSACryptoServiceProviderTest {
 		// test default key size
 		Assert.AreEqual (1024, rsa.KeySize, "ConstructorEmpty");
 		Assert.IsFalse (rsa.PersistKeyInCsp, "PersistKeyInCsp");
-#if NET_2_0
 		Assert.IsFalse (rsa.PublicOnly, "PublicOnly");
-#endif
 	}
 
 	[Test]
@@ -105,13 +103,10 @@ public class RSACryptoServiceProviderTest {
 		// test default key size
 		Assert.AreEqual (minKeySize, rsa.KeySize, "ConstructorKeySize");
 		Assert.IsFalse (rsa.PersistKeyInCsp, "PersistKeyInCsp");
-#if NET_2_0
 		Assert.IsFalse (rsa.PublicOnly, "PublicOnly");
-#endif
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")]
 	public void ConstructorCspParameters ()
 	{
 		CspParameters csp = new CspParameters (1, null, "Mono1024");
@@ -120,13 +115,10 @@ public class RSACryptoServiceProviderTest {
 		// test default key size
 		Assert.AreEqual (1024, rsa.KeySize, "ConstructorCspParameters");
 		Assert.IsTrue (rsa.PersistKeyInCsp, "PersistKeyInCsp");
-#if NET_2_0
 		Assert.IsFalse (rsa.PublicOnly, "PublicOnly");
-#endif
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")]
 	public void ConstructorKeySizeCspParameters ()
 	{
 		int keySize = 512;
@@ -134,9 +126,7 @@ public class RSACryptoServiceProviderTest {
 		rsa = new RSACryptoServiceProvider (keySize, csp);
 		Assert.AreEqual (keySize, rsa.KeySize, "ConstructorCspParameters");
 		Assert.IsTrue (rsa.PersistKeyInCsp, "PersistKeyInCsp");
-#if NET_2_0
 		Assert.IsFalse (rsa.PublicOnly, "PublicOnly");
-#endif
 	}
 
 	[Test]
@@ -165,13 +155,11 @@ public class RSACryptoServiceProviderTest {
 	public void TooSmallKeyPair () 
 	{
 		rsa = new RSACryptoServiceProvider (256);
-#if NET_2_0
 		// in 2.0 MS delay the creation of the key pair until it is required
 		// (same trick that Mono almost always used ;-) but they also delay
 		// the parameter validation (what Mono didn't). So here we must "get"
 		// the key (export) to trigger the exception
 		rsa.ToXmlString (true);
-#endif
 	}
 
 	[Test]
@@ -179,13 +167,11 @@ public class RSACryptoServiceProviderTest {
 	public void TooBigKeyPair () 
 	{
 		rsa = new RSACryptoServiceProvider (32768);
-#if NET_2_0
 		// in 2.0 MS delay the creation of the key pair until it is required
 		// (same trick that Mono almost always used ;-) but they also delay
 		// the parameter validation (what Mono didn't). So here we must "get"
 		// the key (export) to trigger the exception
 		rsa.ToXmlString (true);
-#endif
 	}
 
 	[Test]
@@ -434,7 +420,7 @@ public class RSACryptoServiceProviderTest {
 		rsa.VerifyHash (hash, "1.3.14.3.2.26", null);
 	}
 
-#if NET_2_0 && !NET_2_1
+#if !NET_2_1
 	[Test]
 	[Category ("NotWorking")]
 	public void ImportDisposed ()
@@ -857,6 +843,20 @@ public class RSACryptoServiceProviderTest {
 		rsa.ToXmlString (true);
 	}
 
+	[Test]
+	[ExpectedException (typeof (CryptographicException))]
+	public void ExportWithoutCRT_2 () 
+	{
+		try {
+			rsa = new RSACryptoServiceProvider ();
+			rsa.FromXmlString (MonoXml384woCRT);
+		}
+		catch {
+		}
+		// exception is HERE!
+		rsa.ExportParameters (true);
+	}
+
 	// Validate that we can sign with every keypair and verify the signature
 	// With Windows this means that we can use Mono keypairs to sign and verify.
 	// For Mono this doesn't mean much.
@@ -1001,7 +1001,6 @@ public class RSACryptoServiceProviderTest {
 	//	http://msdn.microsoft.com/library/en-us/cpguide/html/cpcongeneratingkeysforencryptiondecryption.asp
 
 	[Test]
-	[Category ("TargetJvmNotSupported")]
 	public void Persistence_PersistKeyInCsp_False () 
 	{
 		CspParameters csp = new CspParameters (1, null, "Persistence_PersistKeyInCsp_False");
@@ -1026,7 +1025,6 @@ public class RSACryptoServiceProviderTest {
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")]
 	public void Persistence_PersistKeyInCsp_True () 
 	{
 		CspParameters csp = new CspParameters (1, null, "Persistence_PersistKeyInCsp_True");
@@ -1047,7 +1045,6 @@ public class RSACryptoServiceProviderTest {
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")]
 	public void Persistence_Delete () 
 	{
 		CspParameters csp = new CspParameters (1, null, "Persistence_Delete");
@@ -1076,7 +1073,6 @@ public class RSACryptoServiceProviderTest {
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")]
 	public void UseMachineKeyStore () 
 	{
 		// note only applicable when CspParameters isn't used - which don't
@@ -1137,9 +1133,7 @@ public class RSACryptoServiceProviderTest {
 	{
 		rsa = new RSACryptoServiceProvider ();
 		rsa.FromXmlString ("<RSAKeyValue><Modulus>iSObDmmhDgrl4NiLaviFcpv4NdysBWJcqiVz3AQbPdajtXaQQ8VJdfRkixah132yKOFGCWZhHS3EuPMh8dcNwGwta2nh+m2IV6ktzI4+mZ7CSNAsmlDY0JI+H8At1vKvNArlC5jkVGuliYroJeSU/NLPLNYgspi7TtXGy9Rfug8=</Modulus><Exponent>EQ==</Exponent></RSAKeyValue>");
-#if NET_2_0
 		Assert.IsTrue (rsa.PublicOnly, "PublicOnly");
-#endif
 		string b64 = @"YgyAhscnTTIcDeLJTZcOYYyHVxNhV6d03jeZYjq0sPMEsfCCbE/NcFyYHD9BTuiduqPplCLbGpfZIZYJ6vAP9m5z4Q9eEw79kmEFCsm8wSKEo/gKiptVpwQ78VOPrWd/wEkTTeeg2nVim3JIsTKGFlV7rKxIWQhGN9aAqgP8nZI=";
 		byte [] bytes = Convert.FromBase64String (b64);
 		rsa.Decrypt (bytes, true);
@@ -1167,7 +1161,6 @@ public class RSACryptoServiceProviderTest {
 		Assert.IsNotNull (r.Decrypt (bytes, true));
 	}
 
-#if NET_2_0
 #if !NET_2_1
 	[Test]
 	[Category ("NotWorking")]
@@ -1410,7 +1403,6 @@ public class RSACryptoServiceProviderTest {
 		rsa = new RSACryptoServiceProvider (minKeySize);
 		rsa.ImportCspBlob (blob);
 	}
-#endif
 }
 
 }

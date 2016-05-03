@@ -188,6 +188,12 @@ public class Tests {
 	[DllImport ("libtest", EntryPoint="mono_test_marshal_return_delegate_delegate")]
 	public static extern int mono_test_marshal_return_delegate_delegate (ReturnDelegateDelegate d);
 
+	[DllImport ("libtest", EntryPoint="mono_test_marshal_delegate_ref_delegate")]
+	public static extern int mono_test_marshal_delegate_ref_delegate (DelegateByrefDelegate del);
+
+	[DllImport ("libtest", EntryPoint="mono_test_marshal_virtual_delegate")]
+	public static extern int mono_test_marshal_virtual_delegate (VirtualDelegate del);
+
 	public delegate int TestDelegate (int a, ref SimpleStruct ss, int b);
 
 	public delegate SimpleStruct SimpleDelegate2 (SimpleStruct ss);
@@ -209,6 +215,10 @@ public class Tests {
 	public delegate int PrimitiveByrefDelegate (ref int i);
 
 	public delegate return_int_delegate ReturnDelegateDelegate ();
+
+	public delegate int DelegateByrefDelegate (ref return_int_delegate del);
+
+	public delegate int VirtualDelegate (int i);
 
 	public static int Main () {
 		return TestDriver.RunTests (typeof (Tests));
@@ -331,6 +341,20 @@ public class Tests {
 
 	public static int test_55_marshal_return_delegate_delegate () {
 		return mono_test_marshal_return_delegate_delegate (new ReturnDelegateDelegate (return_delegate));
+	}
+
+	public static int return_plus_1 (int i) {
+		return i + 1;
+	}
+
+	public static int ref_delegate_delegate (ref return_int_delegate del) {
+		del = return_plus_1;
+		return 0;
+	}
+
+	public static int test_55_marshal_delegate_ref_delegate () {
+		var del = new DelegateByrefDelegate (ref_delegate_delegate);
+		return mono_test_marshal_delegate_ref_delegate (del);
 	}
 
 	/* Passing and returning strings */
@@ -1087,29 +1111,54 @@ public class Tests {
 	[DllImport ("libtest", EntryPoint="mono_test_marshal_call_callback")]
 	public static extern int mono_test_marshal_call_callback ();
 
-	public static int test_0_appdomain_swich () {
-        callback = delegate () { return 42; };
-        mono_test_marshal_set_callback (callback);
-
+	public static int test_0_appdomain_switch () {
 		// FIXME: The appdomain unload hangs
-		return 0;
-		/*
+		//return 0;
         AppDomain ad = AppDomain.CreateDomain ("foo");
 		var c = (CallbackClass)ad.CreateInstanceAndUnwrap (
 				typeof (CallbackClass).Assembly.FullName, "Tests/CallbackClass");
-		int res = c.OtherDomainTest ();
+		c.SetCallback ();
+		int domain_id = AppDomain.CurrentDomain.Id;
+		int new_id = mono_test_marshal_call_callback ();
+		int res = 0;
+		if (new_id == domain_id)
+			res = 1;
+		if (AppDomain.CurrentDomain.Id != domain_id)
+			res = 2;
 		AppDomain.Unload (ad);
 		return res;
-		*/
     }
 
+	static int domain_callback () {
+		return AppDomain.CurrentDomain.Id;
+	}
+
 	class CallbackClass : MarshalByRefObject {
-		public int OtherDomainTest () {
-			int appDomainId = AppDomain.CurrentDomain.Id;
-			int res = mono_test_marshal_call_callback ();
-			if (res != 42)
-				return 2;
-			return appDomainId == AppDomain.CurrentDomain.Id ? 0 : 1;
+		public int SetCallback () {
+			mono_test_marshal_set_callback (domain_callback);
+			return 0;
 		}
     }
+
+	class Base {
+		public VirtualDelegate get_del () {
+			return delegate_test;
+		}
+
+		public virtual int delegate_test (int i) {
+			return i;
+		}
+	}
+
+	class Derived : Base {
+		public override int delegate_test (int i) {
+			return i + 1;
+		}
+	}
+
+	public static int test_43_virtual () {
+		Base b = new Derived ();
+
+		return mono_test_marshal_virtual_delegate (b.get_del ());
+	}
 }

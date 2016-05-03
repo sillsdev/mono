@@ -371,7 +371,6 @@ dump_table_property (MonoImage *m)
 	for (i = 0; i < t->rows; i++){
 		guint32 cols [MONO_PROPERTY_SIZE];
 		char *type;
-		int bsize;
 		int prop_flags;
 		
 		mono_metadata_decode_row (t, i, cols, MONO_PROPERTY_SIZE);
@@ -385,7 +384,7 @@ dump_table_property (MonoImage *m)
 			strcat (flags, "hasdefault ");
 
 		ptr = mono_metadata_blob_heap (m, cols [MONO_PROPERTY_TYPE]);
-		bsize = mono_metadata_decode_blob_size (ptr, &ptr);
+		/* bsize = */ mono_metadata_decode_blob_size (ptr, &ptr);
 		/* ECMA claims 0x08 ... */
 		if (*ptr != 0x28 && *ptr != 0x08)
 			g_warning("incorrect signature in propert blob: 0x%x", *ptr);
@@ -566,6 +565,7 @@ dump_table_method (MonoImage *m)
 	current_type = 1;
 	last_m = first_m = 1;
 	for (i = 1; i <= t->rows; i++){
+		MonoError error;
 		guint32 cols [MONO_METHOD_SIZE];
 		char *sig, *impl_flags;
 		const char *sigblob;
@@ -583,17 +583,22 @@ dump_table_method (MonoImage *m)
 				mono_metadata_string_heap (m, mono_metadata_decode_row_col (td, current_type - 2, MONO_TYPEDEF_NAME)));
 			first_m = last_m;
 			type_container = mono_metadata_load_generic_params (m, MONO_TOKEN_TYPE_DEF | (current_type - 1), NULL);
-			if (type_container)
-				mono_metadata_load_generic_param_constraints (m, MONO_TOKEN_TYPE_DEF | (current_type - 1), type_container);
+			if (type_container) {
+				mono_metadata_load_generic_param_constraints_checked (m, MONO_TOKEN_TYPE_DEF | (current_type - 1), type_container, &error);
+				g_assert (mono_error_ok (&error)); /*FIXME don't swallow the error message*/
+			}
 		}
 
 		method_container = mono_metadata_load_generic_params (m, MONO_TOKEN_METHOD_DEF | i, type_container);
-		if (method_container)
-			mono_metadata_load_generic_param_constraints (m, MONO_TOKEN_METHOD_DEF | i, method_container);
+		if (method_container) {
+			mono_metadata_load_generic_param_constraints_checked (m, MONO_TOKEN_METHOD_DEF | i, method_container, &error);
+			g_assert (mono_error_ok (&error)); /*FIXME don't swallow the error message*/
+		}
 		mono_metadata_decode_table_row (m, MONO_TABLE_METHOD, i - 1, cols, MONO_METHOD_SIZE);
 		sigblob = mono_metadata_blob_heap (m, cols [MONO_METHOD_SIGNATURE]);
 		mono_metadata_decode_blob_size (sigblob, &sigblob);
-		method = mono_metadata_parse_method_signature_full (m, method_container ? method_container : type_container, i, sigblob, &sigblob);
+		method = mono_metadata_parse_method_signature_full (m, method_container ? method_container : type_container, i, sigblob, &sigblob, &error);
+		g_assert (mono_error_ok (&error)); /*FIXME don't swallow the error message*/
 		sig = dis_stringify_method_signature (m, method, i, method_container ? method_container : type_container, FALSE);
                 impl_flags = get_method_impl_flags (cols [MONO_METHOD_IMPLFLAGS]);
 		fprintf (output, "%d: %s (param: %d impl_flags: %s)\n", i, sig, cols [MONO_METHOD_PARAMLIST], impl_flags);
@@ -656,14 +661,14 @@ dump_table_methodimpl (MonoImage *m)
 
 	for (i = 1; i <= t->rows; i++){
 		guint32 cols [MONO_METHODIMPL_SIZE];
-		char *class, *impl, *decl;
+		char *klass, *impl, *decl;
 
 		mono_metadata_decode_row (t, i - 1, cols, MONO_METHODIMPL_SIZE);
-		class = get_typedef (m, cols [MONO_METHODIMPL_CLASS]);
+		klass = get_typedef (m, cols [MONO_METHODIMPL_CLASS]);
 		impl = get_method (m, method_dor_to_token (cols [MONO_METHODIMPL_BODY]), NULL);
 		decl = get_method (m, method_dor_to_token (cols [MONO_METHODIMPL_DECLARATION]), NULL);
-		fprintf (output, "%d: %s\n\tdecl: %s\n\timpl: %s\n", i, class, decl, impl);
-		g_free (class);
+		fprintf (output, "%d: %s\n\tdecl: %s\n\timpl: %s\n", i, klass, decl, impl);
+		g_free (klass);
 		g_free (impl);
 		g_free (decl);
 	}

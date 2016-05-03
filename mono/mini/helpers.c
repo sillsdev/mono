@@ -66,7 +66,11 @@ opnames[] = {
 #endif /* DISABLE_LOGGING */
 
 #if defined(__i386__) || defined(__x86_64__)
+#if !defined(TARGET_ARM64) && !defined(__APPLE__)
 #define emit_debug_info  TRUE
+#else
+#define emit_debug_info  FALSE
+#endif
 #else
 #define emit_debug_info  FALSE
 #endif
@@ -95,6 +99,7 @@ mono_inst_name (int op) {
 	g_error ("unknown opcode name for %d", op);
 	return NULL;
 #else
+	g_error ("unknown opcode name for %d", op);
 	g_assert_not_reached ();
 #endif
 }
@@ -144,7 +149,7 @@ mono_disassemble_code (MonoCompile *cfg, guint8 *code, int size, char *id)
 	char *as_file;
 	char *o_file;
 	char *cmd;
-	int unused;
+	int unused G_GNUC_UNUSED;
 
 #ifdef HOST_WIN32
 	as_file = g_strdup_printf ("%s/test.s", tmp);    
@@ -210,8 +215,14 @@ mono_disassemble_code (MonoCompile *cfg, guint8 *code, int size, char *id)
 #else
 #if defined(sparc) && !defined(__GNUC__)
 #define DIS_CMD "dis"
-#elif defined(__i386__) || defined(__x86_64__)
+#elif defined(TARGET_X86)
 #define DIS_CMD "objdump -l -d"
+#elif defined(TARGET_AMD64)
+  #if defined(HOST_WIN32)
+  #define DIS_CMD "x86_64-w64-mingw32-objdump.exe -M x86-64 -d"
+  #else
+  #define DIS_CMD "objdump -l -d"
+  #endif
 #else
 #define DIS_CMD "objdump -d"
 #endif
@@ -237,6 +248,12 @@ mono_disassemble_code (MonoCompile *cfg, guint8 *code, int size, char *id)
 #  else
 #    define AS_CMD "as -gstabs"
 #  endif
+#elif defined (TARGET_ARM64)
+#  if defined (__APPLE__)
+#    define AS_CMD "clang -c -arch arm64 -g -x assembler"
+#  else
+#    define AS_CMD "as -gstabs"
+#  endif
 #elif defined(__mips__) && (_MIPS_SIM == _ABIO32)
 #define AS_CMD "as -mips32"
 #elif defined(__ppc64__)
@@ -254,6 +271,7 @@ mono_disassemble_code (MonoCompile *cfg, guint8 *code, int size, char *id)
 	close (i);
 #endif
 
+#ifdef HAVE_SYSTEM
 	cmd = g_strdup_printf (ARCH_PREFIX AS_CMD " %s -o %s", as_file, o_file);
 	unused = system (cmd); 
 	g_free (cmd);
@@ -271,11 +289,14 @@ mono_disassemble_code (MonoCompile *cfg, guint8 *code, int size, char *id)
 	unused = system (cmd);
 	g_free (cmd);
 #endif
-	
+
 	cmd = g_strdup_printf (ARCH_PREFIX DIS_CMD " %s %s", objdump_args, o_file);
 	unused = system (cmd);
 	g_free (cmd);
-	
+#else
+	g_assert_not_reached ();
+#endif /* HAVE_SYSTEM */
+
 #ifndef HOST_WIN32
 	unlink (o_file);
 	unlink (as_file);

@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0
 
 using NUnit.Framework;
 using System;
@@ -196,9 +195,13 @@ namespace MonoTests.System.Runtime.CompilerServices {
 		if (GC.MaxGeneration == 0) /*Boehm doesn't handle ephemerons */
 			Assert.Ignore ("Not working on Boehm.");
 		var cwt = new ConditionalWeakTable <object,object> ();
-		List<object> keepAlive;
-		List<WeakReference> keys;
-		FillStuff (cwt, out keepAlive, out keys);
+		List<object> keepAlive = null;
+		List<WeakReference> keys = null;
+		Thread t = new Thread (delegate () {
+				FillStuff (cwt, out keepAlive, out keys);
+			});
+		t.Start ();
+		t.Join ();
 
 		GC.Collect ();
 
@@ -398,9 +401,12 @@ namespace MonoTests.System.Runtime.CompilerServices {
 	static int reachable = 0;
  
 	public class FinalizableLink {
+		// The sole purpose of this object is to keep a reference to another object, so it is fine to not use it.
+		#pragma warning disable 414
 		object obj;
-		ConditionalWeakTable <object,object> cwt;
 		int id;
+		#pragma warning restore 414
+		ConditionalWeakTable <object,object> cwt;
 
 		public FinalizableLink (int id, object obj, ConditionalWeakTable <object,object> cwt) {
 			this.id = id;
@@ -489,4 +495,3 @@ namespace MonoTests.System.Runtime.CompilerServices {
 	}
 }
 
-#endif

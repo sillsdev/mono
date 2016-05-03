@@ -29,9 +29,7 @@
 
 #if CONFIGURATION_DEP
 
-#if !TARGET_JVM
 extern alias PrebuiltSystem;
-#endif
 
 using System;
 using System.Collections;
@@ -44,11 +42,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Xml;
 
-#if TARGET_JVM
-using NameValueCollection = System.Collections.Specialized.NameValueCollection;
-#else
 using NameValueCollection = PrebuiltSystem.System.Collections.Specialized.NameValueCollection;
-#endif
 
 namespace System.Configuration
 {
@@ -264,7 +258,6 @@ namespace System.Configuration
 				return attrs [0].Company;
 			}
 
-#if !TARGET_JVM
 			MethodInfo entryPoint = assembly.EntryPoint;
 			Type entryType = entryPoint != null ? entryPoint.DeclaringType : null;
 			if (entryType != null && !String.IsNullOrEmpty (entryType.Namespace)) {
@@ -272,9 +265,6 @@ namespace System.Configuration
 				return end < 0 ? entryType.Namespace : entryType.Namespace.Substring (0, end);
 			}
 			return "Program";
-#else
-			return assembly.GetName ().Name;
-#endif
 		}
 
 		private static string GetProductName ()
@@ -283,20 +273,11 @@ namespace System.Configuration
 			if (assembly == null)
 				assembly = Assembly.GetCallingAssembly ();
 
-#if !TARGET_JVM
 			byte [] pkt = assembly.GetName ().GetPublicKeyToken ();
 			return String.Format ("{0}_{1}_{2}",
 				AppDomain.CurrentDomain.FriendlyName,
 				pkt != null && pkt.Length > 0 ? "StrongName" : "Url",
 				GetEvidenceHash());
-#else // AssemblyProductAttribute-based code
-			AssemblyProductAttribute [] attrs = (AssemblyProductAttribute[]) assembly.GetCustomAttributes (typeof (AssemblyProductAttribute), true);
-		
-			if ((attrs != null) && attrs.Length > 0) {
-				return attrs [0].Product;
-			}
-			return assembly.GetName ().Name;
-#endif
 		}
 
 		// Note: Changed from base64() to hex output to avoid unexpected chars like '\' or '/' with filesystem meaning.
@@ -341,19 +322,15 @@ namespace System.Configuration
 				ProductVersion = GetProductVersion ().Split('.');
 
 			// C:\Documents and Settings\(user)\Application Data
-#if !TARGET_JVM
 			if (userRoamingBasePath == "")
 				userRoamingPath = Environment.GetFolderPath (Environment.SpecialFolder.ApplicationData);
 			else
-#endif
 				userRoamingPath = userRoamingBasePath;
 
 			// C:\Documents and Settings\(user)\Local Settings\Application Data (on Windows)
-#if !TARGET_JVM
 			if (userLocalBasePath == "")
 				userLocalPath = Environment.GetFolderPath (Environment.SpecialFolder.LocalApplicationData);
 			else
-#endif
 				userLocalPath = userLocalBasePath;
 
 			if (isCompany) {
@@ -366,13 +343,11 @@ namespace System.Configuration
 					Assembly assembly = Assembly.GetEntryAssembly ();
 					if (assembly == null)
 						assembly = Assembly.GetCallingAssembly ();
-#if !TARGET_JVM
 					byte [] pkt = assembly.GetName ().GetPublicKeyToken ();
 					ProductName = String.Format ("{0}_{1}_{2}",
 						ProductName,
 						pkt != null ? "StrongName" : "Url",
 						GetEvidenceHash());
-#endif
 				}
 				userRoamingPath = Path.Combine (userRoamingPath, ProductName);
 				userLocalPath = Path.Combine (userLocalPath, ProductName);
@@ -603,14 +578,40 @@ namespace System.Configuration
 		private ExeConfigurationFileMap exeMapPrev = null;
 		private SettingsPropertyValueCollection values = null;
 
+		/// <remarks>
+		/// Hack to remove the XmlDeclaration that the XmlSerializer adds.
+		/// <br />
+		/// see <a href="https://github.com/mono/mono/pull/2273">Issue 2273</a> for details
+		/// </remarks>
+		private string StripXmlHeader (string serializedValue)
+		{
+			if (serializedValue == null)
+			{
+				return string.Empty;
+			}
+
+			XmlDocument doc = new XmlDocument ();
+			XmlElement valueXml = doc.CreateElement ("value");
+			valueXml.InnerXml = serializedValue;
+
+			foreach (XmlNode child in valueXml.ChildNodes) {
+				if (child.NodeType == XmlNodeType.XmlDeclaration) {
+					valueXml.RemoveChild (child);
+					break;
+				}
+			}
+
+			// InnerXml will give you well-formed XML that you could save as a separate document, and 
+			// InnerText will immediately give you a pure-text representation of this inner XML.
+			return valueXml.InnerXml;
+		}
+
 		private void SaveProperties (ExeConfigurationFileMap exeMap, SettingsPropertyValueCollection collection, ConfigurationUserLevel level, SettingsContext context, bool checkUserLevel)
 		{
 			Configuration config = ConfigurationManager.OpenMappedExeConfiguration (exeMap, level);
 			
 			UserSettingsGroup userGroup = config.GetSectionGroup ("userSettings") as UserSettingsGroup;
 			bool isRoaming = (level == ConfigurationUserLevel.PerUserRoaming);
-
-#if true // my reimplementation
 
 			if (userGroup == null) {
 				userGroup = new UserSettingsGroup ();
@@ -648,7 +649,7 @@ namespace System.Configuration
 					element.Value.ValueXml = new XmlDocument ().CreateElement ("value");
 				switch (value.Property.SerializeAs) {
 				case SettingsSerializeAs.Xml:
-					element.Value.ValueXml.InnerXml = (value.SerializedValue as string) ?? string.Empty;
+					element.Value.ValueXml.InnerXml = StripXmlHeader (value.SerializedValue as string);
 					break;
 				case SettingsSerializeAs.String:
 					element.Value.ValueXml.InnerText = value.SerializedValue as string;
@@ -662,43 +663,6 @@ namespace System.Configuration
 			}
 			if (hasChanges)
 				config.Save (ConfigurationSaveMode.Minimal, true);
-
-#else // original impl. - likely buggy to miss some properties to save
-
-			foreach (ConfigurationSection configSection in userGroup.Sections)
-			{
-				ClientSettingsSection userSection = configSection as ClientSettingsSection;
-				if (userSection != null)
-				{
-/*
-					userSection.Settings.Clear();
-
-					foreach (SettingsPropertyValue propertyValue in collection)
-					{
-						if (propertyValue.IsDirty)
-						{
-							SettingElement element = new SettingElement(propertyValue.Name, SettingsSerializeAs.String);
-							element.Value.ValueXml = new XmlDocument();
-							element.Value.ValueXml.InnerXml = (string)propertyValue.SerializedValue;
-							userSection.Settings.Add(element);
-						}
-					}
-*/
-					foreach (SettingElement element in userSection.Settings)
-					{
-						if (collection [element.Name] != null) {
-							if (collection [element.Name].Property.Attributes.Contains (typeof (SettingsManageabilityAttribute)) != isRoaming)
-								continue;
-
-							element.SerializeAs = SettingsSerializeAs.String;
-							element.Value.ValueXml.InnerXml = (string) collection [element.Name].SerializedValue;	///Value = XmlElement
-						}
-					}
- 
-				}
-			}
-			config.Save (ConfigurationSaveMode.Minimal, true);
-#endif
 		}
 
 		// NOTE: We should add here all the chars that are valid in a name of a class (Ecma-wise),
@@ -731,7 +695,7 @@ namespace System.Configuration
 					value.SerializedValue = element.Value.ValueXml.InnerXml;
 					break;
 				case SettingsSerializeAs.String:
-					value.SerializedValue = element.Value.ValueXml.InnerText;
+					value.SerializedValue = element.Value.ValueXml.InnerText.Trim ();
 					break;
 				case SettingsSerializeAs.Binary:
 					value.SerializedValue = Convert.FromBase64String (element.Value.ValueXml.InnerText);
@@ -858,11 +822,6 @@ namespace System.Configuration
 
 		public void Reset (SettingsContext context)
 		{
-			if (values == null) {
-				SettingsPropertyCollection coll = new SettingsPropertyCollection ();
-				GetPropertyValues (context, coll);
-			}
-
 			if (values != null) {
 				foreach (SettingsPropertyValue propertyValue in values) {
 					// Can't use propertyValue.Property.DefaultValue

@@ -20,16 +20,13 @@
 #include <alloca.h>
 #endif
 
-#define USE_ORIGINAL_VARS
 #define CREATE_PRUNED_SSA
 
 //#define DEBUG_SSA 1
 
 #define NEW_PHI(cfg,dest,val) do {	\
-		(dest) = mono_mempool_alloc0 ((cfg)->mempool, sizeof (MonoInst));	\
-		(dest)->opcode = OP_PHI;	\
-		(dest)->inst_c0 = (val);	\
-        (dest)->dreg = (dest)->sreg1 = (dest)->sreg2 = -1; \
+	MONO_INST_NEW ((cfg), (dest), OP_PHI); \
+	(dest)->inst_c0 = (val);							   \
 	} while (0)
 
 typedef struct {
@@ -144,7 +141,7 @@ static inline void
 record_use (MonoCompile *cfg, MonoInst *var, MonoBasicBlock *bb, MonoInst *ins)
 {
 	MonoMethodVar *info;
-	MonoVarUsageInfo *ui = mono_mempool_alloc (cfg->mempool, sizeof (MonoVarUsageInfo));
+	MonoVarUsageInfo *ui = (MonoVarUsageInfo *)mono_mempool_alloc (cfg->mempool, sizeof (MonoVarUsageInfo));
 
 	info = MONO_VARINFO (cfg, var->inst_c0);
 	
@@ -355,7 +352,7 @@ mono_ssa_compute (MonoCompile *cfg)
 	mono_compile_dominator_info (cfg, MONO_COMP_DOM | MONO_COMP_IDOM | MONO_COMP_DFRONTIER);
 
 	bitsize = mono_bitset_alloc_size (cfg->num_bblocks, 0);
-	buf = buf_start = g_malloc0 (mono_bitset_alloc_size (cfg->num_bblocks, 0) * cfg->num_varinfo);
+	buf = buf_start = (guint8 *)g_malloc0 (mono_bitset_alloc_size (cfg->num_bblocks, 0) * cfg->num_varinfo);
 
 	for (i = 0; i < cfg->num_varinfo; ++i) {
 		vinfo [i].def_in = mono_bitset_mem_new (buf, cfg->num_bblocks, 0);
@@ -437,7 +434,7 @@ mono_ssa_compute (MonoCompile *cfg)
  			else
  				ins->klass = var->klass;
 
-			ins->inst_phi_args =  mono_mempool_alloc0 (cfg->mempool, sizeof (int) * (cfg->bblocks [idx]->in_count + 1));
+			ins->inst_phi_args = (int *)mono_mempool_alloc0 (cfg->mempool, sizeof (int) * (cfg->bblocks [idx]->in_count + 1));
 			ins->inst_phi_args [0] = cfg->bblocks [idx]->in_count;
 
 			/* For debugging */
@@ -460,7 +457,7 @@ mono_ssa_compute (MonoCompile *cfg)
 
 	/* Renaming phase */
 
-	stack = alloca (sizeof (MonoInst *) * cfg->num_varinfo);
+	stack = (MonoInst **)alloca (sizeof (MonoInst *) * cfg->num_varinfo);
 	memset (stack, 0, sizeof (MonoInst *) * cfg->num_varinfo);
 
 	lvreg_stack = g_new0 (guint32, cfg->next_vreg);
@@ -478,6 +475,73 @@ mono_ssa_compute (MonoCompile *cfg)
 		printf ("\nEND COMPUTE SSA.\n\n");
 
 	cfg->comp_done |= MONO_COMP_SSA;
+}
+
+/*
+ * mono_ssa_remove_gsharedvt:
+ *
+ *   Same as mono_ssa_remove, but only remove phi nodes for gsharedvt variables.
+ */
+void
+mono_ssa_remove_gsharedvt (MonoCompile *cfg)
+{
+	MonoInst *ins, *var, *move;
+	int i, j, first;
+
+	/*
+	 * When compiling gsharedvt code, we need to get rid of the VPHI instructions,
+	 * since they cannot be handled later in the llvm backend.
+	 */
+	g_assert (cfg->comp_done & MONO_COMP_SSA);
+
+	for (i = 0; i < cfg->num_bblocks; ++i) {
+		MonoBasicBlock *bb = cfg->bblocks [i];
+
+		if (cfg->verbose_level >= 4)
+			printf ("\nREMOVE SSA %d:\n", bb->block_num);
+
+		for (ins = bb->code; ins; ins = ins->next) {
+			if (!(MONO_IS_PHI (ins) && ins->opcode == OP_VPHI && mini_is_gsharedvt_variable_type (&ins->klass->byval_arg)))
+				continue;
+
+			g_assert (ins->inst_phi_args [0] == bb->in_count);
+			var = get_vreg_to_inst (cfg, ins->dreg);
+
+			/* Check for PHI nodes where all the inputs are the same */
+			first = ins->inst_phi_args [1];
+
+			for (j = 1; j < bb->in_count; ++j)
+				if (first != ins->inst_phi_args [j + 1])
+					break;
+
+			if ((bb->in_count > 1) && (j == bb->in_count)) {
+				ins->opcode = op_phi_to_move (ins->opcode);
+				if (ins->opcode == OP_VMOVE)
+					g_assert (ins->klass);
+				ins->sreg1 = first;
+			} else {
+				for (j = 0; j < bb->in_count; j++) {
+					MonoBasicBlock *pred = bb->in_bb [j];
+					int sreg = ins->inst_phi_args [j + 1];
+
+					if (cfg->verbose_level >= 4)
+						printf ("\tADD R%d <- R%d in BB%d\n", var->dreg, sreg, pred->block_num);
+					if (var->dreg != sreg) {
+						MONO_INST_NEW (cfg, move, op_phi_to_move (ins->opcode));
+						if (move->opcode == OP_VMOVE) {
+							g_assert (ins->klass);
+							move->klass = ins->klass;
+						}
+						move->dreg = var->dreg;
+						move->sreg1 = sreg;
+						mono_add_ins_to_end (pred, move);
+					}
+				}
+
+				NULLIFY_INS (ins);
+			}
+		}
+	}
 }
 
 void
@@ -530,8 +594,7 @@ mono_ssa_remove (MonoCompile *cfg)
 						}
 					}
 
-					ins->opcode = OP_NOP;
-					ins->dreg = -1;
+					NULLIFY_INS (ins);
 				}
 			}
 		}
@@ -941,7 +1004,7 @@ visit_inst (MonoCompile *cfg, MonoBasicBlock *bb, MonoInst *ins, GList **cvars, 
 
 		if (MONO_IS_JUMP_TABLE (ins)) {
 			int i;
-			MonoJumpInfoBBTable *table = MONO_JUMP_TABLE_FROM_INS (ins);
+			MonoJumpInfoBBTable *table = (MonoJumpInfoBBTable *)MONO_JUMP_TABLE_FROM_INS (ins);
 
 			if (!ins->next || ins->next->opcode != OP_PADD) {
 				/* The PADD was optimized away */
@@ -977,7 +1040,7 @@ visit_inst (MonoCompile *cfg, MonoBasicBlock *bb, MonoInst *ins, GList **cvars, 
 
 		if (ins->opcode == OP_SWITCH) {
 			int i;
-			MonoJumpInfoBBTable *table = ins->inst_p0;
+			MonoJumpInfoBBTable *table = (MonoJumpInfoBBTable *)ins->inst_p0;
 
 			for (i = 0; i < table->table_size; i++)
 				if (table->table [i])
@@ -1053,7 +1116,7 @@ fold_ins (MonoCompile *cfg, MonoBasicBlock *bb, MonoInst *ins, MonoInst **carray
 
 		if (MONO_IS_JUMP_TABLE (ins)) {
 			int i;
-			MonoJumpInfoBBTable *table = MONO_JUMP_TABLE_FROM_INS (ins);
+			MonoJumpInfoBBTable *table = (MonoJumpInfoBBTable *)MONO_JUMP_TABLE_FROM_INS (ins);
 
 			if (!ins->next || ins->next->opcode != OP_PADD) {
 				/* The PADD was optimized away */
@@ -1287,12 +1350,10 @@ mono_ssa_deadce (MonoCompile *cfg)
 				MonoInst *src_var = get_vreg_to_inst (cfg, def->sreg1);
 				if (src_var && !(src_var->flags & (MONO_INST_VOLATILE|MONO_INST_INDIRECT)))
 					add_to_dce_worklist (cfg, info, MONO_VARINFO (cfg, src_var->inst_c0), &work_list);
-				def->opcode = OP_NOP;
-				def->dreg = def->sreg1 = def->sreg2 = -1;
+				NULLIFY_INS (def);
 				info->reg = -1;
 			} else if ((def->opcode == OP_ICONST) || (def->opcode == OP_I8CONST) || MONO_IS_ZERO (def)) {
-				def->opcode = OP_NOP;
-				def->dreg = def->sreg1 = def->sreg2 = -1;
+				NULLIFY_INS (def);
 				info->reg = -1;
 			} else if (MONO_IS_PHI (def)) {
 				int j;
@@ -1300,8 +1361,7 @@ mono_ssa_deadce (MonoCompile *cfg)
 					MonoMethodVar *u = MONO_VARINFO (cfg, get_vreg_to_inst (cfg, def->inst_phi_args [j])->inst_c0);
 					add_to_dce_worklist (cfg, info, u, &work_list);
 				}
-				def->opcode = OP_NOP;
-				def->dreg = def->sreg1 = def->sreg2 = -1;
+				NULLIFY_INS (def);
 				info->reg = -1;
 			}
 			else if (def->opcode == OP_NOP) {
@@ -1370,22 +1430,10 @@ mono_ssa_loop_invariant_code_motion (MonoCompile *cfg)
 		if (bb != h)
 			continue;
 		MONO_BB_FOR_EACH_INS_SAFE (bb, n, ins) {
-			gboolean is_class_init = FALSE;
-
 			/*
 			 * Try to move instructions out of loop headers into the preceeding bblock.
 			 */
-			if (ins->opcode == OP_VOIDCALL) {
-				MonoCallInst *call = (MonoCallInst*)ins;
-
-				if (call->fptr_is_patch) {
-					MonoJumpInfo *ji = (MonoJumpInfo*)call->fptr;
-
-					if (ji->type == MONO_PATCH_INFO_CLASS_INIT)
-						is_class_init = TRUE;
-				}
-			}
-			if (ins->opcode == OP_LDLEN || ins->opcode == OP_STRLEN || ins->opcode == OP_CHECK_THIS || ins->opcode == OP_AOTCONST || is_class_init) {
+			if (ins->opcode == OP_LDLEN || ins->opcode == OP_STRLEN || ins->opcode == OP_CHECK_THIS || ins->opcode == OP_AOTCONST || ins->opcode == OP_GENERIC_CLASS_INIT) {
 				gboolean skip;
 				int sreg;
 
@@ -1424,7 +1472,7 @@ mono_ssa_loop_invariant_code_motion (MonoCompile *cfg)
 				else
 					sreg = -1;
 				if (sreg != -1) {
-					MonoInst *tins;
+					MonoInst *tins, *var;
 
 					skip = FALSE;
 					for (tins = ins->prev; tins; tins = tins->prev) {
@@ -1438,6 +1486,9 @@ mono_ssa_loop_invariant_code_motion (MonoCompile *cfg)
 						}
 					}
 					if (skip)
+						continue;
+					var = get_vreg_to_inst (cfg, sreg);
+					if (var && (var->flags & (MONO_INST_VOLATILE|MONO_INST_INDIRECT)))
 						continue;
 					ins->sreg1 = sreg;
 				}

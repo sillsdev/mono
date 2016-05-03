@@ -125,7 +125,8 @@ namespace System.IO.Packaging {
 
 		private PackageRelationship CreateRelationship (Uri targetUri, TargetMode targetMode, string relationshipType, string id, bool loading)
 		{
-			Package.CheckIsReadOnly ();
+			if (!loading)
+				Package.CheckIsReadOnly ();
 			Check.TargetUri (targetUri);
 			Check.RelationshipTypeIsValid (relationshipType);
 			Check.IdIsValid (id);
@@ -165,7 +166,7 @@ namespace System.IO.Packaging {
 				if (node.Attributes["TargetMode"] != null)
 					mode = (TargetMode) Enum.Parse (typeof(TargetMode), node.Attributes ["TargetMode"].Value);
 				
-				CreateRelationship (new Uri (node.Attributes["Target"].Value.ToString(), UriKind.Relative),
+				CreateRelationship (new Uri (node.Attributes["Target"].Value.ToString(), UriKind.RelativeOrAbsolute),
 				                    mode,
 				                    node.Attributes["Type"].Value.ToString (),
 				                    node.Attributes["Id"].Value.ToString (),

@@ -13,6 +13,9 @@ using System;
 using System.Globalization;
 using System.Security.Principal;
 using System.Threading;
+using System.Reflection;
+using System.Collections.Generic;
+using SD = System.Diagnostics;
 
 using NUnit.Framework;
 
@@ -25,9 +28,7 @@ namespace MonoTests.System.Threading
 	{
 		public static void NoPrincipal () 
 		{
-#if !TARGET_JVM // AppDomain.SetPrincipalPolicy not supported for TARGET_JVM
 			AppDomain.CurrentDomain.SetPrincipalPolicy (PrincipalPolicy.NoPrincipal);
-#endif
 			IPrincipal p = Thread.CurrentPrincipal;
 			Assert.IsNull (p, "#1");
 
@@ -39,7 +40,6 @@ namespace MonoTests.System.Threading
 			// in this case we can return to null
 		}
 
-#if !TARGET_JVM // AppDomain.SetPrincipalPolicy not supported for TARGET_JVM
 		public static void UnauthenticatedPrincipal () 
 		{
 			AppDomain.CurrentDomain.SetPrincipalPolicy (PrincipalPolicy.UnauthenticatedPrincipal);
@@ -76,7 +76,6 @@ namespace MonoTests.System.Threading
 			Assert.IsNotNull (Thread.CurrentPrincipal, "#7");
 			// in this case we can't return to null
 		}
-#endif // TARGET_JVM
 
 		public static void CopyOnNewThread ()
 		{
@@ -89,10 +88,10 @@ namespace MonoTests.System.Threading
 	[Category("MobileNotWorking")] // Abort #10240
 	public class ThreadTest
 	{
-		TimeSpan Infinite = new TimeSpan (-10000);	// -10000 ticks == -1 ms
+		//TimeSpan Infinite = new TimeSpan (-10000);	// -10000 ticks == -1 ms
 		TimeSpan SmallNegative = new TimeSpan (-2);	// between 0 and -1.0 (infinite) ms
 		TimeSpan Negative = new TimeSpan (-20000);	// really negative
-		TimeSpan MaxValue = TimeSpan.FromMilliseconds ((long) Int32.MaxValue);
+		//TimeSpan MaxValue = TimeSpan.FromMilliseconds ((long) Int32.MaxValue);
 		TimeSpan TooLarge = TimeSpan.FromMilliseconds ((long) Int32.MaxValue + 1);
 
 		static bool is_win32;
@@ -185,7 +184,11 @@ namespace MonoTests.System.Threading
 			{
 				sub_thread.Start();
 				Thread.Sleep (100);
+#if MONO_FEATURE_THREAD_ABORT
 				sub_thread.Abort();
+#else
+				sub_thread.Interrupt ();
+#endif
 			}
 		}
 		
@@ -216,10 +219,18 @@ namespace MonoTests.System.Threading
 				thread2.Start();
 				TestUtil.WaitForAlive (thread2, "wait2");
 				T2ON = true;
+#if MONO_FEATURE_THREAD_ABORT
 				thread1.Abort();
+#else
+				thread1.Interrupt ();
+#endif
 				TestUtil.WaitForNotAlive (thread1, "wait3");
 				T1ON = false;
+#if MONO_FEATURE_THREAD_ABORT
 				thread2.Abort();
+#else
+				thread2.Interrupt ();
+#endif
 				TestUtil.WaitForNotAlive (thread2, "wait4");
 				T2ON = false;
 			}
@@ -264,38 +275,29 @@ namespace MonoTests.System.Threading
 			C1Test test1 = new C1Test ();
 			Thread tA = new Thread (new ThreadStart (test1.TestMethod));
 			int hA1 = tA.GetHashCode ();
-#if NET_2_0
 			Assert.IsTrue (hA1 > 0, "#A1");
-#endif
 			tA.Start ();
 			int hA2 = tA.GetHashCode ();
 			Assert.AreEqual (hA1, hA2, "#A2");
 			tA.Join ();
 			int hA3 = tA.GetHashCode ();
 			Assert.AreEqual (hA1, hA3, "#A3");
-#if NET_2_0
 			Assert.AreEqual (hA1, tA.ManagedThreadId, "#A4");
-#endif
 
 			test1 = new C1Test ();
 			Thread tB = new Thread (new ThreadStart (test1.TestMethod));
 			int hB1 = tB.GetHashCode ();
-#if NET_2_0
 			Assert.IsTrue (hB1 > 0, "#B1");
-#endif
 			tB.Start ();
 			int hB2 = tB.GetHashCode ();
 			Assert.AreEqual (hB1, hB2, "#B2");
 			tB.Join ();
 			int hB3 = tB.GetHashCode ();
 			Assert.AreEqual (hB1, hB3, "#B3");
-#if NET_2_0
 			Assert.AreEqual (hB1, tB.ManagedThreadId, "#B4");
-#endif
 			Assert.IsFalse (hA2 == hB2, "#B5");
 		}
 
-#if NET_2_0
 		[Test] // bug #82700
 		public void ManagedThreadId ()
 		{
@@ -320,7 +322,6 @@ namespace MonoTests.System.Threading
 			Assert.AreEqual (mtB2, mtB3, "#B2");
 			Assert.IsFalse (mtB1 == mtA1, "#B3");
 		}
-#endif
 
 		[Test]
 		[Category ("NotDotNet")] // it hangs.
@@ -339,7 +340,11 @@ namespace MonoTests.System.Threading
 			C2Test test1 = new C2Test();
 			Thread TestThread = new Thread(new ThreadStart(test1.TestMethod));
 			TestThread.Start();
+#if MONO_FEATURE_THREAD_ABORT
 			TestThread.Abort();
+#else
+			TestThread.Interrupt ();
+#endif
 			try {
 				TestThread.Start();
 				Assert.Fail ("#2");
@@ -354,7 +359,11 @@ namespace MonoTests.System.Threading
 			}
 			bool started = (TestThread.ThreadState == ThreadState.Running);
 			Assert.AreEqual (started, test1.run, "#15 Thread Is not in the correct state: ");
+#if MONO_FEATURE_THREAD_ABORT
 			TestThread.Abort();
+#else
+			TestThread.Interrupt ();
+#endif
 		}
 		}
 
@@ -369,15 +378,16 @@ namespace MonoTests.System.Threading
 			Assert.AreEqual (ApartmentState.Unknown, TestThread.ApartmentState, "#1");
 			TestThread.Start();
 			TestUtil.WaitForAlive (TestThread, "wait5");
-#if NET_2_0
 			Assert.AreEqual (ApartmentState.MTA, TestThread.ApartmentState, "#2");
-#else
-			Assert.AreEqual (ApartmentState.Unknown, TestThread.ApartmentState, "#3");
-#endif
+#if MONO_FEATURE_THREAD_ABORT
 			TestThread.Abort();
+#else
+			TestThread.Interrupt ();
+#endif
 		}
 
 		[Test]
+		[Category ("NotWorking")] // setting the priority of a Thread before it is started isn't implemented in Mono yet
 		public void TestPriority1()
 		{
 			if (is_win32 && is_mono)
@@ -387,16 +397,22 @@ namespace MonoTests.System.Threading
 			Thread TestThread = new Thread(new ThreadStart(test1.TestMethod));
 			try {
 				TestThread.Priority=ThreadPriority.BelowNormal;
-				ThreadPriority after = TestThread.Priority;
+				ThreadPriority before = TestThread.Priority;
+				Assert.AreEqual (ThreadPriority.BelowNormal, before, "#40 Unexpected priority before thread start: ");
 				TestThread.Start();
 				TestUtil.WaitForAlive (TestThread, "wait7");
-				ThreadPriority before = TestThread.Priority;
+				ThreadPriority after = TestThread.Priority;
 				Assert.AreEqual (before, after, "#41 Unexpected Priority Change: ");
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 		}
 
+#if MONO_FEATURE_THREAD_ABORT
 		[Test]
 		[Category ("NotDotNet")] // on MS, Thread is still in AbortRequested state when Start is invoked
 		public void AbortUnstarted ()
@@ -406,6 +422,7 @@ namespace MonoTests.System.Threading
 			th.Abort ();
 			th.Start ();
 		}
+#endif
 
 		[Test]
 		[Category ("NotDotNet")] // on MS, ThreadState is immediately Stopped after Abort
@@ -420,7 +437,11 @@ namespace MonoTests.System.Threading
 				TestUtil.WaitForAliveOrStop (TestThread, "wait8");
 				Assert.AreEqual (ThreadPriority.Normal, TestThread.Priority, "#43 Incorrect Priority in Started thread: ");
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 			Assert.AreEqual (ThreadPriority.Normal, TestThread.Priority, "#44 Incorrect Priority in Aborted thread: ");
 		}
@@ -445,7 +466,11 @@ namespace MonoTests.System.Threading
 				Assert.AreEqual (ThreadPriority.Highest, TestThread.Priority, "#45E Incorrect Priority:");
 			}
 			finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 		}
 
@@ -473,7 +498,11 @@ namespace MonoTests.System.Threading
 				bool state = TestThread.IsBackground;
 				Assert.IsFalse (state, "#51 IsBackground not set at the default state: ");
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 		}
 
@@ -486,7 +515,11 @@ namespace MonoTests.System.Threading
 			try {
 				TestThread.Start();
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 			
 			if (TestThread.IsAlive) {
@@ -515,7 +548,11 @@ namespace MonoTests.System.Threading
 				TestThread.Name = newname;
 				Assert.AreEqual (newname, TestThread.Name, "#62 Name not set when must be set: ");
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 		}
 
@@ -530,11 +567,42 @@ namespace MonoTests.System.Threading
 
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))]
-		public void ReName ()
+		public void Rename ()
 		{
-			Thread t = new Thread (new ThreadStart (ReName));
+			Thread t = new Thread (new ThreadStart (Rename));
 			t.Name = "a";
 			t.Name = "b";
+		}
+
+		bool rename_finished;
+		bool rename_failed;
+
+		[Test]
+		public void RenameTpThread ()
+		{
+			object monitor = new object ();
+			ThreadPool.QueueUserWorkItem (new WaitCallback (Rename_callback), monitor);
+			lock (monitor) {
+				if (!rename_finished)
+					Monitor.Wait (monitor);
+			}
+			Assert.IsTrue (!rename_failed);
+		}
+
+		void Rename_callback (object o) {
+			Thread.CurrentThread.Name = "a";
+			try {
+				Thread.CurrentThread.Name = "b";
+				//Console.WriteLine ("Thread name is: {0}", Thread.CurrentThread.Name);
+			} catch (Exception e) {
+				//Console.Error.WriteLine (e);
+				rename_failed = true;
+			}
+			object monitor = o;
+			lock (monitor) {
+				rename_finished = true;
+				Monitor.Pulse (monitor);
+			}
 		}
 
 		[Test]
@@ -546,7 +614,11 @@ namespace MonoTests.System.Threading
 				TestThread.Start();
 				TestUtil.WaitForAlive (TestThread, "wait11");
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 		}
 
@@ -558,7 +630,11 @@ namespace MonoTests.System.Threading
 			try {
 				TestThread.Start();
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 		}
 
@@ -574,8 +650,13 @@ namespace MonoTests.System.Threading
 				thread2.Start();
 				thread2.Join();
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				thread1.Abort();
 				thread2.Abort();
+#else
+				thread1.Interrupt ();
+				thread2.Interrupt ();
+#endif
 			}
 		}
 
@@ -660,7 +741,11 @@ namespace MonoTests.System.Threading
 				Assert.IsTrue (TestThread.ThreadState == ThreadState.Running || (TestThread.ThreadState & ThreadState.Unstarted) != 0,
 					"#102 Wrong Thread State: " + TestThread.ThreadState.ToString ());
 			} finally {
+#if MONO_FEATURE_THREAD_ABORT
 				TestThread.Abort();
+#else
+				TestThread.Interrupt ();
+#endif
 			}
 			
 			TestUtil.WaitForNotAlive (TestThread, "wait12");
@@ -680,11 +765,14 @@ namespace MonoTests.System.Threading
 				t.Start ();
 				t.Join ();
 			} catch {
+#if MONO_FEATURE_THREAD_ABORT
 				t.Abort ();
+#else
+				t.Interrupt ();
+#endif
 			}
 		}
 
-#if !TARGET_JVM // AppDomain.SetPrincipalPolicy not supported for TARGET_JVM
 		[Test]
 		[Ignore ("see comment below.")]
 		public void CurrentPrincipal_PrincipalPolicy_UnauthenticatedPrincipal () 
@@ -696,7 +784,11 @@ namespace MonoTests.System.Threading
 				t.Start ();
 				t.Join ();
 			} catch {
+#if MONO_FEATURE_THREAD_ABORT
 				t.Abort ();
+#else
+				t.Interrupt ();
+#endif
 			}
 		}
 
@@ -710,10 +802,13 @@ namespace MonoTests.System.Threading
 				t.Start ();
 				t.Join ();
 			} catch {
+#if MONO_FEATURE_THREAD_ABORT
 				t.Abort ();
+#else
+				t.Interrupt ();
+#endif
 			}
 		}
-#endif // TARGET_JVM
 		
 		[Test]
 		public void IPrincipal_CopyOnNewThread () 
@@ -725,12 +820,17 @@ namespace MonoTests.System.Threading
 				t.Start ();
 				t.Join ();
 			} catch {
+#if MONO_FEATURE_THREAD_ABORT
 				t.Abort ();
+#else
+				t.Interrupt ();
+#endif
 			}
 		}
 
 		int counter = 0;
 
+#if MONO_FEATURE_THREAD_SUSPEND_RESUME
 		[Test]
 		public void TestSuspend ()
 		{
@@ -754,7 +854,9 @@ namespace MonoTests.System.Threading
 			TestUtil.WaitForNotAlive (t, "wait13");
 			CheckIsNotRunning ("t6", t);
 		}
-
+#endif
+		
+#if MONO_FEATURE_THREAD_SUSPEND_RESUME && MONO_FEATURE_THREAD_ABORT
 		[Test]
 		[Category("NotDotNet")] // On MS, ThreadStateException is thrown on Abort: "Thread is suspended; attempting to abort"
 		public void TestSuspendAbort ()
@@ -785,19 +887,22 @@ namespace MonoTests.System.Threading
 			
 			CheckIsNotRunning ("t6", t);
 		}
+#endif
 
 		[Test]
 		public void Test_Interrupt ()
 		{
+			ManualResetEvent mre = new ManualResetEvent (false);
 			bool interruptedExceptionThrown = false;
+
 			ThreadPool.QueueUserWorkItem (Test_Interrupt_Worker, Thread.CurrentThread);
 
 			try {
 				try {
-					Thread.Sleep (3000);
+					mre.WaitOne (3000);
 				} finally {
 					try {
-						Thread.Sleep (0);
+						mre.WaitOne (0);
 					} catch (ThreadInterruptedException) {
 						Assert.Fail ("ThreadInterruptedException thrown twice");
 					}
@@ -827,11 +932,12 @@ namespace MonoTests.System.Threading
 		[Category ("NotDotNet")] // it crashes nunit.
 		public void Test_InterruptCurrentThread ()
 		{
+			ManualResetEvent mre = new ManualResetEvent (false);
 			bool interruptedExceptionThrown = false;
 
 			Thread.CurrentThread.Interrupt ();
 			try {
-				Thread.Sleep (0);
+				mre.WaitOne (0);
 				Assert.Fail ();
 			} catch (ThreadInterruptedException) {
 			}
@@ -843,6 +949,34 @@ namespace MonoTests.System.Threading
 			Assert.IsNotNull (Thread.GetNamedDataSlot ("te#st"), "#1");
 			Assert.AreSame (Thread.GetNamedDataSlot ("te#st"), Thread.GetNamedDataSlot ("te#st"), "#2");
 		}
+
+		class DomainClass : MarshalByRefObject {
+			Thread m_thread;
+			bool success;
+
+			public bool Run () {
+				m_thread = new Thread(ThreadProc);
+				m_thread.Start(Thread.CurrentThread);
+				m_thread.Join();
+				return success;
+			}
+
+			public void ThreadProc (object arg) {
+				success = m_thread == Thread.CurrentThread;
+			}
+		}
+
+#if MONO_FEATURE_MULTIPLE_APPDOMAINS
+		[Test]
+		public void CurrentThread_Domains ()
+		{
+			AppDomain ad = AppDomain.CreateDomain ("foo");
+			ad.Load (typeof (DomainClass).Assembly.GetName ());
+			var o = (DomainClass)ad.CreateInstanceAndUnwrap (typeof (DomainClass).Assembly.FullName, typeof (DomainClass).FullName);
+			Assert.IsTrue (o.Run ());
+			AppDomain.Unload (ad);
+		}
+#endif // MONO_FEATURE_MULTIPLE_APPDOMAINS
 
 		void CheckIsRunning (string s, Thread t)
 		{
@@ -1112,11 +1246,7 @@ namespace MonoTests.System.Threading
 				exception_occured = true;
 			}
 			Assert.AreEqual (ApartmentState.Unknown, t3.ApartmentState, "Thread3 Set Invalid");
-#if NET_2_0
 			Assert.IsFalse (exception_occured, "Thread3 Set Invalid Exception Occured");
-#else
-			Assert.IsTrue (exception_occured, "Thread3 Set Invalid Exception Occured");
-#endif
 
 			t1.Start ();
 			exception_occured = false;
@@ -1238,6 +1368,17 @@ namespace MonoTests.System.Threading
 
 		static void ThreadProc(Object stateInfo) {
 			Thread.CurrentThread.Name = "My Worker";
+		}
+
+		[Test]
+		public void GetStackTraces () {
+			var m = typeof (Thread).GetMethod ("Mono_GetStackTraces", BindingFlags.NonPublic|BindingFlags.Static);
+			if (m != null) {
+				var res = (Dictionary<Thread,SD.StackTrace>)typeof (Thread).GetMethod ("Mono_GetStackTraces", BindingFlags.NonPublic|BindingFlags.Static).Invoke (null, null);
+				foreach (var t in res.Keys) {
+					var st = res [t].ToString ();
+				}
+			}
 		}
 	}
 

@@ -5,7 +5,7 @@
 #include <mono/utils/mono-context.h>
 #include <signal.h>
 
-#define MONO_ARCH_CPU_SPEC s390x_cpu_desc
+#define MONO_ARCH_CPU_SPEC mono_s390x_cpu_desc
 
 #define MONO_MAX_IREGS 16
 #define MONO_MAX_FREGS 16
@@ -13,29 +13,6 @@
 /*-------------------------------------------*/
 /* Parameters used by the register allocator */
 /*-------------------------------------------*/
-
-#define S390_LONG(loc, opy, op, r, ix, br, off)					\
-	if (mono_hwcap_s390x_has_ld) {						\
-		if (s390_is_imm20(off)) {					\
-			s390_##opy (loc, r, ix, br, off);			\
-		} else {							\
-			s390_basr (code, s390_r13, 0);				\
-			s390_j    (code, 6);					\
-			s390_llong(code, off);					\
-			s390_lg   (code, s390_r13, 0, s390_r13, 4);		\
-			s390_##op (code, r, s390_r13, br, 0);			\
-		}								\
-	} else {								\
-		if (s390_is_uimm12(off)) {					\
-			s390_##op (loc, r, ix, br, off);			\
-		} else {							\
-			s390_basr (code, s390_r13, 0);				\
-			s390_j    (code, 6);					\
-			s390_llong(code, off);					\
-			s390_lg   (code, s390_r13, 0, s390_r13, 4);		\
-			s390_##op (code, r, s390_r13, br, 0);			\
-		}								\
-	}
 
 struct MonoLMF {
 	gpointer    previous_lmf;
@@ -62,65 +39,19 @@ typedef struct
 	void *return_address;
 } MonoS390StackFrame;
 
-typedef struct
-{
-	char	n3:1;		// N3 instructions present
-	char	zArch:1;	// z/Architecture mode installed
-	char	zAct:1;		// z/Architecture mode active
-	char	date:1;		// DATE enhancement facility
-	char	idte1:1;	// IDTE present (PST)
-	char	idte2:1;	// IDTE present (REG)
-	char	asnlx:1;	// ASN and LX reuse facility
-	char	stfle:1;	// STFLE installed
-	char	zDATe:1;	// Enhanced DAT in z mode
-	char	srstat:1;	// Sense running status facility
-	char	cSSKE:1;	// Conditional SSKE facility
-	char	topo:1;		// COnfiguration topology facility
-	char	xTrans2:1;	// Extended translation facility 2
-	char	msgSec:1;	// Message security facility
-	char	longDsp:1;	// Long displacement facility
-	char	hiPerfLD:1;	// High performance long displacement facility
-	char	hfpMAS:1;	// HFP multiply-and-add/subtrace facility
-	char	xImm:1;		// Extended immediate facility
-	char	xTrans3:1;	// Extended translation facility 3
-	char	hfpUnX:1;	// HFP unnormalized extension facility
-	char	etf2:1;		// ETF2-enhancement facility
-	char	stckf:1;	// Store-clock-fast facility
-	char	parse:1;	// Parsing enhancement facility
-	char	mvcos:1;	// MVCOS facility
-	char	todSteer:1;	// TOD-clock steering facility
-	char	etf3:1;		// ETF3-enhancement facility
-	char	xCPUtm:1;	// Extract CPU time facility
-	char	csst:1;		// Compare-swap-and-store facility
-	char	csst2:1;	// Compare-swap-and-store facility 2
-	char	giX:1;		// General instructions extension facility
-	char	exX:1;		// Execute extensions facility
-	char	ibm:1;		// IBM internal use
-	char	fps:1;		// Floating point support enhancement
-	char	dfp:1;		// Decimal floating point facility
-	char	hiDFP:1;	// High Performance DFP facility
-	char	pfpo:1;		// PFPO instruction facility
-} __attribute__((aligned(8))) facilityList_t;
-	
 // #define MONO_ARCH_SIGSEGV_ON_ALTSTACK		1
 #define MONO_ARCH_EMULATE_LCONV_TO_R8_UN 		1
 #define MONO_ARCH_NO_EMULATE_LONG_MUL_OPTS		1
 #define MONO_ARCH_NO_EMULATE_LONG_SHIFT_OPS		1
 #define MONO_ARCH_HAVE_IS_INT_OVERFLOW  		1
 #define MONO_ARCH_NEED_DIV_CHECK			1
-#define MONO_ARCH_HAVE_ATOMIC_ADD 			1
-#define MONO_ARCH_HAVE_ATOMIC_EXCHANGE 			1
 #define MONO_ARCH_SIGNAL_STACK_SIZE 			256*1024
 #define MONO_ARCH_HAVE_DECOMPOSE_OPTS 			1
-#define MONO_ARCH_HAVE_CREATE_DELEGATE_TRAMPOLINE	1
-#define MONO_ARCH_HAVE_IMT 				1
 #define MONO_ARCH_HAVE_TLS_GET				1
 #define MONO_ARCH_ENABLE_MONO_LMF_VAR			1
 #define MONO_ARCH_IMT_REG				s390_r9
-#define MONO_ARCH_VTABLE_REG				MONO_ARCH_IMT_REG
+#define MONO_ARCH_VTABLE_REG				S390_FIRST_ARG_REG
 #define MONO_ARCH_RGCTX_REG				MONO_ARCH_IMT_REG
-#define MONO_ARCH_THIS_AS_FIRST_ARG     		1
-#define MONO_ARCH_HAVE_XP_UNWIND			1
 #define MONO_ARCH_HAVE_SIGCTX_TO_MONOCTX		1
 #define MONO_ARCH_SOFT_DEBUG_SUPPORTED			1
 #define MONO_ARCH_HAVE_CONTEXT_SET_INT_REG		1
@@ -128,17 +59,16 @@ typedef struct
 #define MONO_ARCH_GC_MAPS_SUPPORTED			1
 #define MONO_ARCH_GSHARED_SUPPORTED			1
 #define MONO_ARCH_MONITOR_ENTER_ADJUSTMENT		1
+#define MONO_ARCH_HAVE_HANDLER_BLOCK_GUARD		1
+#define MONO_ARCH_HAVE_INVALIDATE_METHOD		1
+#define MONO_ARCH_HAVE_OP_GENERIC_CLASS_INIT		1
+#define MONO_ARCH_HAVE_SETUP_ASYNC_CALLBACK		1
 
 #define S390_STACK_ALIGNMENT		 8
 #define S390_FIRST_ARG_REG 		s390_r2
 #define S390_LAST_ARG_REG 		s390_r6
 #define S390_FIRST_FPARG_REG 		s390_f0
 #define S390_LAST_FPARG_REG 		s390_f6
-#define S390_PASS_STRUCTS_BY_VALUE 	 1
-#define S390_SMALL_RET_STRUCT_IN_REG	 1
-
-#define S390_NUM_REG_ARGS (S390_LAST_ARG_REG-S390_FIRST_ARG_REG+1)
-#define S390_NUM_REG_FPARGS ((S390_LAST_FPARG_REG-S390_FIRST_FPARG_REG)/2)
 
 /*===============================================*/
 /* Definitions used by mini-codegen.c            */
@@ -167,7 +97,8 @@ typedef struct
 #define MONO_ARCH_FPSTACK_SIZE 0
 
 #define MONO_ARCH_INST_FIXED_REG(desc) ((desc == 'o') ? s390_r2 : 		\
-					((desc == 'g') ? s390_f0 : - 1))
+					((desc == 'g') ? s390_f0 : 		\
+					((desc == 'A') ? S390_FIRST_ARG_REG : -1)))
 
 #define MONO_ARCH_INST_IS_FLOAT(desc)  ((desc == 'f') || (desc == 'g'))
 
@@ -181,7 +112,13 @@ typedef struct
 #define MONO_ARCH_FRAME_ALIGNMENT 8
 #define MONO_ARCH_CODE_ALIGNMENT 32
 
-#define MONO_ARCH_RETREG1 s390_r2
+/*-----------------------------------------------*/
+/* SIMD Related Definitions                      */
+/*-----------------------------------------------*/
+
+#define MONO_MAX_XREGS			31
+#define MONO_ARCH_CALLEE_XREGS		0x0
+#define MONO_ARCH_CALLEE_SAVED_XREGS	0x0
 
 /*-----------------------------------------------*/
 /* Macros used to generate instructions          */

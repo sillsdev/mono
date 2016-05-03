@@ -142,7 +142,7 @@ namespace Mono.CSharp {
 			}
 
 			if (targs != null) {
-				if (!targs.Resolve (rc))
+				if (!targs.Resolve (rc, true))
 					return null;
 			}
 
@@ -208,6 +208,18 @@ namespace Mono.CSharp {
 		protected override void CloneTo (CloneContext clonectx, Expression t)
 		{
 			// Nothing
+		}
+	}
+
+	public class EmptyCompletion : CompletingExpression
+	{
+		protected override void CloneTo (CloneContext clonectx, Expression target)
+		{
+		}
+
+		protected override Expression DoResolve (ResolveContext rc)
+		{
+			throw new CompletionResult ("", new string [0]);
 		}
 	}
 	

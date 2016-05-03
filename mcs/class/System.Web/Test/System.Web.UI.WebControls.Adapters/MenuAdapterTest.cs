@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using NUnit.Framework;
 using System;
 using System.Collections;
@@ -58,9 +57,7 @@ namespace MonoTests.System.Web.UI.WebControls.Adapters
 		{
 			p = new Page ();
 			c = new MyMenu ();
-#if NET_4_0
 			c.RenderingMode = MenuRenderingMode.Table;
-#endif
 			a = new MyMenuAdapter (c);
 			p.Controls.Add(c);
 			sw = new StringWriter ();
@@ -218,4 +215,3 @@ namespace MonoTests.System.Web.UI.WebControls.Adapters
 #endregion
 	}
 }
-#endif

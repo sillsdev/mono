@@ -78,8 +78,11 @@ namespace System.Net.Http.Headers
 					return v;
 
 				long l;
-				if (content.TryComputeLength (out l))
+				if (content.TryComputeLength (out l)) {
+					// .net compatibility reading value actually set header property value
+					SetValue ("Content-Length", l);
 					return l;
+				}
 
 				return null;
 			}
@@ -102,7 +105,7 @@ namespace System.Net.Http.Headers
 				return GetValue<byte[]> ("Content-MD5");
 			}
 			set {
-				AddOrRemove ("Content-MD5", value);
+				AddOrRemove ("Content-MD5", value, Parser.MD5.ToString);
 			}
 		}
 

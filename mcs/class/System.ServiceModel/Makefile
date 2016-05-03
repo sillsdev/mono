@@ -7,58 +7,44 @@ RESOURCE_FILES = \
 	resources/ws-addr.xsd
 
 LIBRARY = System.ServiceModel.dll
-LIBRARY_USE_INTERMEDIATE_FILE = yes
 
+LIB_REFS = System System.Xml System.Core System.Runtime.Serialization
 LIB_MCS_FLAGS = \
 		/nowarn:414,169,67,3005,436,219,618 \
 		/unsafe \
 		/d:TRACE \
-	        /r:System.dll \
-	        /r:System.Xml.dll \
-		/r:System.Core.dll \
-	        /r:System.Runtime.Serialization.dll \
 		$(RESOURCE_FILES:%=/resource:%)
 
+ifdef XAMMAC_4_5
+LIB_REFS += System.ServiceModel.Internals
+endif
+
 ifneq (2.1, $(FRAMEWORK_VERSION))
-LIB_MCS_FLAGS += /d:NET_3_0 	\
-			/r:System.Configuration.dll \
-			/r:System.Data.dll	\
-			/r:System.Security.dll \
-			/r:System.IdentityModel.dll \
-			/r:System.IdentityModel.Selectors.dll \
-			/r:System.Transactions.dll \
-			/r:System.Messaging.dll \
-			/r:System.Web.dll \
-			/r:System.Web.Services.dll \
-			/r:Mono.Security.dll
+LIB_REFS += System.Configuration System.Data System.Security System.IdentityModel System.IdentityModel.Selectors System.Transactions System.Messaging System.Web.Services Mono.Security
+LIB_MCS_FLAGS += /d:NET_3_0
+
+ifndef NO_SYSTEM_WEB_DEPENDENCY
+LIB_REFS += System.Web
 endif
 
 ifeq (4, $(FRAMEWORK_VERSION_MAJOR))
 
-ACTIVATION_DEP := System.ServiceModel.Activation.dll
-ACTIVATION_DEP_FILE := $(wildcard ../lib/$(PROFILE)/$(ACTIVATION_DEP))
-CYCLIC_DEPS += $(ACTIVATION_DEP)
-CYCLIC_DEP_FILES += $(ACTIVATION_DEP_FILE)
+ifndef NO_SYSTEM_SERVICEMODEL_ACTIVATION_DEPENDENCY
+activation = $(the_libdir_base)System.ServiceModel.Activation.dll
+servicemodel_deps = $(activation)
 
-ifdef ACTIVATION_DEP_FILE
-LIB_MCS_FLAGS += -define:HAS_ACTIVATION -r:$(ACTIVATION_DEP)
+ifneq (plainservice/,$(intermediate))
+LIB_MCS_FLAGS += -define:HAS_ACTIVATION -r:System.ServiceModel.Activation.dll
+endif 
+endif # NO_SYSTEM_SERVICEMODEL_ACTIVATION_DEPENDENCY
+
+ifndef NO_SYSTEM_WEB_APPSERVICES_DEPENDENCY
+LIB_REFS += System.Web.ApplicationServices
 endif
 
-LIB_MCS_FLAGS += /r:System.Web.ApplicationServices.dll
+endif # (4, $(FRAMEWORK_VERSION_MAJOR))
 
-ifneq ($(CYCLIC_DEPS:%=../lib/$(PROFILE)/%), $(CYCLIC_DEP_FILES))
-NO_SIGN_ASSEMBLY = yes
-NO_INSTALL = yes
-all-local: echo-warning
-.PHONY: echo-warning
-
-ifeq   (, $(strip $(CYCLIC_DEP_FILES)))
-echo-warning:
-	@echo "** Warning: System.ServiceModel.dll built without parts that depend on: $(CYCLIC_DEPS)"
-endif
-endif
-
-endif
+endif # (2.1, $(FRAMEWORK_VERSION))
 
 TEST_MCS_FLAGS = $(LIB_MCS_FLAGS)
 
@@ -87,6 +73,21 @@ endif
 
 include ../../build/library.make
 
-ifdef ACTIVATION_DEP_FILE
-$(build_lib): $(CYCLIC_DEP_FILES)
+$(the_libdir_base)System.ServiceModel.dll: $(servicemodel_deps)
+
+$(activation):
+	(cd ../System.ServiceModel.Activation; $(MAKE) $@)
+
+ifneq (plainservice/,$(intermediate))
+$(the_libdir_base)plainservice/System.ServiceModel.dll:
+	$(MAKE) intermediate=plainservice/ $(the_libdir_base)plainservice/System.ServiceModel.dll
+endif
+
+.NOTPARALLEL: $(servicemodel_deps)
+
+CLEAN_FILES = $(the_libdir_base)plainservice/System.ServiceModel.dll
+
+ifndef intermediate
+csproj-local:
+	$(MAKE) csproj-local intermediate=plainservice/
 endif

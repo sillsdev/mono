@@ -56,7 +56,7 @@ namespace MonoTests.System.ComponentModel.DataAnnotations
 			var rea = new RegularExpressionAttributePoker (@"[A-Za-z]");
 			Assert.AreEqual (@"[A-Za-z]", rea.Pattern, "Patterns not saved correctly.");
 			Assert.AreEqual (null, rea.ErrorMessage, "Error message not null when not yet matched.");
-			Assert.AreEqual ("The field {0} must match the regular expression {1}.", rea.GetErrorMessageString (), "Error message not valid.");
+			Assert.AreEqual ("The field {0} must match the regular expression '{1}'.", rea.GetErrorMessageString (), "Error message not valid.");
 		}
 
 		[Test]
@@ -64,19 +64,13 @@ namespace MonoTests.System.ComponentModel.DataAnnotations
 		{
 			var rea = new RegularExpressionAttributePoker (@"[A-Za-z]");
 
-			Assert.AreEqual ("The field MyField must match the regular expression [A-Za-z].", 
+			Assert.AreEqual ("The field MyField must match the regular expression '[A-Za-z]'.", 
 				rea.FormatErrorMessage ("MyField"), 
 				"Error message not correctly formatted.");
 
-#if !NET_4_0
-			rea = new RegularExpressionAttributePoker (@"[A-Za-z]");
-#endif
 			rea.ErrorMessage = "Param 0: {0}";
 			Assert.AreEqual ("Param 0: MyField", rea.FormatErrorMessage ("MyField"), "Error message not correctly updated.");
 
-#if !NET_4_0
-			rea = new RegularExpressionAttributePoker (@"[A-Za-z]");
-#endif
 			rea.ErrorMessage = "Param 0: {0}; Param 1: {1}";
 			Assert.AreEqual ("Param 0: MyField; Param 1: [A-Za-z]", rea.FormatErrorMessage ("MyField"), "Error message not correctly updated.");
 			Assert.AreEqual ("Param 0: ; Param 1: [A-Za-z]", rea.FormatErrorMessage (null), "Error message fails on null value.");
@@ -90,26 +84,29 @@ namespace MonoTests.System.ComponentModel.DataAnnotations
 			Assert.IsTrue (rea.IsValid (null), "Null does not match [A-Za-z].");
 			Assert.IsTrue (rea.IsValid ("A"), "'A' does not match [A-Za-z].");
 			Assert.IsTrue (rea.IsValid ("a"), "'a' does not match [A-Za-z].");
-			Assert.IsTrue (rea.IsValid ("Bz"), "'Bz' does not match [A-Za-z].");
-			Assert.IsTrue (rea.IsValid ("string"), "'string' does not match [A-Za-z].");
-			Assert.IsFalse (rea.IsValid (String.Empty), "Empty string matches [A-Za-z].");
+			Assert.IsFalse (rea.IsValid ("Bz"), "'Bz' does not match [A-Za-z].");
+			Assert.IsFalse (rea.IsValid ("string"), "'string' does not match [A-Za-z].");
+			Assert.IsTrue (rea.IsValid (String.Empty), "Empty string matches [A-Za-z].");
 			Assert.IsFalse (rea.IsValid ("0123456789"), "'0123456789' matches [A-Za-z].");
 			Assert.IsFalse (rea.IsValid ("0123456789"), "'0123456789A' matches [A-Za-z].");
-			AssertExtensions.Throws<InvalidCastException> (() => {
-				rea.IsValid (123);
-			}, "Casting does not fails");
-			AssertExtensions.Throws<InvalidCastException> (() => {
-				rea.IsValid (DateTime.Now);
-			}, "Casting does not fails");
+			Assert.IsFalse (rea.IsValid (123), "Casting does not fails");
+			Assert.IsFalse (rea.IsValid (DateTime.Now), "Casting does not fails");
 
 			rea = new RegularExpressionAttributePoker ("");
-			Assert.IsTrue (rea.IsValid (null), "null does not match empty pattern");
-			Assert.IsTrue (rea.IsValid (String.Empty), "empty string does not match empty pattern");
-			Assert.IsTrue (rea.IsValid ("string"), "'string' does not match empty pattern");
+
+			AssertExtensions.Throws<InvalidOperationException> (() => {
+				rea.IsValid (null);
+			}, "null does not match empty pattern");
+
+			AssertExtensions.Throws<InvalidOperationException> (() => {
+				rea.IsValid (String.Empty);
+			}, "empty string does not match empty pattern");
+
+			AssertExtensions.Throws<InvalidOperationException> (() => {
+				rea.IsValid ("string");
+			}, "'string' does not match empty pattern");
 			
-			AssertExtensions.Throws<ArgumentNullException> (() => {
-				rea = new RegularExpressionAttributePoker (null);
-			}, "Null pattern allowed");
+			rea = new RegularExpressionAttributePoker (null);
 		}
 	}
 }

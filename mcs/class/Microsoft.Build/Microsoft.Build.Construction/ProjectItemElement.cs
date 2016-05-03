@@ -62,14 +62,16 @@ namespace Microsoft.Build.Construction
                 }
                 string @remove;
                 public string Remove { get { return @remove ?? String.Empty; } set { @remove = value; } }
-                #if NET_4_5
                 string keepDuplicates;
-                public string KeepDuplicates { get { return keepDuplicates ?? String.Empty; } set { keepDuplicates = value; } }
-                string keepMetadata;
-                public string KeepMetadata { get { return keepMetadata ?? String.Empty; } set { keepMetadata = value; } }
-                string removeMetadata;
-                public string RemoveMetadata { get { return removeMetadata ?? String.Empty; } set { removeMetadata = value; } }
-                #endif
+		string keepMetadata;
+		string removeMetadata;
+                public
+                string KeepDuplicates { get { return keepDuplicates ?? String.Empty; } set { keepDuplicates = value; } }
+                public
+		string KeepMetadata { get { return keepMetadata ?? String.Empty; } set { keepMetadata = value; } }
+                public
+		string RemoveMetadata { get { return removeMetadata ?? String.Empty; } set { removeMetadata = value; } }
+                
                 public ProjectMetadataElement AddMetadata (string name, string unevaluatedValue)
                 {
                         var metadata = ContainingProject.CreateMetadataElement (name, unevaluatedValue);
@@ -83,11 +85,9 @@ namespace Microsoft.Build.Construction
                 {
                         SaveAttribute (writer, "Include", Include);
                         SaveAttribute (writer, "Exclude", Exclude);
-#if NET_4_5
                         SaveAttribute (writer, "KeepDuplicates", KeepDuplicates);
                         SaveAttribute (writer, "KeepMetadata", KeepMetadata);
                         SaveAttribute (writer, "RemoveMetadata", RemoveMetadata);
-#endif
                         SaveAttribute (writer, "Remove", Remove);
                         base.SaveValue (writer);
                 }
@@ -101,7 +101,6 @@ namespace Microsoft.Build.Construction
                         case "Exclude":
                                 Exclude = value;
                                 break;
-#if NET_4_5
                         case "KeepDuplicates":
                                 KeepDuplicates = value;
                                 break;
@@ -111,7 +110,6 @@ namespace Microsoft.Build.Construction
                         case "RemoveMetadata":
                                 RemoveMetadata = value;
                                 break;
-#endif
                         case "Remove":
                                 Remove = value;
                                 break;
@@ -132,18 +130,10 @@ namespace Microsoft.Build.Construction
                         AppendChild (metadata);
                         return metadata;
                 }
-#if NET_4_5
                  public ElementLocation ExcludeLocation { get; private set; }
                  public ElementLocation IncludeLocation { get; private set; }
                  public ElementLocation KeepDuplicatesLocation { get; private set; }
                  public ElementLocation RemoveLocation { get; private set; }
                  public ElementLocation RemoveMetadataLocation { get; private set; }
-#else
-                 ElementLocation ExcludeLocation { get; set; }
-                 ElementLocation IncludeLocation { get; set; }
-                 ElementLocation KeepDuplicatesLocation { get; set; }
-                 ElementLocation RemoveLocation { get; set; }
-                 ElementLocation RemoveMetadataLocation { get; set; }
-#endif
         }
 }

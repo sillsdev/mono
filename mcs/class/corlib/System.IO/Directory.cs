@@ -72,8 +72,6 @@ namespace System.IO
 			if (File.Exists(path))
 				throw new IOException ("Cannot create " + path + " because a file with the same name already exists.");
 			
-			// LAMESPEC: with .net 1.0 version this throw NotSupportedException and msdn says so too
-			// but v1.1 throws ArgumentException.
 			if (Environment.IsRunningOnWindows && path == ":")
 				throw new ArgumentException ("Only ':' In path");
 			
@@ -500,7 +498,6 @@ namespace System.IO
 			return result;
 		}
 
-#if NET_4_0
 		public static string[] GetFileSystemEntries (string path, string searchPattern, SearchOption searchOption)
 		{
 			// Take the simple way home:
@@ -634,7 +631,6 @@ namespace System.IO
 			return EnumerateKind (path, "*", SearchOption.TopDirectoryOnly, FileAttributes.Normal | FileAttributes.Directory);
 		}
 		
-#endif
 
 		public static DirectorySecurity GetAccessControl (string path, AccessControlSections includeSections)
 		{

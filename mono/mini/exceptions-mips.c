@@ -77,6 +77,7 @@ mono_arch_get_restore_context (MonoTrampInfo **info, gboolean aot)
 
 	g_assert ((code - start) < sizeof(start));
 	mono_arch_flush_icache (start, code - start);
+	mono_profiler_code_buffer_new (start, code - start, MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING, NULL);
 	return start;
 }
 
@@ -168,6 +169,7 @@ mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
 
 	g_assert ((code - start) < sizeof(start));
 	mono_arch_flush_icache (start, code - start);
+	mono_profiler_code_buffer_new (start, code - start, MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING, NULL);
 	return start;
 }
 
@@ -194,8 +196,10 @@ throw_exception (MonoObject *exc, unsigned long eip, unsigned long esp, gboolean
 
 	if (mono_object_isinst (exc, mono_defaults.exception_class)) {
 		MonoException *mono_ex = (MonoException*)exc;
-		if (!rethrow)
+		if (!rethrow) {
 			mono_ex->stack_trace = NULL;
+			mono_ex->trace_ips = NULL;
+		}
 	}
 	mono_handle_exception (&ctx, exc);
 #ifdef DEBUG_EXCEPTIONS
@@ -281,6 +285,7 @@ mono_arch_get_throw_exception_generic (guint8 *start, int size, int corlib, gboo
 
 	g_assert ((code - start) < size);
 	mono_arch_flush_icache (start, code - start);
+	mono_profiler_code_buffer_new (start, code - start, MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING, NULL);
 	return start;
 }
 
@@ -348,6 +353,7 @@ mono_arch_get_throw_exception_by_name (void)
 	start = code = mono_global_codeman_reserve (size);
 	mips_break (code, 0xfd);
 	mono_arch_flush_icache (start, code - start);
+	mono_profiler_code_buffer_new (start, code - start, MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING, NULL);
 	return start;
 }
 
@@ -377,7 +383,7 @@ mono_arch_get_throw_corlib_exception (MonoTrampInfo **info, gboolean aot)
 }
 
 /*
- * mono_arch_find_jit_info:
+ * mono_arch_unwind_frame:
  *
  * This function is used to gather information from @ctx, and store it in @frame_info.
  * It unwinds one stack frame, and stores the resulting context into @new_ctx. @lmf
@@ -385,7 +391,7 @@ mono_arch_get_throw_corlib_exception (MonoTrampInfo **info, gboolean aot)
  * Returns TRUE on success, FALSE otherwise.
  */
 gboolean
-mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls, 
+mono_arch_unwind_frame (MonoDomain *domain, MonoJitTlsData *jit_tls, 
 							 MonoJitInfo *ji, MonoContext *ctx, 
 							 MonoContext *new_ctx, MonoLMF **lmf, 
 							 mgreg_t **save_locations,
@@ -404,7 +410,10 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 		guint32 unwind_info_len;
 		guint8 *unwind_info;
 
-		frame->type = FRAME_TYPE_MANAGED;
+		if (ji->is_trampoline)
+			frame->type = FRAME_TYPE_TRAMPOLINE;
+		else
+			frame->type = FRAME_TYPE_MANAGED;
 
 		unwind_info = mono_jinfo_get_unwind_info (ji, &unwind_info_len);
 
@@ -413,18 +422,13 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 
 		mono_unwind_frame (unwind_info, unwind_info_len, ji->code_start, 
 						   (guint8*)ji->code_start + ji->code_size,
-						   ip, regs, MONO_MAX_IREGS,
+						   ip, NULL, regs, MONO_MAX_IREGS,
 						   save_locations, MONO_MAX_IREGS, &cfa);
 
 		for (i = 0; i < MONO_MAX_IREGS; ++i)
 			new_ctx->sc_regs [i] = regs [i];
 		new_ctx->sc_pc = regs [mips_ra];
 		new_ctx->sc_regs [mips_sp] = (mgreg_t)cfa;
-
-		if (*lmf && (MONO_CONTEXT_GET_SP (ctx) >= (gpointer)(*lmf)->iregs [mips_sp])) {
-			/* remove any unused lmf */
-			*lmf = (gpointer)(((gsize)(*lmf)->previous_lmf) & ~3);
-		}
 
 		/* we substract 8, so that the IP points into the call instruction */
 		MONO_CONTEXT_SET_IP (new_ctx, new_ctx->sc_pc - 8);
@@ -454,7 +458,7 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 
 		if (!(*lmf)->method) {
 #ifdef DEBUG_EXCEPTIONS
-			g_print ("mono_arch_find_jit_info: bad lmf @ %p\n", (void *) *lmf);
+			g_print ("mono_arch_unwind_frame: bad lmf @ %p\n", (void *) *lmf);
 #endif
 			return FALSE;
 		}
@@ -481,18 +485,6 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 	}
 
 	return FALSE;
-}
-
-void
-mono_arch_sigctx_to_monoctx (void *sigctx, MonoContext *mctx)
-{
-	mono_sigctx_to_monoctx (sigctx, mctx);
-}
-
-void
-mono_arch_monoctx_to_sigctx (MonoContext *mctx, void *sigctx)
-{
-	mono_monoctx_to_sigctx (mctx, sigctx);
 }
 
 gpointer
@@ -539,7 +531,7 @@ mono_arch_handle_exception (void *ctx, gpointer obj)
 	guint64 sp = UCONTEXT_GREGS (sigctx) [mips_sp];
 
 	/* Pass the ctx parameter in TLS */
-	mono_arch_sigctx_to_monoctx (sigctx, &jit_tls->ex_ctx);
+	mono_sigctx_to_monoctx (sigctx, &jit_tls->ex_ctx);
 	/* The others in registers */
 	UCONTEXT_GREGS (sigctx)[mips_a0] = (gsize)obj;
 
@@ -554,13 +546,13 @@ mono_arch_handle_exception (void *ctx, gpointer obj)
 	MonoContext mctx;
 	gboolean result;
 
-	mono_arch_sigctx_to_monoctx (ctx, &mctx);
+	mono_sigctx_to_monoctx (ctx, &mctx);
 
 	result = mono_handle_exception (&mctx, obj);
 	/* restore the context so that returning from the signal handler will invoke
 	 * the catch clause 
 	 */
-	mono_arch_monoctx_to_sigctx (&mctx, ctx);
+	mono_monoctx_to_sigctx (&mctx, ctx);
 	return result;
 #endif
 }

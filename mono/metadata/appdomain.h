@@ -66,6 +66,9 @@ mono_domain_create         (void);
 MONO_API MonoDomain *
 mono_domain_create_appdomain (char *friendly_name, char *configuration_file);
 
+MONO_API void
+mono_domain_set_config (MonoDomain *domain, const char *base_dir, const char *config_file_name);
+
 MONO_API MonoDomain *
 mono_domain_get            (void);
 
@@ -74,6 +77,9 @@ mono_domain_get_by_id      (int32_t domainid);
 
 MONO_API int32_t
 mono_domain_get_id         (MonoDomain *domain);
+
+MONO_API const char *
+mono_domain_get_friendly_name (MonoDomain *domain);
 
 MONO_API mono_bool
 mono_domain_set            (MonoDomain *domain, mono_bool force);
@@ -122,6 +128,12 @@ mono_context_set				   (MonoAppContext *new_context);
 
 MONO_API MonoAppContext * 
 mono_context_get				   (void);
+
+MONO_API int32_t
+mono_context_get_id         (MonoAppContext *context);
+
+MONO_API int32_t
+mono_context_get_domain_id  (MonoAppContext *context);
 
 MONO_API MonoJitInfo *
 mono_jit_info_table_find   (MonoDomain *domain, char *addr);

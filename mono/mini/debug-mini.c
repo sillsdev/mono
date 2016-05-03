@@ -16,7 +16,6 @@
 #include <mono/metadata/appdomain.h>
 #include <mono/metadata/threads-types.h>
 
-#define _IN_THE_MONO_DEBUGGER
 #include <mono/metadata/mono-debug-debugger.h>
 
 #include <mono/utils/valgrind.h>
@@ -221,7 +220,6 @@ mono_debug_close_method (MonoCompile *cfg)
 	MonoDebugMethodJitInfo *jit;
 	MonoMethodHeader *header;
 	MonoMethodSignature *sig;
-	MonoDebugMethodAddress *debug_info;
 	MonoMethod *method;
 	int i;
 
@@ -271,7 +269,7 @@ mono_debug_close_method (MonoCompile *cfg)
 	for (i = 0; i < jit->num_line_numbers; i++)
 		jit->line_numbers [i] = g_array_index (info->line_numbers, MonoDebugLineNumberEntry, i);
 
-	debug_info = mono_debug_add_method (cfg->method_to_register, jit, cfg->domain);
+	mono_debug_add_method (cfg->method_to_register, jit, cfg->domain);
 
 	mono_debug_add_vg_method (method, jit);
 
@@ -425,10 +423,10 @@ serialize_variable (MonoDebugVarInfo *var, guint8 *p, guint8 **endbuf)
 		break;
 	case MONO_DEBUG_VAR_ADDRESS_MODE_REGOFFSET:
 	case MONO_DEBUG_VAR_ADDRESS_MODE_REGOFFSET_INDIR:
+	case MONO_DEBUG_VAR_ADDRESS_MODE_VTADDR:
 		encode_value (var->offset, p, &p);
 		break;
 	case MONO_DEBUG_VAR_ADDRESS_MODE_GSHAREDVT_LOCAL:
-	case MONO_DEBUG_VAR_ADDRESS_MODE_VTADDR:
 	case MONO_DEBUG_VAR_ADDRESS_MODE_DEAD:
 		break;
 	default:
@@ -453,7 +451,7 @@ mono_debug_serialize_debug_info (MonoCompile *cfg, guint8 **out_buf, guint32 *bu
 	}
 
 	size = ((jit->num_params + jit->num_locals + 1) * 10) + (jit->num_line_numbers * 10) + 64;
-	p = buf = g_malloc (size);
+	p = buf = (guint8 *)g_malloc (size);
 	encode_value (jit->epilogue_begin, p, &p);
 	encode_value (jit->prologue_end, p, &p);
 	encode_value (jit->code_size, p, &p);
@@ -508,10 +506,10 @@ deserialize_variable (MonoDebugVarInfo *var, guint8 *p, guint8 **endbuf)
 		break;
 	case MONO_DEBUG_VAR_ADDRESS_MODE_REGOFFSET:
 	case MONO_DEBUG_VAR_ADDRESS_MODE_REGOFFSET_INDIR:
+	case MONO_DEBUG_VAR_ADDRESS_MODE_VTADDR:
 		var->offset = decode_value (p, &p);
 		break;
 	case MONO_DEBUG_VAR_ADDRESS_MODE_GSHAREDVT_LOCAL:
-	case MONO_DEBUG_VAR_ADDRESS_MODE_VTADDR:
 	case MONO_DEBUG_VAR_ADDRESS_MODE_DEAD:
 		break;
 	default:
@@ -652,7 +650,7 @@ void
 mono_debug_print_vars (gpointer ip, gboolean only_arguments)
 {
 	MonoDomain *domain = mono_domain_get ();
-	MonoJitInfo *ji = mono_jit_info_table_find (domain, ip);
+	MonoJitInfo *ji = mono_jit_info_table_find (domain, (char *)ip);
 	MonoDebugMethodJitInfo *jit;
 	int i;
 
@@ -689,7 +687,7 @@ mono_debug_print_vars (gpointer ip, gboolean only_arguments)
  * breakpoint when the method is JITed.
  */
 
-static GPtrArray *breakpoints = NULL;
+static GPtrArray *breakpoints;
 
 static int
 mono_debugger_insert_breakpoint_full (MonoMethodDesc *desc)
@@ -732,7 +730,7 @@ mono_debugger_method_has_breakpoint (MonoMethod *method)
 		return 0;
 
 	for (i = 0; i < breakpoints->len; i++) {
-		MiniDebugBreakpointInfo *info = g_ptr_array_index (breakpoints, i);
+		MiniDebugBreakpointInfo *info = (MiniDebugBreakpointInfo *)g_ptr_array_index (breakpoints, i);
 
 		if (!mono_method_desc_full_match (info->desc, method))
 			continue;

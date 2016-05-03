@@ -204,6 +204,15 @@ namespace MonoTests.System.Net
 		}
 
 		[Test]
+		public void GetValuesForMultipleHeaderManyLines ()
+		{
+			WebHeaderCollection w = new WebHeaderCollection ();
+			w.Add ("Pragma", "H1, H2");
+			w.Add ("Pragma", "H3");
+			Assert.AreEqual (3, w.GetValues ("Pragma").Length, "#1");
+		}
+
+		[Test]
 		public void Indexers ()
 		{
 			Assert.AreEqual ("Value1", ((NameValueCollection)col)[0], "#1.1");
@@ -277,11 +286,6 @@ namespace MonoTests.System.Net
 		}
 
 		[Test]
-#if TARGET_JVM
-		//FIXME: include Java serialization compliant tests - the order of object
-		// in SerializationInfo should stay same to MS format...
-		[Ignore ("The MS compliant binary serialization is not supported")]
-#endif			
 		public void GetObjectData ()
 		{
 			SerializationInfo si = new SerializationInfo (typeof (WebHeaderCollection),
@@ -342,10 +346,6 @@ namespace MonoTests.System.Net
 		}
 
 		[Test]
-#if TARGET_JVM
-		//FIXME: include Java serialization compliant tests
-		[Ignore ("The MS compliant binary serialization is not supported")]
-#endif		
 		public void Serialize ()
 		{
 			WebHeaderCollection headers = new WebHeaderCollection ();
@@ -366,10 +366,6 @@ namespace MonoTests.System.Net
 		}
 
 		[Test]
-#if TARGET_JVM
-		//FIXME: include Java serialization compliant tests
-		[Ignore ("The MS compliant binary serialization format is not supported")]
-#endif				
 		public void Deserialize ()
 		{
 			MemoryStream ms = new MemoryStream ();
@@ -386,10 +382,8 @@ namespace MonoTests.System.Net
 			0x49, 0x53, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2c, 0x20, 0x56, 0x65,
 #if MOBILE
 			0x72, 0x73, 0x69, 0x6f, 0x6e, 0x3d, 0x32, 0x2e, 0x30, 0x2e, 0x35,
-#elif NET_4_0
-			0x72, 0x73, 0x69, 0x6f, 0x6e, 0x3d, 0x34, 0x2e, 0x30, 0x2e, 0x30,
 #else
-			0x72, 0x73, 0x69, 0x6f, 0x6e, 0x3d, 0x32, 0x2e, 0x30, 0x2e, 0x30,
+			0x72, 0x73, 0x69, 0x6f, 0x6e, 0x3d, 0x34, 0x2e, 0x30, 0x2e, 0x30,
 #endif
 			0x2e, 0x30, 0x2c, 0x20, 0x43, 0x75, 0x6c, 0x74, 0x75, 0x72, 0x65,
 			0x3d, 0x6e, 0x65, 0x75, 0x74, 0x72, 0x61, 0x6c, 0x2c, 0x20, 0x50,

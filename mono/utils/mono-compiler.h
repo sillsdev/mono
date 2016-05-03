@@ -89,6 +89,10 @@
 #endif
 #elif defined(__arm__) && defined(__ARM_EABI__) && !defined(PIC)
 #define MONO_THREAD_VAR_OFFSET(var,offset) __asm ("	ldr	%0, 1f; b 2f; 1: .word " #var "(tpoff); 2:" : "=r" (offset))
+#elif defined(__aarch64__) && !defined(PIC)
+#define MONO_THREAD_VAR_OFFSET(var,offset) \
+	__asm ( "mov %0, #0\n add %0, %0, #:tprel_hi12:" #var "\n add %0, %0, #:tprel_lo12_nc:" #var "\n" \
+			: "=r" (offset))
 #elif defined(__mono_ppc__) && defined(__GNUC__)
 #if defined(PIC)
 #ifdef PIC_INITIAL_EXEC
@@ -126,30 +130,43 @@
 	: "=r" (offset))
 #endif
 #elif defined(__s390x__)
-# if defined(PIC)
+# if defined(__PIC__)
+#  if !defined(__PIE__)
 // This only works if libmono is linked into the application
-#  define MONO_THREAD_VAR_OFFSET(var,offset) do { guint64 foo;  				\
-						__asm__ ("basr	%%r1,0\n\t"			\
-							 "j	0f\n\t"				\
-							 ".quad " #var "@TLSGD\n\t"		\
+#   define MONO_THREAD_VAR_OFFSET(var,offset) do { guint64 foo;  				\
+						__asm__ ("basr  %%r1,0\n\t"			\
+							 "j     0f\n\t"				\
+							 ".quad " #var "@TLSGD\n"		\
 							 "0:\n\t"				\
-							 "lg	%%r2,4(%%r1)\n\t"		\
+							 "lg    %%r2,4(%%r1)\n\t"		\
 							 "brasl	%%r14,__tls_get_offset@PLT:tls_gdcall:"#var"\n\t" \
 							 "lgr	%0,%%r2\n\t"			\
 							: "=r" (foo) : 				\
 							: "1", "2", "14", "cc");		\
 						offset = foo; } while (0)
+#  elif __PIE__ == 1
+#   define MONO_THREAD_VAR_OFFSET(var,offset) do { guint64 foo;  					\
+						__asm__ ("lg	%0," #var "@GOTNTPOFF(%%r12)\n\t"	\
+							 : "=r" (foo));					\
+						offset = foo; } while (0)
+#  elif __PIE__ == 2
+#   define MONO_THREAD_VAR_OFFSET(var,offset) do { guint64 foo;  				\
+						__asm__ ("larl	%%r1," #var "@INDNTPOFF\n\t"	\
+							 "lg	%0,0(%%r1)\n\t"			\
+							 : "=r" (foo) :				\
+							 : "1", "cc");				\
+						offset = foo; } while (0)
+#  endif
 # else
-#  define MONO_THREAD_VAR_OFFSET(var,offset) do { guint64 foo;  				\
-						__asm__ ("basr	%%r1,0\n\t"			\
-							 "j	0f\n\t"				\
-							 ".quad " #var "@NTPOFF\n"		\
-							 "0:\n\t"				\
-							 "lg	%0,4(%%r1)\n\t"			\
-							: "=r" (foo) : : "1");			\
+#  define MONO_THREAD_VAR_OFFSET(var,offset) do { guint64 foo;  			\
+						__asm__ ("basr  %%r1,0\n\t"		\
+							 "j     0f\n\t"			\
+							 ".quad " #var "@NTPOFF\n"	\
+							 "0:\n\t"			\
+							 "lg    %0,4(%%r1)\n\t"		\
+							: "=r" (foo) : : "1");		\
 						offset = foo; } while (0)
 # endif
-
 #else
 #define MONO_THREAD_VAR_OFFSET(var,offset) (offset) = -1
 #endif
@@ -163,9 +180,9 @@
 #define MONO_THREAD_VAR_OFFSET(var,offset) (offset) = -1
 #endif
 
-#elif defined(__APPLE__) && (defined(__i386__) || defined(__x86_64__))
+#elif !defined(MONO_CROSS_COMPILE) && defined(PLATFORM_MACOSX) && (defined(__i386__) || defined(__x86_64__))
 
-#define MONO_HAVE_FAST_TLS
+#define MONO_HAVE_FAST_TLS 1
 #define MONO_FAST_TLS_SET(x,y) pthread_setspecific(x, y)
 #define MONO_FAST_TLS_GET(x) pthread_getspecific(x)
 #define MONO_FAST_TLS_ADDR(x) (mono_mach_get_tls_address_from_thread (pthread_self (), x))
@@ -173,10 +190,21 @@
 #define MONO_FAST_TLS_DECLARE(x) static pthread_key_t x;
 
 #define MONO_THREAD_VAR_OFFSET(x,y) ({	\
-	typeof(x) _x = (x);			\
+	__typeof__(x) _x = (x);			\
 	pthread_key_t _y;	\
 	(void) (&_x == &_y);		\
 	y = (gint32) x; })
+
+#elif !defined(MONO_CROSS_COMPILE) && (defined(PLATFORM_ANDROID) || defined(TARGET_IOS)) && defined(TARGET_ARM)
+
+#define MONO_HAVE_FAST_TLS
+#define MONO_FAST_TLS_SET(x,y) pthread_setspecific(x, y)
+#define MONO_FAST_TLS_GET(x) pthread_getspecific(x)
+#define MONO_FAST_TLS_INIT(x) pthread_key_create(&x, NULL)
+#define MONO_FAST_TLS_DECLARE(x) static pthread_key_t x;
+
+#define MONO_THREAD_VAR_OFFSET(var, offset) do { offset = (int)var; } while (0)
+
 #else /* no HAVE_KW_THREAD */
 
 #define MONO_THREAD_VAR_OFFSET(var,offset) (offset) = -1
@@ -200,10 +228,12 @@
 #endif
 
 #include <float.h>
-#define isnan(x)	_isnan(x)
 #define trunc(x)	(((x) < 0) ? ceil((x)) : floor((x)))
+#if _MSC_VER < 1800 /* VS 2013 */
+#define isnan(x)	_isnan(x)
 #define isinf(x)	(_isnan(x) ? 0 : (_fpclass(x) == _FPCLASS_NINF) ? -1 : (_fpclass(x) == _FPCLASS_PINF) ? 1 : 0)
 #define isnormal(x)	_finite(x)
+#endif
 
 #define popen		_popen
 #define pclose		_pclose
@@ -216,17 +246,32 @@
 
 #define __func__ __FUNCTION__
 
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+
+/*
+ * SSIZE_MAX is not defined in MSVC, so define it here.
+ *
+ * These values come from MinGW64, and are public domain.
+ *
+ */
+#ifndef SSIZE_MAX
+#ifdef _WIN64
+#define SSIZE_MAX _I64_MAX
+#else
+#define SSIZE_MAX INT_MAX
+#endif
+#endif
+
 #endif /* _MSC_VER */
 
 #if !defined(_MSC_VER) && !defined(PLATFORM_SOLARIS) && !defined(_WIN32) && !defined(__CYGWIN__) && !defined(MONOTOUCH) && HAVE_VISIBILITY_HIDDEN
-#define MONO_INTERNAL __attribute__ ((visibility ("hidden")))
 #if MONO_LLVM_LOADED
-#define MONO_LLVM_INTERNAL 
+#define MONO_LLVM_INTERNAL MONO_API
 #else
-#define MONO_LLVM_INTERNAL MONO_INTERNAL
+#define MONO_LLVM_INTERNAL
 #endif
 #else
-#define MONO_INTERNAL 
 #define MONO_LLVM_INTERNAL 
 #endif
 
@@ -242,6 +287,20 @@
 #define MONO_ALWAYS_INLINE __forceinline
 #else
 #define MONO_ALWAYS_INLINE
+#endif
+
+#ifdef __GNUC__
+#define MONO_NEVER_INLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#define MONO_NEVER_INLINE __declspec(noinline)
+#else
+#define MONO_NEVER_INLINE
+#endif
+
+#ifdef __GNUC__
+#define MONO_COLD __attribute__((cold))
+#else
+#define MONO_COLD
 #endif
 
 #endif /* __UTILS_MONO_COMPILER_H__*/

@@ -36,16 +36,12 @@ bin_SCRIPTS = \
 	mono-test-install	\
 	peverify			\
 	mcs					\
-	gmcs				\
 	mono-heapviz		\
 	$(scripts_mono_configuration_crypto)
 
-if INSTALL_4_0
+if INSTALL_4_x
 bin_SCRIPTS += $(scripts_4_0)
 bin_SCRIPTS += dmcs
-endif
-
-if INSTALL_4_5
 bin_SCRIPTS += xbuild
 endif
 
@@ -103,7 +99,9 @@ scripts_4_0 = \
 	svcutil$(SCRIPT_SUFFIX)			\
 	ccrewrite$(SCRIPT_SUFFIX)		\
 	cccheck$(SCRIPT_SUFFIX)			\
-	mdbrebase$(SCRIPT_SUFFIX)
+	mdbrebase$(SCRIPT_SUFFIX)		\
+	ikdasm$(SCRIPT_SUFFIX)			\
+	mono-symbolicate$(SCRIPT_SUFFIX)
 
 MDOC_SUBCOMMANDS = \
 	mdoc-assemble \
@@ -156,7 +154,6 @@ EXTRA_DIST =			\
 	xbuild.in			\
 	update_submodules		\
 	mcs.in				\
-	gmcs.in				\
 	dmcs.in				\
 	mono-test-install	\
 	mono-heapviz		\
@@ -164,11 +161,7 @@ EXTRA_DIST =			\
 	get-cygwin-deps.sh	\
 	mono-configuration-crypto.in
 
-if USE_JIT
 mono_interp = mono
-else
-mono_interp = mint
-endif
 
 if HOST_WIN32
 if CROSS_COMPILING
@@ -192,22 +185,9 @@ REWRITE_COMMON = sed \
 
 REWRITE = $(REWRITE_COMMON) -e 's,@''mono_interp@,$(mono_interp),g'
 REWRITE_DEBUG = $(REWRITE_COMMON) -e 's,@''mono_interp@,$(mono_interp) --debug,g'
-REWRITE2_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,2.0,g'
 
-REWRITE2 = $(REWRITE) -e 's,@''framework_version@,2.0,g'
-REWRITE2_1 = $(REWRITE) -e 's,@''framework_version@,2.1,g'
-if INSTALL_4_5
 REWRITE4 = $(REWRITE) -e 's,@''framework_version@,4.5,g'
 REWRITE4_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,4.5,g'
-else 
-	if INSTALL_4_0
-	REWRITE4 = $(REWRITE) -e 's,@''framework_version@,4.0,g'
-	REWRITE4_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,4.0,g'
-	else
-	REWRITE4 = $(REWRITE) -e 's,@''framework_version@,2.0,g'
-	REWRITE4_DEBUG = $(REWRITE_DEBUG) -e 's,@''framework_version@,2.0,g'
-	endif
-endif
 
 peverify: peverify.in Makefile
 	$(REWRITE_COMMON) $(srcdir)/peverify.in > $@.tmp
@@ -215,10 +195,6 @@ peverify: peverify.in Makefile
 
 mcs: mcs.in Makefile
 	$(REWRITE_COMMON) $(srcdir)/mcs.in > $@.tmp
-	mv -f $@.tmp $@
-
-gmcs: gmcs.in Makefile
-	$(REWRITE_COMMON) $(srcdir)/gmcs.in > $@.tmp
 	mv -f $@.tmp $@
 
 dmcs: dmcs.in Makefile
@@ -230,15 +206,15 @@ mono-service: mono-service.in Makefile
 	mv -f $@.tmp $@
 
 mono-service2: mono-service.in Makefile
-	$(REWRITE2) -e 's,@''exe_name@,$@,g' $(srcdir)/mono-service.in > $@.tmp
+	$(REWRITE4) -e 's,@''exe_name@,$@,g' $(srcdir)/mono-service.in > $@.tmp
 	mv -f $@.tmp $@
 
 nunit-console$(SCRIPT_SUFFIX): $(SCRIPT_IN) Makefile
-	$(REWRITE2_DEBUG) -e 's,@''exe_name@,nunit-console,g' $(srcdir)/$(SCRIPT_IN) | $(FILTER) > $@.tmp
+	$(REWRITE4_DEBUG) -e 's,@''exe_name@,nunit-console,g' $(srcdir)/$(SCRIPT_IN) | $(FILTER) > $@.tmp
 	mv -f $@.tmp $@
 
 nunit-console2$(SCRIPT_SUFFIX): $(SCRIPT_IN) Makefile
-	$(REWRITE2_DEBUG) -e 's,@''exe_name@,nunit-console,g' $(srcdir)/$(SCRIPT_IN) | $(FILTER) > $@.tmp
+	$(REWRITE4_DEBUG) -e 's,@''exe_name@,nunit-console,g' $(srcdir)/$(SCRIPT_IN) | $(FILTER) > $@.tmp
 	mv -f $@.tmp $@
 
 nunit-console4$(SCRIPT_SUFFIX): $(SCRIPT_IN) Makefile
@@ -251,7 +227,7 @@ xbuild: xbuild.in Makefile
 
 #FIXME: this is not the correct rule for mod.bat.
 mod$(SCRIPT_SUFFIX): mod.in Makefile
-	$(REWRITE2) -e "s,@""exe_name@,mod,g" $(srcdir)/mod.in > $@.tmp
+	$(REWRITE4) -e "s,@""exe_name@,mod,g" $(srcdir)/mod.in > $@.tmp
 	mv -f $@.tmp $@
 
 #FIXME: this is not the correct rule for bat files.
@@ -267,7 +243,7 @@ $(scripts_defaults): $(SCRIPT_IN) Makefile
 
 $(scripts_2_0): $(SCRIPT_IN) Makefile
 	n=`echo $@ | sed 's,$(COMPAT_2_0_SUFFIX)$$,,'`; \
-	$(REWRITE2) -e "s,@""exe_name@,$$n,g" $(srcdir)/$(SCRIPT_IN) | $(FILTER) > $@.tmp
+	$(REWRITE4) -e "s,@""exe_name@,$$n,g" $(srcdir)/$(SCRIPT_IN) | $(FILTER) > $@.tmp
 	mv -f $@.tmp $@
 
 $(scripts_4_0): $(SCRIPT_IN) Makefile

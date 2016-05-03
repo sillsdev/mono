@@ -33,9 +33,7 @@
 
 using System;
 using System.Net;
-#if NET_4_5
 using System.Threading.Tasks;
-#endif
 
 namespace System.Net.Sockets
 {
@@ -520,9 +518,6 @@ namespace System.Net.Sockets
 			}
 		}
 		
-#if TARGET_JVM
-		[MonoNotSupported ("Not supported as Socket.DontFragment is not supported")]
-#endif
 		public bool DontFragment
 		{
 			get {
@@ -533,9 +528,6 @@ namespace System.Net.Sockets
 			}
 		}
 
-#if TARGET_JVM
-		[MonoNotSupported ("Not supported as Socket.EnableBroadcast is not supported")]
-#endif
 		public bool EnableBroadcast
 		{
 			get {
@@ -546,9 +538,6 @@ namespace System.Net.Sockets
 			}
 		}
 		
-#if TARGET_JVM
-		[MonoNotSupported ("Not supported as Socket.ExclusiveAddressUse is not supported")]
-#endif
 		public bool ExclusiveAddressUse
 		{
 			get {
@@ -559,9 +548,6 @@ namespace System.Net.Sockets
 			}
 		}
 		
-#if TARGET_JVM
-		[MonoNotSupported ("Not supported as Socket.MulticastLoopback is not supported")]
-#endif
 		public bool MulticastLoopback
 		{
 			get {
@@ -572,9 +558,6 @@ namespace System.Net.Sockets
 			}
 		}
 		
-#if TARGET_JVM
-		[MonoNotSupported ("Not supported as Socket.Ttl is not supported")]
-#endif
 		public short Ttl
 		{
 			get {
@@ -619,7 +602,6 @@ namespace System.Net.Sockets
 		}		
 #endregion
 
-#if NET_4_5
 		
 		public Task<UdpReceiveResult> ReceiveAsync ()
 		{
@@ -649,7 +631,6 @@ namespace System.Net.Sockets
 			}, EndSend, t);
  
 		}
-#endif
 	}
 }
 

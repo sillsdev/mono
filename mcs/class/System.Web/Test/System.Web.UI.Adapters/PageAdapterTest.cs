@@ -26,7 +26,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0 && !TARGET_DOTNET
+#if !TARGET_DOTNET
 using NUnit.Framework;
 using System;
 using System.Collections;
@@ -165,7 +165,6 @@ namespace MonoTests.System.Web.UI.Adapters
 			pd.SaveStateComplete = RenderPostBackEvent_OnSaveStateComplete;
 			t.Invoker = new PageInvoker (pd);
 			string html = t.Run ();
-			File.WriteAllText("response.html", html);
 		}
 		
 		public static void RenderPostBackEvent_OnSaveStateComplete (Page p)

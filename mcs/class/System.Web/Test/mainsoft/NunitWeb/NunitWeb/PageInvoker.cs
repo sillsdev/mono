@@ -1,7 +1,3 @@
-#if TARGET_JVM
-#define BUG_78521_FIXED
-#endif
-
 using System;
 using System.Web.UI;
 
@@ -43,7 +39,6 @@ namespace MonoTests.SystemWeb.Framework
 			set { _delegates = value; }
 		}
 
-#if NET_2_0
 		/// <summary>
 		/// Create a new <see cref="PageInvoker"/> which Delegates contain the
 		/// given callback for PreInit event.
@@ -57,7 +52,6 @@ namespace MonoTests.SystemWeb.Framework
 			PageInvoker pi = new PageInvoker (pd);
 			return pi;
 		}
-#endif
 
 		/// <summary>
 		/// Create a new <see cref="PageInvoker"/> which Delegates contain the
@@ -105,18 +99,13 @@ namespace MonoTests.SystemWeb.Framework
 
 			_page = (Page) parameters[0];
 
-#if NET_2_0
-#if BUG_78521_FIXED
-			_page.PreInit += OnPreInit;
-#else
 			OnPreInit (null, null);
-#endif
+
 			_page.LoadComplete += OnLoadComplete;
 			_page.PreLoad += OnPreLoad;
 			_page.PreRenderComplete += OnPreRenderComplete;
 			_page.InitComplete += OnInitComplete;
 			_page.SaveStateComplete += OnSaveStateComplete;
-#endif
 			_page.CommitTransaction += new EventHandler (OnCommitTransaction);
 			_page.AbortTransaction += new EventHandler (OnAbortTransaction);
 			_page.Error += new EventHandler (OnError);
@@ -130,7 +119,6 @@ namespace MonoTests.SystemWeb.Framework
 
 		#region Handlers
 
-#if NET_2_0
 		/// <summary>
 		/// This must be made private as soon as Mono allows using private methods for delegates
 		/// </summary>
@@ -185,7 +173,6 @@ namespace MonoTests.SystemWeb.Framework
 		{
 			Invoke (Delegates.SaveStateComplete);
 		}
-#endif
 		/// <summary>
 		/// This must be made private as soon as Mono allows using private methods for delegates
 		/// </summary>

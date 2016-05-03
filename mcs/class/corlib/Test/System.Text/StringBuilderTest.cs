@@ -459,10 +459,6 @@ namespace MonoTests.System.Text {
 	}
 	
 	[Test]
-#if ONLY_1_1
-	[ExpectedException (typeof (ArgumentOutOfRangeException))]
-	[Category ("NotWorking")] // Mono follows 2.0 behaviour in this case
-#endif
 	public void MaxCapacity_Overflow3 ()
 	{
 		//
@@ -535,7 +531,6 @@ namespace MonoTests.System.Text {
 	}
 
 
-#if NET_4_0
 	[Test]
 	public void ClearMethod () {
 		StringBuilder sb = new StringBuilder ("Text");
@@ -543,7 +538,6 @@ namespace MonoTests.System.Text {
 		Assert.AreEqual (0, sb.Length, "#1");
 		Assert.AreEqual (String.Empty, sb.ToString (), "#2");
 	}
-#endif
 
 }
 

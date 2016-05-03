@@ -99,9 +99,7 @@ namespace Microsoft.Build.Execution
 		IDictionary<string, string> global_properties;
 		
 		string full_path, directory;
-		#if NET_4_5
 		ElementLocation location;
-		#endif
 		
 		Dictionary<string, ProjectItemDefinitionInstance> item_definitions;
 		List<ResolvedImport> raw_imports; // maybe we don't need this...
@@ -111,17 +109,18 @@ namespace Microsoft.Build.Execution
 		Dictionary<string, ProjectTargetInstance> targets;
 		string tools_version;
 		
-		List<string> GetDefaultTargets (ProjectRootElement xml)
+		// FIXME: this is a duplicate code between Project and ProjectInstance
+		string [] GetDefaultTargets (ProjectRootElement xml)
 		{
 			var ret = GetDefaultTargets (xml, true, true);
 			return ret.Any () ? ret : GetDefaultTargets (xml, false, true);
 		}
 		
-		List<string> GetDefaultTargets (ProjectRootElement xml, bool fromAttribute, bool checkImports)
+		string [] GetDefaultTargets (ProjectRootElement xml, bool fromAttribute, bool checkImports)
 		{
 			if (fromAttribute) {
-				var ret = xml.DefaultTargets.Split (item_target_sep, StringSplitOptions.RemoveEmptyEntries).Select (s => s.Trim ()).ToList ();
-				if (checkImports && ret.Count == 0) {
+				var ret = xml.DefaultTargets.Split (item_target_sep, StringSplitOptions.RemoveEmptyEntries).Select (s => s.Trim ()).ToArray ();
+				if (checkImports && ret.Length == 0) {
 					foreach (var imp in this.raw_imports) {
 						ret = GetDefaultTargets (imp.ImportedProject, true, false);
 						if (ret.Any ())
@@ -131,7 +130,7 @@ namespace Microsoft.Build.Execution
 				return ret;
 			} else {
 				if (xml.Targets.Any ())
-					return new String [] { xml.Targets.First ().Name }.ToList ();
+					return new String [] { xml.Targets.First ().Name };
 				if (checkImports) {
 					foreach (var imp in this.raw_imports) {
 						var ret = GetDefaultTargets (imp.ImportedProject, false, false);
@@ -139,15 +138,13 @@ namespace Microsoft.Build.Execution
 							return ret;
 					}
 				}
-				return new List<string> ();
+				return new string [0];
 			}
 		}
 
 		void InitializeProperties (ProjectRootElement xml)
 		{
-			#if NET_4_5
 			location = xml.Location;
-			#endif
 			full_path = xml.FullPath;
 			directory = string.IsNullOrWhiteSpace (xml.DirectoryPath) ? System.IO.Directory.GetCurrentDirectory () : xml.DirectoryPath;
 			InitialTargets = xml.InitialTargets.Split (item_target_sep, StringSplitOptions.RemoveEmptyEntries).Select (s => s.Trim ()).ToList ();
@@ -163,7 +160,7 @@ namespace Microsoft.Build.Execution
 				// FIXME: this is kind of workaround for unavoidable issue that PLATFORM=* is actually given
 				// on some platforms and that prevents setting default "PLATFORM=AnyCPU" property.
 				if (!string.Equals ("PLATFORM", (string) p.Key, StringComparison.OrdinalIgnoreCase))
-					this.properties [(string) p.Key] = new ProjectPropertyInstance ((string) p.Key, false, (string) p.Value);
+					this.properties [(string) p.Key] = new ProjectPropertyInstance ((string) p.Key, true, (string) p.Value);
 			foreach (var p in global_properties)
 				this.properties [p.Key] = new ProjectPropertyInstance (p.Key, false, p.Value);
 			var tools = projects.GetToolset (tools_version) ?? projects.GetToolset (projects.DefaultToolsVersion);
@@ -174,7 +171,7 @@ namespace Microsoft.Build.Execution
 
 			ProcessXml (xml);
 			
-			DefaultTargets = GetDefaultTargets (xml);
+			DefaultTargets = GetDefaultTargets (xml).ToList ();
 		}
 		
 		static readonly char [] item_target_sep = {';'};
@@ -191,7 +188,7 @@ namespace Microsoft.Build.Execution
 			// At first step, all non-imported properties are evaluated TOO, WHILE those properties are being evaluated.
 			// This means, Include and IncludeGroup elements with Condition attribute MAY contain references to
 			// properties and they will be expanded.
-			var elements = EvaluatePropertiesUsingTasksAndImports (xml.Children).ToArray (); // ToArray(): to not lazily evaluate elements.
+			var elements = EvaluatePropertiesAndUsingTasksAndImportsAndChooses (xml.Children).ToArray (); // ToArray(): to not lazily evaluate elements.
 			
 			// next, evaluate items
 			EvaluateItems (xml, elements);
@@ -200,7 +197,7 @@ namespace Microsoft.Build.Execution
 			EvaluateTargets (elements);
 		}
 		
-		IEnumerable<ProjectElement> EvaluatePropertiesUsingTasksAndImports (IEnumerable<ProjectElement> elements)
+		IEnumerable<ProjectElement> EvaluatePropertiesAndUsingTasksAndImportsAndChooses (IEnumerable<ProjectElement> elements)
 		{
 			foreach (var child in elements) {
 				yield return child;
@@ -230,6 +227,20 @@ namespace Microsoft.Build.Execution
 				if (inc != null && EvaluateCondition (inc.Condition))
 					foreach (var e in Import (inc))
 						yield return e;
+				var choose = child as ProjectChooseElement;
+				if (choose != null && EvaluateCondition (choose.Condition)) {
+					bool done = false;
+					foreach (ProjectWhenElement when in choose.WhenElements)
+						if (EvaluateCondition (when.Condition)) {
+							foreach (var e in EvaluatePropertiesAndUsingTasksAndImportsAndChooses (when.Children))
+								yield return e;
+							done = true;
+							break;
+						}
+					if (!done && choose.OtherwiseElement != null)
+						foreach (var e in EvaluatePropertiesAndUsingTasksAndImportsAndChooses (choose.OtherwiseElement.Children))
+							yield return e;
+				}
 			}
 		}
 		
@@ -241,7 +252,7 @@ namespace Microsoft.Build.Execution
 
 		void EvaluateItems (ProjectRootElement xml, IEnumerable<ProjectElement> elements)
 		{
-			foreach (var child in elements) {
+			foreach (var child in elements.Reverse ()) {
 				var ige = child as ProjectItemGroupElement;
 				if (ige != null) {
 					foreach (var p in ige.Items) {
@@ -282,7 +293,8 @@ namespace Microsoft.Build.Execution
 		IEnumerable<ProjectElement> Import (ProjectImportElement import)
 		{
 			string dir = projects.GetEvaluationTimeThisFileDirectory (() => FullPath);
-			string path = WindowsCompatibilityExtensions.FindMatchingPath (ExpandString (import.Project));
+			// FIXME: use appropriate logger (but cannot be instantiated here...?)
+			string path = ProjectCollection.FindFileInSeveralExtensionsPath (ref extensions_path_override, ExpandString, import.Project, TextWriter.Null.WriteLine);
 			path = Path.IsPathRooted (path) ? path : dir != null ? Path.Combine (dir, path) : Path.GetFullPath (path);
 			if (projects.OngoingImports.Contains (path))
 				throw new InvalidProjectFileException (import.Location, null, string.Format ("Circular imports was detected: {0} is already on \"importing\" stack", path));
@@ -291,7 +303,7 @@ namespace Microsoft.Build.Execution
 				using (var reader = XmlReader.Create (path)) {
 					var root = ProjectRootElement.Create (reader, projects);
 					raw_imports.Add (new ResolvedImport (import, root, true));
-					return this.EvaluatePropertiesUsingTasksAndImports (root.Children).ToArray ();
+					return this.EvaluatePropertiesAndUsingTasksAndImportsAndChooses (root.Children).ToArray ();
 				}
 			} finally {
 				projects.OngoingImports.Pop ();
@@ -318,11 +330,9 @@ namespace Microsoft.Build.Execution
 		
 		public List<string> InitialTargets { get; private set; }
 		
-#if NET_4_5		
 		public bool IsImmutable {
 			get { throw new NotImplementedException (); }
 		}
-#endif
 		
 		public IDictionary<string, ProjectItemDefinitionInstance> ItemDefinitions {
 			get { return item_definitions; }
@@ -336,21 +346,15 @@ namespace Microsoft.Build.Execution
 			get { return all_evaluated_items.Select (i => i.ItemType).Distinct ().ToArray (); }
 		}
 
-#if NET_4_5		
 		public ElementLocation ProjectFileLocation {
 			get { return location; }
 		}
-#endif
 
 		public ICollection<ProjectPropertyInstance> Properties {
 			get { return properties.Values; }
 		}
 		
-		#if NET_4_5
 		public
-		#else
-		internal
-		#endif
 		IDictionary<string, ProjectTargetInstance> Targets {
 			get { return targets; }
 		}
@@ -419,6 +423,7 @@ namespace Microsoft.Build.Execution
 			var parameters = new BuildParameters (projects) {
 				ForwardingLoggers = remoteLoggers,
 				Loggers = loggers,
+				DefaultToolsVersion = projects.DefaultToolsVersion,
 			};
 			var requestData = new BuildRequestData (this, targets ?? DefaultTargets.ToArray ());
 			var result = manager.Build (parameters, requestData);
@@ -438,17 +443,17 @@ namespace Microsoft.Build.Execution
 		
 		public bool EvaluateCondition (string condition)
 		{
-			return string.IsNullOrWhiteSpace (condition) || new ExpressionEvaluator (this, null).EvaluateAsBoolean (condition);
+			return string.IsNullOrWhiteSpace (condition) || new ExpressionEvaluator (this).EvaluateAsBoolean (condition);
 		}
 
 		public string ExpandString (string unexpandedValue)
 		{
-			return ExpandString (unexpandedValue, null);
+			return WindowsCompatibilityExtensions.NormalizeFilePath (new ExpressionEvaluator (this).Evaluate (unexpandedValue));
 		}
-		
-		string ExpandString (string unexpandedValue, string replacementForMissingStuff)
+
+		internal string ExpandString (ExpressionEvaluator evaluator, string unexpandedValue)
 		{
-			return WindowsCompatibilityExtensions.NormalizeFilePath (new ExpressionEvaluator (this, replacementForMissingStuff).Evaluate (unexpandedValue));
+			return WindowsCompatibilityExtensions.NormalizeFilePath (evaluator.Evaluate (unexpandedValue));
 		}
 
 		public ICollection<ProjectItemInstance> GetItems (string itemType)
@@ -461,8 +466,12 @@ namespace Microsoft.Build.Execution
 			throw new NotImplementedException ();
 		}
 
+		string extensions_path_override;
+
 		public ProjectPropertyInstance GetProperty (string name)
 		{
+			if (extensions_path_override != null && (name.Equals ("MSBuildExtensionsPath") || name.Equals ("MSBuildExtensionsPath32") || name.Equals ("MSBuildExtensionsPath64")))
+				return new ProjectPropertyInstance (name, true, extensions_path_override);
 			return properties.Values.FirstOrDefault (p => p.Name.Equals (name, StringComparison.OrdinalIgnoreCase));
 		}
 		
@@ -500,12 +509,10 @@ namespace Microsoft.Build.Execution
 			throw new NotImplementedException ();
 		}
 		
-#if NET_4_5
 		public void UpdateStateFrom (ProjectInstance projectState)
 		{
 			throw new NotImplementedException ();
 		}
-#endif
 		
 		// static members		
 

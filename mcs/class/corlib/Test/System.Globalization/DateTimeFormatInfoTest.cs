@@ -100,7 +100,7 @@ namespace MonoTests.System.Globalization
 			Assert.AreEqual ("H:mm:ss", di.LongTimePattern, "#2");
 			Assert.AreEqual ("dddd, d' de 'MMMM' de 'yyyy H:mm:ss", di.FullDateTimePattern, "#3");
 			Assert.AreEqual ("MMMM' de 'yyyy", di.YearMonthPattern, "#4");
-			Assert.AreEqual ("d' de 'MMMM", di.MonthDayPattern, "#5");
+			Assert.AreEqual ("d 'de' MMMM", di.MonthDayPattern, "#5");
 		}
 
 		[Test]
@@ -130,10 +130,9 @@ namespace MonoTests.System.Globalization
 		public void QuoteInValue ()
 		{
 			var culture = new CultureInfo("mt-MT");
-			Assert.AreEqual ("dddd, d' ta\\' 'MMMM yyyy", culture.DateTimeFormat.LongDatePattern);
+			Assert.AreEqual ("dddd, d 'ta'’ MMMM yyyy", culture.DateTimeFormat.LongDatePattern);
 		}
 
-#if !TARGET_JVM
 		[Test]
 		public void Bug78569 ()
 		{
@@ -143,7 +142,6 @@ namespace MonoTests.System.Globalization
 			DateTime dt2 = DateTime.Parse (s, ci);
 			Assert.AreEqual (dt.Month, dt2.Month);
 		}
-#endif
 	}
 }
 

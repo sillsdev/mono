@@ -98,26 +98,16 @@ public class CP51932 : MonoEncoding
 
 	public override int GetCharCount (byte [] bytes, int index, int count)
 	{
-#if NET_2_0
 		return new CP51932Decoder ().GetCharCount (
 			bytes, index, count, true);
-#else
-		return new CP51932Decoder ().GetCharCount (
-			bytes, index, count);
-#endif
 	}
 
 	public override int GetChars (
 		byte [] bytes, int byteIndex, int byteCount,
 		char [] chars, int charIndex)
 	{
-#if NET_2_0
 		return new CP51932Decoder ().GetChars (bytes,
 			byteIndex, byteCount, chars, charIndex, true);
-#else
-		return new CP51932Decoder ().GetChars (bytes,
-			byteIndex, byteCount, chars, charIndex);
-#endif
 	}
 
 	// Get the maximum number of bytes needed to encode a
@@ -312,13 +302,9 @@ public class CP51932Encoder : MonoEncoder
 			}
 
 			if (value == 0) {
-#if NET_2_0
 				HandleFallback (
 					chars, ref i, ref charCount,
 					bytes, ref posn, ref byteCount, null);
-#else
-				bytes [posn++] = (byte) '?';
-#endif
 			} else if (value < 0x0100) {
 				bytes [posn++] = (byte) value;
 			} else if ((posn + 1) >= byteLength) {
@@ -468,12 +454,8 @@ public class CP51932Encoder : MonoEncoder
 
 			if (value == 0)
 			{
-#if NET_2_0
 				HandleFallback (chars, ref i, ref charCount,
 					bytes, ref posn, ref byteCount, null);
-#else
-				bytes [posn++] = (byte) '?';
-#endif
 			}
 			else if (value < 0x0100)
 			{
@@ -521,11 +503,7 @@ internal class CP51932Decoder : DbcsEncoding.DbcsDecoder
 		return GetCharCount (bytes, index, count, false);
 	}
 
-#if NET_2_0
 	public override
-#else
-	internal
-#endif
 	int GetCharCount (byte [] bytes, int index, int count, bool refresh)
 	{
 		CheckRange (bytes, index, count);
@@ -543,19 +521,13 @@ internal class CP51932Decoder : DbcsEncoding.DbcsDecoder
 			--count;
 			if (last == 0) {
 				if (byteval == 0x8F) {
-					if (byteval != 0) {
-						// Invalid second byte of a 3-byte character.
-						last = 0;
-						length++;
-					}
-					// First byte in a triple-byte sequence
-					else
-						last = byteval;
+					// SS3: One-time triple-byte sequence should follow.
+					last = byteval;
 				} else if (byteval <= 0x7F) {
 					// Ordinary ASCII/Latin1/Control character.
 					length++;
 				} else if (byteval == 0x8E) {
-					// First byte of half-width Katakana
+					// SS2: One-time double-byte sequence should follow.
 					last = byteval;
 				} else if (byteval >= 0xA1 && byteval <= 0xFE) {
 					// First byte in a double-byte sequence.
@@ -566,9 +538,8 @@ internal class CP51932Decoder : DbcsEncoding.DbcsDecoder
 				}
 			}
 			else if (last == 0x8E) {
+				// SS2 (One-time double-byte sequence)
 				if (byteval >= 0xA1 && byteval <= 0xDF) {
-					value = ((byteval - 0x40) |
-						(last + 0x71) << 8);
 					length++;
 				} else {
 					// Invalid second byte.
@@ -577,8 +548,8 @@ internal class CP51932Decoder : DbcsEncoding.DbcsDecoder
 				last =0;
 			}
 			else if (last == 0x8F) {
-				// 3-byte character
-				// FIXME: currently not supported yet
+				// SS3: 3-byte character
+				// FIXME: not supported (I don't think iso-2022-jp has)
 				last = byteval;
 			}
 			else
@@ -629,11 +600,7 @@ internal class CP51932Decoder : DbcsEncoding.DbcsDecoder
 		return GetChars (bytes, byteIndex, byteCount, chars, charIndex, false);
 	}
 
-#if NET_2_0
 	public override
-#else
-	internal
-#endif
 	int GetChars (byte[] bytes, int byteIndex,
 						 int byteCount, char[] chars,
 						 int charIndex, bool refresh)
@@ -653,23 +620,15 @@ internal class CP51932Decoder : DbcsEncoding.DbcsDecoder
 			--byteCount;
 			if (last == 0) {
 				if (byteval == 0x8F) {
-					if (byteval != 0) {
-						// Invalid second byte of a 3-byte character.
-						last = 0;
-						if (posn >= charLength)
-							throw Insufficient ();
-						chars [posn++] = '\u30FB';
-					}
-					// First byte in a triple-byte sequence
-					else
-						last = byteval;
+					// SS3 (One-time triple-byte sequence) should follow.
+					last = byteval;
 				} else if (byteval <= 0x7F) {
 					// Ordinary ASCII/Latin1/Control character.
 					if (posn >= charLength)
 						throw Insufficient ();
 					chars [posn++] = (char) byteval;
 				} else if (byteval == 0x8E) {
-					// First byte of half-width Katakana
+					// SS2 (One-time double-byte sequence) should follow.
 					last = byteval;
 				} else if (byteval >= 0xA1 && byteval <= 0xFE) {
 					// First byte in a double-byte sequence.
@@ -682,6 +641,7 @@ internal class CP51932Decoder : DbcsEncoding.DbcsDecoder
 				}
 			}
 			else if (last == 0x8E) {
+				// SS2 (One-time double-byte sequence)
 				if (byteval >= 0xA1 && byteval <= 0xDF) {
 					value = ((byteval - 0x40) |
 						(last + 0x71) << 8);
@@ -697,8 +657,8 @@ internal class CP51932Decoder : DbcsEncoding.DbcsDecoder
 				last =0;
 			}
 			else if (last == 0x8F) {
-				// 3-byte character
-				// FIXME: currently not supported yet
+				// SS3: 3-byte character
+				// FIXME: not supported (I don't think iso-2022-jp has)
 				last = byteval;
 			}
 			else

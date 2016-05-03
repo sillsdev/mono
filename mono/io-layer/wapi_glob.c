@@ -44,7 +44,6 @@
 
 #include <glib.h>
 #include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,7 +65,7 @@
 #define	M_MASK		0xffff
 #define	M_ASCII		0x00ff
 
-typedef u_short Char;
+typedef unsigned short Char;
 
 #else
 
@@ -87,7 +86,7 @@ typedef char Char;
 #define	ismeta(c)	(((c)&M_QUOTE) != 0)
 
 
-static int	 g_Ctoc(const gchar *, char *, u_int);
+static int	 g_Ctoc(const gchar *, char *, unsigned int);
 static int	 glob0(GDir *dir, const gchar *, wapi_glob_t *, gboolean,
 		       gboolean);
 static int	 glob1(GDir *dir, gchar *, gchar *, wapi_glob_t *, size_t *,
@@ -103,11 +102,11 @@ static void	 qprintf(const char *, Char *);
 int
 _wapi_glob(GDir *dir, const char *pattern, int flags, wapi_glob_t *pglob)
 {
-	const u_char *patnext;
+	const unsigned char *patnext;
 	int c;
 	gchar *bufnext, *bufend, patbuf[PATH_MAX];
 
-	patnext = (u_char *) pattern;
+	patnext = (unsigned char *) pattern;
 	if (!(flags & WAPI_GLOB_APPEND)) {
 		pglob->gl_pathc = 0;
 		pglob->gl_pathv = NULL;
@@ -262,13 +261,14 @@ globextend(const gchar *path, wapi_glob_t *pglob, size_t *limitp)
 {
 	char **pathv;
 	int i;
-	u_int newsize, len;
+	unsigned int newsize, len;
 	char *copy;
 	const gchar *p;
 
 	newsize = sizeof(*pathv) * (2 + pglob->gl_pathc + pglob->gl_offs);
-	pathv = pglob->gl_pathv ? realloc((char *)pglob->gl_pathv, newsize) :
-	    malloc(newsize);
+	/* FIXME: Can just use realloc(). */
+	pathv = (char **)(pglob->gl_pathv ? realloc((char *)pglob->gl_pathv, newsize) :
+	    malloc(newsize));
 	if (pathv == NULL) {
 		if (pglob->gl_pathv) {
 			free(pglob->gl_pathv);
@@ -289,7 +289,7 @@ globextend(const gchar *path, wapi_glob_t *pglob, size_t *limitp)
 		;
 	len = (size_t)(p - path);
 	*limitp += len;
-	if ((copy = malloc(len)) != NULL) {
+	if ((copy = (char *)malloc(len)) != NULL) {
 		if (g_Ctoc(path, copy, len)) {
 			free(copy);
 			return(WAPI_GLOB_NOSPACE);
@@ -368,7 +368,7 @@ _wapi_globfree(wapi_glob_t *pglob)
 }
 
 static int
-g_Ctoc(const gchar *str, char *buf, u_int len)
+g_Ctoc(const gchar *str, char *buf, unsigned int len)
 {
 
 	while (len--) {

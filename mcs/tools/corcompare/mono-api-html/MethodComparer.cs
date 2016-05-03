@@ -25,6 +25,8 @@
 //
 
 using System;
+using System.Linq;
+using System.Reflection;
 using System.Xml.Linq;
 
 namespace Xamarin.ApiDiff {
@@ -42,8 +44,34 @@ namespace Xamarin.ApiDiff {
 		// operators have identical names but vary by return types
 		public override bool Find (XElement e)
 		{
-			return (e.GetAttribute ("name") == Source.GetAttribute ("name")) &&
-				(e.GetAttribute ("returntype") == Source.GetAttribute ("returntype"));
+			if (e.GetAttribute ("name") != Source.GetAttribute ("name"))
+				return false;
+
+			if (e.GetAttribute ("returntype") != Source.GetAttribute ("returntype"))
+				return false;
+
+			var eGP = e.Element ("generic-parameters");
+			var sGP = Source.Element ("generic-parameters");
+
+			if (eGP == null && sGP == null)
+				return true;
+			else if (eGP == null ^ sGP == null)
+				return false;
+			else {
+				var eGPs = eGP.Elements ("generic-parameter");
+				var sGPs = sGP.Elements ("generic-parameter");
+				return eGPs.Count () == sGPs.Count ();
+			}
+		}
+
+		protected override bool IsBreakingRemoval (XElement e)
+		{
+			// Removing virtual methods that override another method is not a breaking change.
+			var is_override = e.Attribute ("is-override");
+			if (is_override != null)
+				return is_override.Value != "true";
+			
+			return true; // all other removals are breaking changes
 		}
 	}
 }

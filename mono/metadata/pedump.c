@@ -27,6 +27,7 @@
 #include <mono/metadata/marshal.h>
 #include "mono/utils/mono-digest.h"
 #include <mono/utils/mono-mmap.h>
+#include <mono/utils/mono-counters.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef HAVE_UNISTD_H
@@ -332,7 +333,7 @@ dump_methoddef (MonoImage *metadata, guint32 token)
 static void
 dump_dotnet_iinfo (MonoImage *image)
 {
-	MonoCLIImageInfo *iinfo = image->image_info;
+	MonoCLIImageInfo *iinfo = (MonoCLIImageInfo *)image->image_info;
 
 	dump_dotnet_header (&iinfo->cli_header);
 	dump_sections (iinfo);
@@ -359,11 +360,13 @@ dump_verify_info (MonoImage *image, int flags)
 
 		for (i = 0; i < m->rows; ++i) {
 			MonoMethod *method;
+			MonoError error;
 			mono_loader_clear_error ();
 
-			method = mono_get_method (image, MONO_TOKEN_METHOD_DEF | (i+1), NULL);
+			method = mono_get_method_checked (image, MONO_TOKEN_METHOD_DEF | (i+1), NULL, NULL, &error);
 			if (!method) {
-				g_print ("Warning: Cannot lookup method with token 0x%08x\n", i + 1);
+				g_print ("Warning: Cannot lookup method with token 0x%08x due to %s\n", i + 1, mono_error_get_message (&error));
+				mono_error_cleanup (&error);
 				continue;
 			}
 			errors = mono_method_verify (method, flags);
@@ -382,7 +385,7 @@ dump_verify_info (MonoImage *image, int flags)
 			}
 
 			for (tmp = errors; tmp; tmp = tmp->next) {
-				MonoVerifyInfo *info = tmp->data;
+				MonoVerifyInfo *info = (MonoVerifyInfo *)tmp->data;
 				g_print ("%s: %s\n", desc [info->status], info->message);
 				if (info->status == MONO_VERIFY_ERROR) {
 					count++;
@@ -473,22 +476,24 @@ verify_image_file (const char *fname)
 
 	table = &image->tables [MONO_TABLE_TYPEDEF];
 	for (i = 1; i <= table->rows; ++i) {
+		MonoError error;
 		guint32 token = i | MONO_TOKEN_TYPE_DEF;
-		MonoClass *class = mono_class_get (image, token);
-		if (!class) {
-			printf ("Could not load class with token %x\n", token);
+		MonoClass *klass = mono_class_get_checked (image, token, &error);
+		if (!klass) {
+			printf ("Could not load class with token %x due to %s\n", token, mono_error_get_message (&error));
+			mono_error_cleanup (&error);
 			continue;
 		}
-		mono_class_init (class);
-		if (class->exception_type != MONO_EXCEPTION_NONE || mono_loader_get_last_error ()) {
-			printf ("Error verifying class(0x%08x) %s.%s a type load error happened\n", token, class->name_space, class->name);
+		mono_class_init (klass);
+		if (klass->exception_type != MONO_EXCEPTION_NONE || mono_loader_get_last_error ()) {
+			printf ("Error verifying class(0x%08x) %s.%s a type load error happened\n", token, klass->name_space, klass->name);
 			mono_loader_clear_error ();
 			++count;
 		}
 
-		mono_class_setup_vtable (class);
-		if (class->exception_type != MONO_EXCEPTION_NONE || mono_loader_get_last_error ()) {
-			printf ("Error verifying class(0x%08x) %s.%s a type load error happened\n", token, class->name_space, class->name);
+		mono_class_setup_vtable (klass);
+		if (klass->exception_type != MONO_EXCEPTION_NONE || mono_loader_get_last_error ()) {
+			printf ("Error verifying class(0x%08x) %s.%s a type load error happened\n", token, klass->name_space, klass->name);
 			mono_loader_clear_error ();
 			++count;
 		}
@@ -499,7 +504,7 @@ verify_image_file (const char *fname)
 
 invalid_image:
 	for (tmp = errors; tmp; tmp = tmp->next) {
-		MonoVerifyInfo *info = tmp->data;
+		MonoVerifyInfo *info = (MonoVerifyInfo *)tmp->data;
 		g_print ("%s: %s\n", desc [info->status], info->message);
 		if (info->status == MONO_VERIFY_ERROR)
 			count++;
@@ -605,7 +610,7 @@ pedump_assembly_search_hook (MonoAssemblyName *aname, gpointer user_data)
         GList *tmp;
 
        for (tmp = loaded_assemblies; tmp; tmp = tmp->next) {
-               MonoAssembly *ass = tmp->data;
+               MonoAssembly *ass = (MonoAssembly *)tmp->data;
                if (mono_assembly_names_equal (aname, &ass->aname))
 		       return ass;
        }
@@ -653,6 +658,7 @@ main (int argc, char *argv [])
 #ifndef DISABLE_PERFCOUNTERS
 	mono_perfcounters_init ();
 #endif
+	mono_counters_init ();
 	mono_metadata_init ();
 	mono_images_init ();
 	mono_assemblies_init ();

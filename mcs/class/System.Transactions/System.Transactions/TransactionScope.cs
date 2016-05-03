@@ -9,7 +9,6 @@
 // (C)2006 Novell Inc,
 //
 
-#if NET_2_0
 
 using DTCOption = System.Transactions.EnterpriseServicesInteropOption;
 
@@ -62,7 +61,6 @@ namespace System.Transactions
 		{
 		}
 
-		[MonoTODO ("No TimeoutException is thrown")]
 		public TransactionScope (TransactionScopeOption option,
 			TimeSpan timeout)
 		{
@@ -92,6 +90,10 @@ namespace System.Transactions
 			completed = false;
 			isRoot = false;
 			nested = 0;
+
+			if (timeout < TimeSpan.Zero)
+				throw new ArgumentOutOfRangeException ("timeout");
+
 			this.timeout = timeout;
 
 			oldTransaction = Transaction.CurrentInternal;
@@ -199,4 +201,3 @@ namespace System.Transactions
 	}
 }
 
-#endif

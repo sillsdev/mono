@@ -7,7 +7,6 @@
 // (C) 2003 Motus Technologies Inc. (http://www.motus.com)
 //
 
-#if NET_2_0
 
 using NUnit.Framework;
 
@@ -17,11 +16,7 @@ using System.Security.Cryptography;
 namespace MonoTests.System.Security.Cryptography {
 
 	[TestFixture]
-#if TARGET_JVM
-	[Ignore ("The class System.Security.Cryptography.OidEnumerator - is not supported")]
-#endif
 	public class OidEnumeratorTest {
-#if !TARGET_JVM
 		private OidEnumerator GetEnumerator () 
 		{
 			OidCollection oc = new OidCollection ();
@@ -79,8 +74,6 @@ namespace MonoTests.System.Security.Cryptography {
 			enumerator.Reset ();
 			Assert.IsNotNull (enumerator.Current, "Current after reset");
 		}
-#endif
 	}
 }
 
-#endif

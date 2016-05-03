@@ -10,6 +10,7 @@ using System.Text;
 
 using NUnit.Framework;
 
+using MonoTests.Helpers;
 
 namespace MonoTests.System.Net.WebSockets
 {
@@ -17,7 +18,7 @@ namespace MonoTests.System.Net.WebSockets
 	public class ClientWebSocketTest
 	{
 		const string EchoServerUrl = "ws://echo.websocket.org";
-		const int Port = 42123;
+		int Port = NetworkHelpers.FindFreePort ();
 		HttpListener listener;
 		ClientWebSocket socket;
 		MethodInfo headerSetMethod;
@@ -40,18 +41,22 @@ namespace MonoTests.System.Net.WebSockets
 			}
 			if (socket != null) {
 				if (socket.State == WebSocketState.Open)
-					socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait ();
+					socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait (2000);
 				socket.Dispose ();
 				socket = null;
 			}
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void ServerHandshakeReturnCrapStatusCodeTest ()
 		{
+			// On purpose, 
+			#pragma warning disable 4014
 			HandleHttpRequestAsync ((req, resp) => resp.StatusCode = 418);
+			#pragma warning restore 4014
 			try {
-				socket.ConnectAsync (new Uri ("ws://localhost:" + Port), CancellationToken.None).Wait ();
+				Assert.IsTrue (socket.ConnectAsync (new Uri ("ws://localhost:" + Port), CancellationToken.None).Wait (5000));
 			} catch (AggregateException e) {
 				AssertWebSocketException (e, WebSocketError.Success, typeof (WebException));
 				return;
@@ -60,14 +65,17 @@ namespace MonoTests.System.Net.WebSockets
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void ServerHandshakeReturnWrongUpgradeHeader ()
 		{
+			#pragma warning disable 4014
 			HandleHttpRequestAsync ((req, resp) => {
 					resp.StatusCode = 101;
 					resp.Headers["Upgrade"] = "gtfo";
 				});
+			#pragma warning restore 4014
 			try {
-				socket.ConnectAsync (new Uri ("ws://localhost:" + Port), CancellationToken.None).Wait ();
+				Assert.IsTrue (socket.ConnectAsync (new Uri ("ws://localhost:" + Port), CancellationToken.None).Wait (5000));
 			} catch (AggregateException e) {
 				AssertWebSocketException (e, WebSocketError.Success);
 				return;
@@ -76,16 +84,19 @@ namespace MonoTests.System.Net.WebSockets
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void ServerHandshakeReturnWrongConnectionHeader ()
 		{
+			#pragma warning disable 4014
 			HandleHttpRequestAsync ((req, resp) => {
 					resp.StatusCode = 101;
 					resp.Headers["Upgrade"] = "websocket";
 					// Mono http request doesn't like the forcing, test still valid since the default connection header value is empty
 					//ForceSetHeader (resp.Headers, "Connection", "Foo");
 				});
+			#pragma warning restore 4014
 			try {
-				socket.ConnectAsync (new Uri ("ws://localhost:" + Port), CancellationToken.None).Wait ();
+				Assert.IsTrue (socket.ConnectAsync (new Uri ("ws://localhost:" + Port), CancellationToken.None).Wait (5000));
 			} catch (AggregateException e) {
 				AssertWebSocketException (e, WebSocketError.Success);
 				return;
@@ -94,6 +105,7 @@ namespace MonoTests.System.Net.WebSockets
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // The test hangs when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void EchoTest ()
 		{
 			const string Payload = "This is a websocket test";
@@ -103,7 +115,7 @@ namespace MonoTests.System.Net.WebSockets
 			Assert.AreEqual (WebSocketState.Open, socket.State);
 
 			var sendBuffer = Encoding.ASCII.GetBytes (Payload);
-			socket.SendAsync (new ArraySegment<byte> (sendBuffer), WebSocketMessageType.Text, true, CancellationToken.None).Wait ();
+			Assert.IsTrue (socket.SendAsync (new ArraySegment<byte> (sendBuffer), WebSocketMessageType.Text, true, CancellationToken.None).Wait (5000));
 
 			var receiveBuffer = new byte[Payload.Length];
 			var resp = socket.ReceiveAsync (new ArraySegment<byte> (receiveBuffer), CancellationToken.None).Result;
@@ -113,17 +125,18 @@ namespace MonoTests.System.Net.WebSockets
 			Assert.AreEqual (WebSocketMessageType.Text, resp.MessageType);
 			Assert.AreEqual (Payload, Encoding.ASCII.GetString (receiveBuffer, 0, resp.Count));
 
-			socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait ();
+			Assert.IsTrue (socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait (5000));
 			Assert.AreEqual (WebSocketState.Closed, socket.State);
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void CloseOutputAsyncTest ()
 		{
-			socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait ();
+			Assert.IsTrue (socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait (5000));
 			Assert.AreEqual (WebSocketState.Open, socket.State);
 
-			socket.CloseOutputAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait ();
+			Assert.IsTrue (socket.CloseOutputAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait (5000));
 			Assert.AreEqual (WebSocketState.CloseSent, socket.State);
 
 			var resp = socket.ReceiveAsync (new ArraySegment<byte> (new byte[0]), CancellationToken.None).Result;
@@ -134,12 +147,13 @@ namespace MonoTests.System.Net.WebSockets
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void CloseAsyncTest ()
 		{
-			socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait ();
+			Assert.IsTrue (socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait (5000));
 			Assert.AreEqual (WebSocketState.Open, socket.State);
 
-			socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait ();
+			Assert.IsTrue (socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait (5000));
 			Assert.AreEqual (WebSocketState.Closed, socket.State);
 		}
 
@@ -150,9 +164,10 @@ namespace MonoTests.System.Net.WebSockets
 		}
 
 		[Test, ExpectedException (typeof (ArgumentNullException))]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void SendAsyncArgTest_NoArray ()
 		{
-			socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait ();
+			Assert.IsTrue (socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait (5000));
 			socket.SendAsync (new ArraySegment<byte> (), WebSocketMessageType.Text, true, CancellationToken.None);
 		}
 
@@ -163,19 +178,21 @@ namespace MonoTests.System.Net.WebSockets
 		}
 
 		[Test, ExpectedException (typeof (ArgumentNullException))]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void ReceiveAsyncArgTest_NoArray ()
 		{
-			socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait ();
+			Assert.IsTrue (socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait (5000));
 			socket.ReceiveAsync (new ArraySegment<byte> (), CancellationToken.None);
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void ReceiveAsyncWrongState_Closed ()
 		{
 			try {
-				socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait ();
-				socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait ();
-				socket.ReceiveAsync (new ArraySegment<byte> (new byte[0]), CancellationToken.None).Wait ();
+				Assert.IsTrue (socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait (5000));
+				Assert.IsTrue (socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait (5000));
+				Assert.IsTrue (socket.ReceiveAsync (new ArraySegment<byte> (new byte[0]), CancellationToken.None).Wait (5000));
 			} catch (AggregateException e) {
 				AssertWebSocketException (e, WebSocketError.Success);
 				return;
@@ -184,12 +201,13 @@ namespace MonoTests.System.Net.WebSockets
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void SendAsyncWrongState_Closed ()
 		{
 			try {
-				socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait ();
-				socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait ();
-				socket.SendAsync (new ArraySegment<byte> (new byte[0]), WebSocketMessageType.Text, true, CancellationToken.None).Wait ();
+				Assert.IsTrue (socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait (5000));
+				Assert.IsTrue (socket.CloseAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait (5000));
+				Assert.IsTrue (socket.SendAsync (new ArraySegment<byte> (new byte[0]), WebSocketMessageType.Text, true, CancellationToken.None).Wait (5000));
 			} catch (AggregateException e) {
 				AssertWebSocketException (e, WebSocketError.Success);
 				return;
@@ -198,17 +216,57 @@ namespace MonoTests.System.Net.WebSockets
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")] // Fails when ran as part of the entire BCL test suite. Works when only this fixture is ran
 		public void SendAsyncWrongState_CloseSent ()
 		{
 			try {
-				socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait ();
-				socket.CloseOutputAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait ();
-				socket.SendAsync (new ArraySegment<byte> (new byte[0]), WebSocketMessageType.Text, true, CancellationToken.None).Wait ();
+				Assert.IsTrue (socket.ConnectAsync (new Uri (EchoServerUrl), CancellationToken.None).Wait (5000));
+				Assert.IsTrue (socket.CloseOutputAsync (WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).Wait (5000));
+				Assert.IsTrue (socket.SendAsync (new ArraySegment<byte> (new byte[0]), WebSocketMessageType.Text, true, CancellationToken.None).Wait (5000));
 			} catch (AggregateException e) {
 				AssertWebSocketException (e, WebSocketError.Success);
 				return;
 			}
 			Assert.Fail ("Should have thrown");
+		}
+
+		[Test]
+		[Category ("NotWorking")]  // FIXME: test relies on unimplemented HttpListenerContext.AcceptWebSocketAsync (), reenable it when the method is implemented
+		public void SendAsyncEndOfMessageTest ()
+		{
+			var cancellationToken = new CancellationTokenSource (TimeSpan.FromSeconds (30)).Token;
+			SendAsyncEndOfMessageTest (false, WebSocketMessageType.Text, cancellationToken).Wait (5000);
+			SendAsyncEndOfMessageTest (true, WebSocketMessageType.Text, cancellationToken).Wait (5000);
+			SendAsyncEndOfMessageTest (false, WebSocketMessageType.Binary, cancellationToken).Wait (5000);
+			SendAsyncEndOfMessageTest (true, WebSocketMessageType.Binary, cancellationToken).Wait (5000);
+		}
+
+		public async Task SendAsyncEndOfMessageTest (bool expectedEndOfMessage, WebSocketMessageType webSocketMessageType, CancellationToken cancellationToken)
+		{
+			using (var client = new ClientWebSocket ()) {
+				// Configure the listener.
+				var serverReceive = HandleHttpWebSocketRequestAsync<WebSocketReceiveResult> (async socket => await socket.ReceiveAsync (new ArraySegment<byte> (new byte[32]), cancellationToken), cancellationToken);
+
+				// Connect to the listener and make the request.
+				await client.ConnectAsync (new Uri ("ws://localhost:" + Port + "/"), cancellationToken);
+				await client.SendAsync (new ArraySegment<byte> (Encoding.UTF8.GetBytes ("test")), webSocketMessageType, expectedEndOfMessage, cancellationToken);
+
+				// Wait for the listener to handle the request and return its result.
+				var result = await serverReceive;
+
+				// Cleanup and check results.
+				await client.CloseAsync (WebSocketCloseStatus.NormalClosure, "Finished", cancellationToken);
+				Assert.AreEqual (expectedEndOfMessage, result.EndOfMessage, "EndOfMessage should be " + expectedEndOfMessage);
+			}
+		}
+
+		async Task<T> HandleHttpWebSocketRequestAsync<T> (Func<WebSocket, Task<T>> action, CancellationToken cancellationToken)
+		{
+			var ctx = await this.listener.GetContextAsync ();
+			var wsContext = await ctx.AcceptWebSocketAsync (null);
+			var result = await action (wsContext.WebSocket);
+			await wsContext.WebSocket.CloseOutputAsync (WebSocketCloseStatus.NormalClosure, "Finished", cancellationToken);
+			return result;
 		}
 
 		async Task HandleHttpRequestAsync (Action<HttpListenerRequest, HttpListenerResponse> handler)

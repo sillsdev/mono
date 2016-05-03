@@ -27,8 +27,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
-
 using System;
 using System.Collections;
 using System.Collections.Specialized;
@@ -51,9 +49,7 @@ namespace Microsoft.Build.Tasks {
 		string		workingDirectory;
 		string scriptFile;
 
-#if NET_4_0
 		Func<string, bool> errorMatcher, warningMatcher;
-#endif
 		
 		public Exec ()
 		{
@@ -82,10 +78,8 @@ namespace Microsoft.Build.Tasks {
 						    string commandLineCommands)
 		{
 			try {
-#if NET_4_0
 				errorMatcher = GetTryMatchRegexFunc (CustomErrorRegularExpression, true);
 				warningMatcher = GetTryMatchRegexFunc (CustomWarningRegularExpression, false);
-#endif
 				return base.ExecuteTool (pathToTool, responseFileCommands, commandLineCommands);
 			} finally {
 				if (scriptFile != null)
@@ -124,16 +118,13 @@ namespace Microsoft.Build.Tasks {
 			Log.LogMessage (MessageImportance.Normal, "Executing: " + command);
 		}
 		
-		protected override void LogEventsFromTextOutput (string singleLine, MessageImportance importance)
+		protected override void LogEventsFromTextOutput (string singleLine, MessageImportance messageImportance)
 		{
-#if NET_4_0
 			if (IgnoreStandardErrorWarningFormat ||
 				(!errorMatcher (singleLine) && !warningMatcher (singleLine)))
-#endif
-				Log.LogMessage (importance, singleLine);
+				Log.LogMessage (messageImportance, singleLine);
 		}
 
-#if NET_4_0
 		// @is_error_type - log as errors, else warnings
 		Func<string, bool> GetTryMatchRegexFunc (string regex_str, bool is_error_type)
 		{
@@ -166,7 +157,6 @@ namespace Microsoft.Build.Tasks {
 				return true;
 			};
 		}
-#endif
 
 		[MonoTODO]
 		protected override bool ValidateParameters ()
@@ -211,13 +201,11 @@ namespace Microsoft.Build.Tasks {
 			get { return base.StandardOutputLoggingImportance; }
 		}
 
-#if NET_4_0
 		public bool IgnoreStandardErrorWarningFormat { get; set; }
 
 		public string CustomErrorRegularExpression { get; set; }
 
 		public string CustomWarningRegularExpression { get; set; }
-#endif
 		
 		[MonoTODO]
 		[Output]
@@ -252,5 +240,3 @@ namespace Microsoft.Build.Tasks {
 
 	}
 }
-
-#endif

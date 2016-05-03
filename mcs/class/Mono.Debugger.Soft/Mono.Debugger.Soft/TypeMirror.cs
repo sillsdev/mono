@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using C = Mono.Cecil;
 using Mono.Cecil.Metadata;
-#if NET_4_5
 using System.Threading.Tasks;
-#endif
 
 namespace Mono.Debugger.Soft
 {
@@ -189,6 +187,14 @@ namespace Mono.Debugger.Soft
 		public bool IsMarshalByRef {
 			get {
 				return IsMarshalByRefImpl ();
+			}
+		}
+
+		public bool IsNested {
+			get {
+				var masked = (Attributes & TypeAttributes.VisibilityMask);
+
+				return masked >= TypeAttributes.NestedPublic && masked <= TypeAttributes.NestedFamORAssem;
 			}
 		}
 
@@ -798,7 +804,10 @@ namespace Mono.Debugger.Soft
 			return ObjectMirror.EndInvokeMethodInternal (asyncResult);
 		}
 
-#if NET_4_5
+		public InvokeResult EndInvokeMethodWithResult (IAsyncResult asyncResult) {
+			return  ObjectMirror.EndInvokeMethodInternalWithResult (asyncResult);
+		}
+
 		public Task<Value> InvokeMethodAsync (ThreadMirror thread, MethodMirror method, IList<Value> arguments, InvokeOptions options = InvokeOptions.None) {
 			var tcs = new TaskCompletionSource<Value> ();
 			BeginInvokeMethod (thread, method, arguments, options, iar =>
@@ -813,14 +822,24 @@ namespace Mono.Debugger.Soft
 					}, null);
 			return tcs.Task;
 		}
-#endif
 
 		public Value NewInstance (ThreadMirror thread, MethodMirror method, IList<Value> arguments) {
-			return ObjectMirror.InvokeMethod (vm, thread, method, null, arguments, InvokeOptions.None);
+			return NewInstance (thread, method, arguments, InvokeOptions.None);
 		}			
 
 		public Value NewInstance (ThreadMirror thread, MethodMirror method, IList<Value> arguments, InvokeOptions options) {
+			if (method == null)
+				throw new ArgumentNullException ("method");
+
+			if (!method.IsConstructor)
+				throw new ArgumentException ("The method must be a constructor.", "method");
+
 			return ObjectMirror.InvokeMethod (vm, thread, method, null, arguments, options);
+		}
+
+		// Since protocol version 2.31
+		public Value NewInstance () {
+			return vm.GetObject (vm.conn.Type_CreateInstance (id));
 		}
 
 		// Since protocol version 2.11

@@ -46,18 +46,14 @@ using System.Security;
 [assembly: AssemblyCompany (Consts.MonoCompany)]
 [assembly: AssemblyProduct (Consts.MonoProduct)]
 [assembly: AssemblyCopyright (Consts.MonoCopyright)]
-#if NET_3_5
 	[assembly: AssemblyVersion (Consts.FxVersion)]
-#else
-	[assembly: AssemblyVersion ("1.0.61025.0")]
-#endif
 [assembly: SatelliteContractVersion (Consts.FxVersion)]
 [assembly: AssemblyInformationalVersion (Consts.FxFileVersion)]
 [assembly: AssemblyFileVersion (Consts.FxFileVersion)]
 
 [assembly: NeutralResourcesLanguage ("en-US")]
 
-#if !(TARGET_JVM || TARGET_DOTNET)
+#if !(TARGET_DOTNET)
 	[assembly: CLSCompliant (true)]
 	[assembly: AssemblyDelaySign (true)]
 	[assembly: AssemblyKeyFile ("../winfx.pub")]

@@ -22,6 +22,10 @@ public class TestsBase
 	static string base_static_s = "C";
 #pragma warning restore 0414
 #pragma warning restore 0169
+
+	public virtual string virtual_method () {
+		return "V1";
+	}
 }
 
 public enum AnEnum {
@@ -76,11 +80,28 @@ public class Tests2 {
 	}
 }
 
-public struct AStruct {
+public struct AStruct : ITest2 {
 	public int i;
 	public string s;
 	public byte k;
 	public IntPtr j;
+	public int l;
+/*
+	public AStruct () {
+		i = 0;
+		s = null;
+		k = 0;
+		j = IntPtr.Zero;
+		l = 0;
+	}
+*/
+	public AStruct (int arg) {
+		i = arg;
+		s = null;
+		k = 0;
+		j = IntPtr.Zero;
+		l = 0;
+	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public int foo (int val) {
@@ -105,6 +126,19 @@ public struct AStruct {
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public IntPtr invoke_return_intptr () {
 		return j;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public void invoke_mutate () {
+		l = 5;
+	}
+
+	public int invoke_iface () {
+		return i;
+	}
+
+	public override string ToString () {
+		return i.ToString ();
 	}
 }
 
@@ -137,6 +171,18 @@ public struct NestedStruct {
 }
 
 public struct NestedInner {
+}
+
+public interface IRecStruct {
+	void foo (object o);
+}
+
+struct RecStruct : IRecStruct {
+	public object o;
+
+	public void foo (object o) {
+		this.o = o;
+	}
 }
 
 interface ITest
@@ -284,6 +330,9 @@ public class Tests : TestsBase, ITest2
 		type_load ();
 		regress ();
 		gc_suspend ();
+		set_ip ();
+		step_filters ();
+		local_reflect ();
 		if (args.Length > 0 && args [0] == "domain-test")
 			/* This takes a lot of time, so execute it conditionally */
 			domains ();
@@ -293,7 +342,15 @@ public class Tests : TestsBase, ITest2
 			frames_in_native ();
 		if (args.Length > 0 && args [0] == "invoke-single-threaded")
 			new Tests ().invoke_single_threaded ();
+		if (args.Length > 0 && args [0] == "invoke-abort")
+			new Tests ().invoke_abort ();
+		new Tests ().evaluate_method ();
 		return 3;
+	}
+
+	public static void local_reflect () {
+		//Breakpoint line below, and reflect someField via ObjectMirror;
+		LocalReflectClass.RunMe ();
 	}
 
 	public static void breakpoints () {
@@ -360,6 +417,7 @@ public class Tests : TestsBase, ITest2
 		ss_nested ();
 		ss_regress_654694 ();
 		ss_step_through ();
+		ss_non_user_code ();
 		ss_recursive (1);
 		ss_fp_clobber ();
 	}
@@ -480,6 +538,30 @@ public class Tests : TestsBase, ITest2
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_non_user_code () {
+		non_user_code_1 ();
+		StepNonUserCodeClass.non_user_code_2 ();
+		non_user_code_3 ();
+	}
+
+	[DebuggerNonUserCode]
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void non_user_code_1 () {
+	}
+
+	[DebuggerNonUserCode]
+	class StepNonUserCodeClass {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public static void non_user_code_2 () {
+		}
+	}
+
+	[DebuggerNonUserCode]
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void non_user_code_3 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void ss_recursive (int n) {
 		if (n == 10)
 			return;
@@ -518,7 +600,7 @@ public class Tests : TestsBase, ITest2
 	public static void arguments () {
 		arg1 (SByte.MaxValue - 5, Byte.MaxValue - 5, true, Int16.MaxValue - 5, UInt16.MaxValue - 5, 'F', Int32.MaxValue - 5, UInt32.MaxValue - 5, Int64.MaxValue - 5, UInt64.MaxValue - 5, 1.2345f, 6.78910, new IntPtr (Int32.MaxValue - 5), new UIntPtr (UInt32.MaxValue - 5));
 		int i = 42;
-		arg2 ("FOO", null, "BLA", ref i, new GClass <int> { field = 42 }, new object ());
+		arg2 ("FOO", null, "BLA", ref i, new GClass <int> { field = 42 }, new object (), '\0'.ToString () + "A");
 		Tests t = new Tests () { field_i = 42, field_s = "S" };
 		t.arg3 ("BLA");
 	}
@@ -529,7 +611,7 @@ public class Tests : TestsBase, ITest2
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	public static string arg2 (string s, string s3, object o, ref int i, GClass <int> gc, object o2) {
+	public static string arg2 (string s, string s3, object o, ref int i, GClass <int> gc, object o2, string s4) {
 		return s + (s3 != null ? "" : "") + o + i + gc.field + o2;
 	}
 
@@ -587,13 +669,15 @@ public class Tests : TestsBase, ITest2
 		AStruct[] arr = new AStruct[] { 
 			new AStruct () { i = 1, s = "S1" },
 			new AStruct () { i = 2, s = "S2" } };
-		t.vtypes1 (s, arr);
+		TypedReference typedref = __makeref (s);
+		t.vtypes1 (s, arr, typedref);
 		vtypes2 (s);
 		vtypes3 (s);
+		vtypes4 ();
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	public object vtypes1 (AStruct s, AStruct[] arr) {
+	public object vtypes1 (AStruct s, AStruct[] arr, TypedReference typedref) {
 		if (arr != null)
 			return this;
 		else
@@ -608,6 +692,17 @@ public class Tests : TestsBase, ITest2
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void vtypes3 (AStruct s) {
 		AStruct.static_foo (5);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void vtypes4_2 (IRecStruct o) {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void vtypes4 () {
+		IRecStruct s = new RecStruct ();
+		s.foo (s);
+		vtypes4_2 (s);
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -653,6 +748,7 @@ public class Tests : TestsBase, ITest2
 			astruct = new AStruct ();
 		}
 		rs = "A";
+		List<int> alist = new List<int> () { 12 };
 	}
 
 
@@ -758,6 +854,10 @@ public class Tests : TestsBase, ITest2
 		}
 	}
 
+	struct TypedRefTest {
+		public int MaxValue;
+	}
+
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void type_info () {
 		Tests t = new Tests () { field_i = 42, field_s = "S", base_field_i = 43, base_field_s = "T", field_enum = AnEnum.B };
@@ -765,8 +865,9 @@ public class Tests : TestsBase, ITest2
 		int val = 0;
 		unsafe {
 			AStruct s = new AStruct () { i = 42, s = "S", k = 43 };
-
-			ti2 (new string [] { "BAR", "BAZ" }, new int[] { 42, 43 }, new int [,] { { 1, 2 }, { 3, 4 }}, ref val, (int*)IntPtr.Zero, 5, s, new Tests (), new Tests2 (), new GClass <int> (), AnEnum.B);
+			TypedRefTest reftest = new TypedRefTest () { MaxValue = 12 };
+			TypedReference typedref = __makeref (reftest);
+			ti2 (new string [] { "BAR", "BAZ" }, new int[] { 42, 43 }, new int [,] { { 1, 2 }, { 3, 4 }}, ref val, (int*)IntPtr.Zero, 5, s, new Tests (), new Tests2 (), new GClass <int> (), AnEnum.B, typedref);
 		}
 	}
 
@@ -779,7 +880,7 @@ public class Tests : TestsBase, ITest2
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	public static unsafe string ti2 (string[] s2, int[] s3, int[,] s4, ref int ri, int* ptr, int i, AStruct s, Tests t, Tests2 t2, GClass<int> g, AnEnum ae) {
+	public static unsafe string ti2 (string[] s2, int[] s3, int[,] s4, ref int ri, int* ptr, int i, AStruct s, Tests t, Tests2 t2, GClass<int> g, AnEnum ae, TypedReference typedref) {
 		return s2 [0] + s3 [0] + s4 [0, 0];
 	}
 
@@ -845,6 +946,15 @@ public class Tests : TestsBase, ITest2
 	public void invoke_single_threaded_2 () {
 	}
 
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public void invoke_abort () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public void invoke_abort_2 () {
+		Thread.Sleep (1000000);
+	}
+
 	public void invoke_return_void () {
 	}
 
@@ -900,6 +1010,11 @@ public class Tests : TestsBase, ITest2
 
 	public int invoke_iface () {
 		return 42;
+	}
+
+	public void invoke_out (out int foo, out int[] arr) {
+		foo = 5;
+		arr = new int [10];
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -1096,6 +1211,12 @@ public class Tests : TestsBase, ITest2
 		AppDomain.Unload (domain);
 
 		domains_3 ();
+
+		typeof (Tests).GetMethod ("called_from_invoke").Invoke (null, null);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void called_from_invoke () {
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -1274,6 +1395,57 @@ public class Tests : TestsBase, ITest2
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void generic_method<T> () where T : class {
 	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public void evaluate_method_2 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public void evaluate_method () {
+		field_i = 42;
+		evaluate_method_2 ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void set_ip_1 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static void set_ip_2 () {
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void set_ip () {
+		int i = 0, j;
+
+		i ++;
+		i ++;
+		set_ip_1 ();
+		i ++;
+		j = 5;
+		set_ip_2 ();
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void step_filters () {
+		ClassWithCctor.cctor_filter ();
+	}
+
+	class ClassWithCctor {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		static ClassWithCctor () {
+			int i = 1;
+			int j = 2;
+		}
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public static void cctor_filter () {
+		}
+	}
+
+	public override string virtual_method () {
+		return "V2";
+	}
 }
 
 class TypeLoadClass {
@@ -1324,3 +1496,23 @@ public class LineNumbers
 		#line 55 "FOO"
 	}
 }
+
+class LocalReflectClass
+{
+	public static void RunMe ()
+	{
+		var reflectMe = new someClass ();
+		reflectMe.someMethod ();
+	}
+
+	class someClass : ContextBoundObject
+	{
+		public object someField;
+
+		public void someMethod ()
+		{
+		}
+	}
+}
+
+

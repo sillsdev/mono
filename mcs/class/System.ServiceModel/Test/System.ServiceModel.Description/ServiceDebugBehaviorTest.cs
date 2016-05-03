@@ -36,6 +36,8 @@ using System.ServiceModel.Description;
 using System.ServiceModel.Dispatcher;
 using System.ServiceModel.Channels;
 
+using MonoTests.Helpers;
+
 namespace MonoTests.System.ServiceModel.Description
 {
 	[TestFixture]
@@ -55,18 +57,9 @@ namespace MonoTests.System.ServiceModel.Description
 			}
 		}
 
-		Uri CreateUri (string uriString)
-		{
-			var uri = new Uri (uriString);
-			var l = new TcpListener (uri.Port);
-			l.Start ();
-			l.Stop ();
-			return uri;
-		}
-
 		[Test]
 		public void InitializeRuntime1 () {
-			using (ServiceHost host = new ServiceHost (typeof (MyService), CreateUri ("http://localhost:37564"))) {
+			using (ServiceHost host = new ServiceHost (typeof (MyService), new Uri ("http://localhost:" + NetworkHelpers.FindFreePort ()))) {
 				host.AddServiceEndpoint (typeof (IMyContract), new BasicHttpBinding (), "e1");
 
 				Assert.AreEqual (0, host.ChannelDispatchers.Count, "ChannelDispatchers.Count #1");
@@ -103,7 +96,7 @@ namespace MonoTests.System.ServiceModel.Description
 
 		[Test]
 		public void InitializeRuntime2 () {
-			using (ServiceHost host = new ServiceHost (typeof (MyService), CreateUri ("http://localhost:37564"))) {
+			using (ServiceHost host = new ServiceHost (typeof (MyService), new Uri ("http://localhost:" + NetworkHelpers.FindFreePort ()))) {
 				host.AddServiceEndpoint (typeof (IMyContract), new BasicHttpBinding (), "");
 				host.Description.Behaviors.Remove<ServiceDebugBehavior> ();
 
@@ -122,7 +115,7 @@ namespace MonoTests.System.ServiceModel.Description
 
 		[Test]
 		public void InitializeRuntime3 () {
-			using (ServiceHost host = new ServiceHost (typeof (MyService), CreateUri ("http://localhost:37564"))) {
+			using (ServiceHost host = new ServiceHost (typeof (MyService), new Uri ("http://localhost:" + NetworkHelpers.FindFreePort ()))) {
 				host.AddServiceEndpoint (typeof (IMyContract), new BasicHttpBinding (), "");
 				host.Description.Behaviors.Find<ServiceDebugBehavior> ().HttpHelpPageEnabled = false;
 
@@ -140,9 +133,10 @@ namespace MonoTests.System.ServiceModel.Description
 
 		[Test]
 		public void InitializeRuntime4 () {
-			using (ServiceHost host = new ServiceHost (typeof (MyService), CreateUri ("http://localhost:37564"))) {
+			int port = NetworkHelpers.FindFreePort ();
+			using (ServiceHost host = new ServiceHost (typeof (MyService), new Uri ("http://localhost:" + port))) {
 				host.AddServiceEndpoint (typeof (IMyContract), new BasicHttpBinding (), "");
-				host.Description.Behaviors.Find<ServiceDebugBehavior> ().HttpHelpPageUrl = new Uri ("http://localhost:37564/help");
+				host.Description.Behaviors.Find<ServiceDebugBehavior> ().HttpHelpPageUrl = new Uri ("http://localhost:" + port + "/help");
 
 				Assert.AreEqual (0, host.ChannelDispatchers.Count, "ChannelDispatchers.Count #1");
 
@@ -168,7 +162,7 @@ namespace MonoTests.System.ServiceModel.Description
 				Assert.AreEqual (0, ed.FilterPriority, "FilterPriority");
 
 				EndpointAddress ea = ed.EndpointAddress;
-				Assert.AreEqual (new Uri ("http://localhost:37564/help"), ea.Uri, "Uri");
+				Assert.AreEqual (new Uri ("http://localhost:" + port + "/help"), ea.Uri, "Uri");
 
 				DispatchRuntime dr = ed.DispatchRuntime;
 				Assert.AreEqual (1, dr.Operations.Count, "Operations.Count");
@@ -186,9 +180,10 @@ namespace MonoTests.System.ServiceModel.Description
 
 		[Test]
 		public void ServiceMetadataExtension1 () {
-			using (ServiceHost host = new ServiceHost (typeof (MyService), CreateUri ("http://localhost:37564"))) {
+			int port = NetworkHelpers.FindFreePort ();
+			using (ServiceHost host = new ServiceHost (typeof (MyService), new Uri ("http://localhost:" + port))) {
 				host.AddServiceEndpoint (typeof (IMyContract), new BasicHttpBinding (), "");
-				host.Description.Behaviors.Find<ServiceDebugBehavior> ().HttpHelpPageUrl = new Uri ("http://localhost:37564/help");
+				host.Description.Behaviors.Find<ServiceDebugBehavior> ().HttpHelpPageUrl = new Uri ("http://localhost:" + port + "/help");
 				try {
 				host.Open ();
 
@@ -202,9 +197,10 @@ namespace MonoTests.System.ServiceModel.Description
 
 		[Test]
 		public void ServiceMetadataExtension2 () {
-			using (ServiceHost host = new ServiceHost (typeof (MyService), CreateUri ("http://localhost:37564"))) {
+			int port = NetworkHelpers.FindFreePort ();
+			using (ServiceHost host = new ServiceHost (typeof (MyService), new Uri ("http://localhost:" + port))) {
 				host.AddServiceEndpoint (typeof (IMyContract), new BasicHttpBinding (), "");
-				host.Description.Behaviors.Find<ServiceDebugBehavior> ().HttpHelpPageUrl = CreateUri ("http://localhost:37564/help");
+				host.Description.Behaviors.Find<ServiceDebugBehavior> ().HttpHelpPageUrl = new Uri ("http://localhost:" + port + "/help");
 
 				ServiceMetadataExtension extension = new ServiceMetadataExtension ();
 				host.Extensions.Add (extension);

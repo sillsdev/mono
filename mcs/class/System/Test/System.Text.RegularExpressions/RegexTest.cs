@@ -11,9 +11,7 @@
 using System;
 using System.Text.RegularExpressions;
 
-#if NET_2_0
 using System.Collections.Generic;
-#endif
 
 using NUnit.Framework;
 
@@ -54,7 +52,6 @@ namespace MonoTests.System.Text.RegularExpressions
 
        protected bool Compiled { get; set; }
 
-#if NET_2_0
 		private int cache_initial_value;
 
 		[TestFixtureSetUp]
@@ -68,7 +65,6 @@ namespace MonoTests.System.Text.RegularExpressions
 		{
 			Regex.CacheSize = cache_initial_value;
 		}
-#endif
 
 		[Test]
 		public void Simple ()
@@ -189,7 +185,7 @@ namespace MonoTests.System.Text.RegularExpressions
 			           AddOptions( RegexOptions.None )).Match ("foobar", 5, -1);
 		}
 
-		[Test, ExpectedException (typeof (ArgumentOutOfRangeException))]
+		[Test, ExpectedException (typeof (IndexOutOfRangeException))]
 		public void Match_BadLength2 ()
 		{
 			new Regex (@"foo",
@@ -215,6 +211,27 @@ namespace MonoTests.System.Text.RegularExpressions
 		{
 			new Regex (@"foo",
 			           AddOptions(RegexOptions.RightToLeft)).Matches (null);
+		}
+
+		[Test]
+		public void Match_SubstringAnchors ()
+		{
+			Regex r = new Regex ("^ooba$",
+			                     AddOptions( RegexOptions.None ));
+			Match m = r.Match ("foobar", 1, 4);
+
+			Assert.IsTrue (m.Success);
+			Assert.AreEqual ("ooba", m.Value);
+		}
+
+		[Test]
+		public void Match_SubstringRtl ()
+		{
+			Regex r = new Regex(@".*", RegexOptions.RightToLeft);
+			Match m = r.Match("ABCDEFGHI", 2, 6);
+
+			Assert.IsTrue (m.Success);
+			Assert.AreEqual ("CDEFGH", m.Value);
 		}
 
 		[Test, ExpectedException (typeof (ArgumentNullException))]
@@ -424,7 +441,6 @@ namespace MonoTests.System.Text.RegularExpressions
 			foreach (MatchCollectionTrial t in trials)
 				runTrial (t,Compiled);
 		}
-#if NET_2_0
 		[Test]
 		public void CacheSize ()
 		{
@@ -504,6 +520,5 @@ namespace MonoTests.System.Text.RegularExpressions
 				x += "1";
 			}
 		}
-#endif
 	}
 }

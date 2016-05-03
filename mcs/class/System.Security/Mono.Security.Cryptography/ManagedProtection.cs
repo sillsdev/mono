@@ -43,12 +43,6 @@ namespace Mono.Security.Cryptography {
 	// * AES 128 bits encryption (separate key for each data protected)
 	// * SHA256 digest to ensure integrity
 
-#if !NET_2_0
-	internal enum DataProtectionScope {
-		CurrentUser,
-		LocalMachine
- 	}
-#endif
 
 	internal static class ManagedProtection {
 
@@ -243,23 +237,29 @@ namespace Mono.Security.Cryptography {
 
 		private static RSA user;
 		private static RSA machine;
+		private readonly static object user_lock = new object ();
+		private readonly static object machine_lock = new object ();
 
 		private static RSA GetKey (DataProtectionScope scope)
 		{
 			switch (scope) {
 			case DataProtectionScope.CurrentUser:
 				if (user == null) {
-					CspParameters csp = new CspParameters ();
-					csp.KeyContainerName = "DAPI";
-					user = new RSACryptoServiceProvider (1536, csp);
+					lock (user_lock) {
+						CspParameters csp = new CspParameters ();
+						csp.KeyContainerName = "DAPI";
+						user = new RSACryptoServiceProvider (1536, csp);
+					}
 				}
 				return user;
 			case DataProtectionScope.LocalMachine:
 				if (machine == null) {
-					CspParameters csp = new CspParameters ();
-					csp.KeyContainerName = "DAPI";
-					csp.Flags = CspProviderFlags.UseMachineKeyStore;
-					machine = new RSACryptoServiceProvider (1536, csp);
+					lock (machine_lock) {
+						CspParameters csp = new CspParameters ();
+						csp.KeyContainerName = "DAPI";
+						csp.Flags = CspProviderFlags.UseMachineKeyStore;
+						machine = new RSACryptoServiceProvider (1536, csp);
+					}
 				}
 				return machine;
 			default:

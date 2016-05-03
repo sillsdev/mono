@@ -28,13 +28,19 @@
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.ServiceModel;
 using System.ServiceModel.Channels;
 using System.ServiceModel.Description;
+using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
+using System.Xml.Serialization;
 using NUnit.Framework;
+
+using MonoTests.Helpers;
 
 namespace MonoTests.System.ServiceModel
 {
@@ -217,22 +223,23 @@ namespace MonoTests.System.ServiceModel
 		[Ignore ("With Orcas it does not work fine")]
 		public void UseCase1Test ()
 		{
+			int port = NetworkHelpers.FindFreePort ();
 			// almost equivalent to samples/clientbase/samplesvc.cs
 			using (host = new ServiceHost (typeof (UseCase1))) {
 				Binding binding = new BasicHttpBinding ();
 				binding.ReceiveTimeout = TimeSpan.FromSeconds (15);
-				host.AddServiceEndpoint (typeof (IUseCase1).FullName, binding, new Uri ("http://localhost:37564"));
+				host.AddServiceEndpoint (typeof (IUseCase1).FullName, binding, new Uri ("http://localhost:" + port));
 
 				host.Open ();
 				// almost equivalent to samples/clientbase/samplecli.cs
 				using (UseCase1Proxy proxy = new UseCase1Proxy (
 					new BasicHttpBinding (),
-					new EndpointAddress ("http://localhost:37564"))) {
+					new EndpointAddress ("http://localhost:" + port))) {
 					proxy.Open ();
 					Assert.AreEqual ("TEST FOR ECHOTEST FOR ECHO", proxy.Echo ("TEST FOR ECHO"));
 				}
 			}
-			EnsurePortNonBlocking (37564);
+			EnsurePortNonBlocking (port);
 		}
 
 		void EnsurePortNonBlocking (int port)
@@ -357,8 +364,9 @@ namespace MonoTests.System.ServiceModel
 			ServiceHost host = new ServiceHost (typeof (UseCase2));
 			Binding binding = new BasicHttpBinding ();
 			binding.ReceiveTimeout = TimeSpan.FromSeconds (15);
+			int port = NetworkHelpers.FindFreePort ();
 			host.AddServiceEndpoint (typeof (IUseCase2).FullName,
-			binding, new Uri ("http://localhost:37564"));
+			binding, new Uri ("http://localhost:" + port));
 
 			try {
 				host.Open ();
@@ -368,7 +376,7 @@ namespace MonoTests.System.ServiceModel
 				b.ReceiveTimeout = TimeSpan.FromSeconds (15);
 				UseCase2Proxy proxy = new UseCase2Proxy (
 					b,
-					new EndpointAddress ("http://localhost:37564/"));
+					new EndpointAddress ("http://localhost:" + port + "/"));
 				proxy.Open ();
 				Message req = Message.CreateMessage (MessageVersion.Soap11, "http://tempuri.org/IUseCase2/Echo");
 				Message res = proxy.Echo (req);
@@ -378,7 +386,7 @@ namespace MonoTests.System.ServiceModel
 			} finally {
 				if (host.State == CommunicationState.Opened)
 					host.Close ();
-				EnsurePortNonBlocking (37564);
+				EnsurePortNonBlocking (port);
 			}
 		}
 
@@ -426,9 +434,10 @@ namespace MonoTests.System.ServiceModel
 			Binding bs = new BasicHttpBinding ();
 			bs.SendTimeout = TimeSpan.FromSeconds (5);
 			bs.ReceiveTimeout = TimeSpan.FromSeconds (5);
+			int port = NetworkHelpers.FindFreePort ();
 			// magic name that does not require fully qualified name ...
 			host.AddServiceEndpoint ("IMetadataExchange",
-			        bs, new Uri ("http://localhost:37564"));
+			        bs, new Uri ("http://localhost:" + port));
 			try {
 				host.Open ();
 				// almost equivalent to samples/clientbase/samplecli3.cs
@@ -437,7 +446,7 @@ namespace MonoTests.System.ServiceModel
 				bc.ReceiveTimeout = TimeSpan.FromSeconds (5);
 				MetadataExchangeProxy proxy = new MetadataExchangeProxy (
 					bc,
-					new EndpointAddress ("http://localhost:37564/"));
+					new EndpointAddress ("http://localhost:" + port + "/"));
 				proxy.Open ();
 
 				Message req = Message.CreateMessage (MessageVersion.Soap11, "http://schemas.xmlsoap.org/ws/2004/09/transfer/Get");
@@ -448,7 +457,7 @@ namespace MonoTests.System.ServiceModel
 			} finally {
 				if (host.State == CommunicationState.Opened)
 					host.Close ();
-				EnsurePortNonBlocking (37564);
+				EnsurePortNonBlocking (port);
 			}
 		}
 
@@ -474,7 +483,6 @@ namespace MonoTests.System.ServiceModel
 			}
 		}
 
-#if NET_4_0
 		[Test]
 		public void ConstructorServiceEndpoint ()
 		{
@@ -499,6 +507,82 @@ namespace MonoTests.System.ServiceModel
 			{
 			}
 		}
-#endif
+
+		[SerializableAttribute ()]
+		[XmlTypeAttribute (Namespace = "http://mono.com/")]
+		public class ValueWithXmlAttributes
+		{
+			[XmlElementAttribute (ElementName = "Name")]
+			public string FakeName;
+		}
+
+		[ServiceContractAttribute (Namespace = "http://mono.com/")]
+		public interface IXmlSerializerFormatService
+		{
+			[OperationContractAttribute (Action = "http://mono.com/Send", ReplyAction = "*")]
+			[XmlSerializerFormatAttribute ()]
+			void SendValueWithXmlAttributes (ValueWithXmlAttributes v);
+		}
+
+		class XmlSerializerFormatClient : ClientBase<IXmlSerializerFormatService>
+		{
+			public XmlSerializerFormatClient (Binding binding, EndpointAddress address)
+				: base (binding, address)
+			{
+			}
+
+			public void SendValue ()
+			{
+				var v = new ValueWithXmlAttributes () { FakeName = "name" };
+				base.Channel.SendValueWithXmlAttributes (v);
+			}
+		}
+
+		[Test]
+		public void TestXmlAttributes ()
+		{
+			int port = NetworkHelpers.FindFreePort();
+			var endpoint = new EndpointAddress ("http://localhost:" + port);
+			var binding = new BasicHttpBinding ();
+			var client = new XmlSerializerFormatClient (binding, endpoint);
+
+			var server = new TcpListener (IPAddress.Any, port);
+			server.Start ();
+
+			var acceptTask = server.AcceptTcpClientAsync ();
+
+			var t1 = new Task( () => client.SendValue ());
+			t1.Start();
+
+			if (!acceptTask.Wait (2000))
+				Assert.Fail ("No request from client.");
+
+			var netStream = acceptTask.Result.GetStream ();
+
+			byte[] buffer = new byte [1024];
+			int numBytesRead = 0;
+			var message = new StringBuilder ();
+			
+			do {
+				numBytesRead = netStream.Read (buffer, 0, buffer.Length);
+				var str =  Encoding.UTF8.GetString (buffer, 0, numBytesRead);
+				message.AppendFormat ("{0}", str);
+				if (str.EndsWith ("</s:Envelope>", StringComparison.InvariantCulture))
+					break;
+			} while (numBytesRead > 0);
+
+			var messageStr = message.ToString ();
+			var envelopeIndex = messageStr.IndexOf ("<s:Envelope");
+			if (envelopeIndex < 0)
+				Assert.Fail ("Soap envelope was not received.");
+			
+			var envelope = messageStr.Substring (envelopeIndex);
+
+			var expected = "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><SendValueWithXmlAttributes xmlns=\"http://mono.com/\"><v><Name>name</Name></v></SendValueWithXmlAttributes></s:Body></s:Envelope>";
+
+			Assert.AreEqual (expected, envelope);
+
+			server.Stop ();
+		}
 	}
 }

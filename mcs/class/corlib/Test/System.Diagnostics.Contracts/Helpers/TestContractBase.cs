@@ -1,4 +1,3 @@
-#if NET_4_0
 
 using System;
 using System.Collections.Generic;
@@ -28,11 +27,7 @@ namespace MonoTests.System.Diagnostics.Contracts.Helpers {
 		[SetUp]
 		public void Setup() {
 			// Remove all event handlers from Contract.ContractFailed
-			var eventField = typeof(Contract).GetField("ContractFailed", BindingFlags.Static | BindingFlags.NonPublic);
-			if (eventField == null) {
-				// But in MS.NET it's done this way.
-				eventField = typeof(ContractHelper).GetField("contractFailedEvent", BindingFlags.Static | BindingFlags.NonPublic);
-			}
+			var eventField = typeof(global::System.Runtime.CompilerServices.ContractHelper).GetField("contractFailedEvent", BindingFlags.Static | BindingFlags.NonPublic);
 			eventField.SetValue(null, null);
 		}
 
@@ -45,4 +40,3 @@ namespace MonoTests.System.Diagnostics.Contracts.Helpers {
 	}
 }
 
-#endif

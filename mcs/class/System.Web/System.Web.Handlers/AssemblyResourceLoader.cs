@@ -272,9 +272,7 @@ namespace System.Web.Handlers
 				debug = resourceName.EndsWith (".debug.js", StringComparison.OrdinalIgnoreCase);
 				string dbgTail = debug ? "d" : String.Empty;
 				lookupKey = resourceNameHash + (notifyScriptLoaded ? "t" : "f") + dbgTail;
-#if NET_3_5
 				CheckIfResourceIsCompositeScript (resourceName, ref includeTimeStamp);
-#endif
 #else
 				lookupKey = resourceNameHash;
 #endif
@@ -314,16 +312,12 @@ namespace System.Web.Handlers
 			extra = QueryParamSeparator + "n=" + (notifyScriptLoaded ? "t" : "f");
 #endif
 
-#if TARGET_JVM
-			atime = QueryParamSeparator + "t=" + assemblyName.GetHashCode ();
-#else
 			if (includeTimeStamp) {
 				if (!String.IsNullOrEmpty (assemblyPath) && File.Exists (assemblyPath))
 					atime = QueryParamSeparator + "t=" + File.GetLastWriteTimeUtc (assemblyPath).Ticks;
 				else
 					atime = QueryParamSeparator + "t=" + DateTime.UtcNow.Ticks;
 			}
-#endif
 			string d = HttpUtility.UrlEncode (assemblyNameHash + "_" + resourceNameHash +  (debug ? "_t" : "_f"));
 			string href = HandlerFileName + "?d=" + d + atime + extra;
 			HttpContext ctx = HttpContext.Current;

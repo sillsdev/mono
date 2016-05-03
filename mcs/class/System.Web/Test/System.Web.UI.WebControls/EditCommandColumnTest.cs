@@ -70,10 +70,8 @@ namespace MonoTests.System.Web.UI.WebControls
 			Assert.AreEqual(string.Empty, e.CancelText, "D2");
 			Assert.AreEqual(string.Empty, e.EditText, "D3");
 			Assert.AreEqual(string.Empty, e.UpdateText, "D4");
-#if NET_2_0
 			Assert.AreEqual (true, e.CausesValidation, "CausesValidation");
 			Assert.AreEqual (string.Empty, e.ValidationGroup, "ValidationGroup");
-#endif
 		}
 
 		[Test]
@@ -93,12 +91,10 @@ namespace MonoTests.System.Web.UI.WebControls
 
 			e.UpdateText = "Update? What update?";
 			Assert.AreEqual("Update? What update?", e.UpdateText, "D4");
-#if NET_2_0
 			e.CausesValidation = false;
 			Assert.AreEqual (false, e.CausesValidation, "CausesValidation");
 			e.ValidationGroup = "test";
 			Assert.AreEqual ("test", e.ValidationGroup, "ValidationGroup");
-#endif
 		}
 
 		private string ControlMarkup(Control c) {
@@ -125,11 +121,7 @@ namespace MonoTests.System.Web.UI.WebControls
 		[Test]
 		public void InitializeCell () 
 		{
-#if NET_4_0
 			string origHtml = "<table><tr><td>&nbsp;</td><td>&nbsp;</td><td>one</td><td>two</td><td>three</td></tr><tr><td><a>Edit</a></td><td><input name=\"sucker$ctl02$ctl00\" type=\"submit\" value=\"Bearbeiten\" /></td><td>1</td><td>2</td><td>3</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>";
-#else
-			string origHtml = "<table border=\"0\"><tr><td>&nbsp;</td><td>&nbsp;</td><td>one</td><td>two</td><td>three</td></tr><tr><td><a>Edit</a></td><td><input name=\"sucker$ctl02$ctl00\" type=\"submit\" value=\"Bearbeiten\" /></td><td>1</td><td>2</td><td>3</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>";
-#endif
 			DataGridTest	p = new DataGridTest ();
 			DataTable	table = new DataTable ();
 			EditCommandColumn	e;
@@ -174,11 +166,7 @@ namespace MonoTests.System.Web.UI.WebControls
 		[Test]
 		public void ThisIsADGTest () 
 		{
-#if NET_4_0
 			string origHtml = "<table id=\"sucker_tbl\"><tr><td>&nbsp;</td><td>&nbsp;</td><td>one</td><td>two</td><td>three</td></tr><tr><td><a>Edit</a></td><td><input name=\"sucker$ctl02$ctl00\" type=\"submit\" value=\"Bearbeiten\" /></td><td>1</td><td>2</td><td>3</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>";
-#else
-			string origHtml = "<table border=\"0\" id=\"sucker_tbl\"><tr><td>&nbsp;</td><td>&nbsp;</td><td>one</td><td>two</td><td>three</td></tr><tr><td><a>Edit</a></td><td><input name=\"sucker$ctl02$ctl00\" type=\"submit\" value=\"Bearbeiten\" /></td><td>1</td><td>2</td><td>3</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>";
-#endif
 			DataGridTest	p = new DataGridTest ();
 			DataTable	table = new DataTable ();
 			EditCommandColumn	e;
@@ -232,11 +220,7 @@ namespace MonoTests.System.Web.UI.WebControls
 		[Test]
 		public void InitializeEditCell () 
 		{
-#if NET_4_0
 			string origHtml = "<table><tr><td>&nbsp;</td><td>&nbsp;</td><td>one</td><td>two</td><td>three</td></tr><tr><td><a>Update</a>&nbsp;<a>Cancel</a></td><td><input name=\"sucker$ctl02$ctl00\" type=\"submit\" value=\"Refresh\" />&nbsp;<input name=\"sucker$ctl02$ctl01\" type=\"submit\" value=\"Abbrechen\" /></td><td><input name=\"sucker$ctl02$ctl02\" type=\"text\" value=\"1\" /></td><td><input name=\"sucker$ctl02$ctl03\" type=\"text\" value=\"2\" /></td><td><input name=\"sucker$ctl02$ctl04\" type=\"text\" value=\"3\" /></td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>";
-#else
-			string origHtml = "<table border=\"0\"><tr><td>&nbsp;</td><td>&nbsp;</td><td>one</td><td>two</td><td>three</td></tr><tr><td><a>Update</a>&nbsp;<a>Cancel</a></td><td><input name=\"sucker$ctl02$ctl00\" type=\"submit\" value=\"Refresh\" />&nbsp;<input name=\"sucker$ctl02$ctl01\" type=\"submit\" value=\"Abbrechen\" /></td><td><input name=\"sucker$ctl02$ctl02\" type=\"text\" value=\"1\" /></td><td><input name=\"sucker$ctl02$ctl03\" type=\"text\" value=\"2\" /></td><td><input name=\"sucker$ctl02$ctl04\" type=\"text\" value=\"3\" /></td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>";
-#endif
 			DataGridTest	p = new DataGridTest ();
 			DataTable	table = new DataTable ();
 			EditCommandColumn	e;
@@ -349,7 +333,6 @@ namespace MonoTests.System.Web.UI.WebControls
 				"</tr></table>", markup, "I2");
 		}
 
-#if NET_2_0
 		[Test]
 		[Category ("NunitWeb")]
 		public void Validation_ValidatingValid () 
@@ -615,11 +598,9 @@ namespace MonoTests.System.Web.UI.WebControls
 
 			private Control[] templateControls;
 		}
-#endif
 	}
 }
 
-#if NET_2_0
 #region MyObjectDS
 public class MyObjectDS
 {
@@ -650,4 +631,3 @@ public class MyObjectDS
 	}
 }
 #endregion
-#endif

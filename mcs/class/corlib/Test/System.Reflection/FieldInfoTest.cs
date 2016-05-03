@@ -31,9 +31,9 @@
 using System;
 using System.Threading;
 using System.Reflection;
-#if !TARGET_JVM && !MONOTOUCH
+#if !MONOTOUCH
 using System.Reflection.Emit;
-#endif // TARGET_JVM
+#endif
 using System.Runtime.InteropServices;
 
 using NUnit.Framework;
@@ -58,13 +58,13 @@ namespace MonoTests.System.Reflection
 
 		[MarshalAs(UnmanagedType.ByValTStr, SizeConst=100)]
 		public string f2;
-
+#if FEATURE_COMINTEROP
 		[MarshalAs(UnmanagedType.CustomMarshaler, MarshalTypeRef=typeof (Marshal1), MarshalCookie="5")]
 		public int f3;
 
 		[MarshalAs (UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof (Marshal1), MarshalCookie = "5")]
 		public object f4;
-
+#endif
 		[Obsolete]
 		public int f5;
 	}
@@ -73,6 +73,8 @@ namespace MonoTests.System.Reflection
 	{
 	}
 
+	// Disable this warning, as the purpose of this struct is to poke at the internal via reflection
+	#pragma warning disable 649
 	class FieldInvokeMatrix
 	{
 		public Byte field_Byte;
@@ -102,6 +104,7 @@ namespace MonoTests.System.Reflection
 		public Int64Enum field_Int64Enum;
 		public UInt64Enum field_UInt64Enum;
 	}
+	#pragma warning restore 649
 
 	public enum ByteEnum : byte
 	{
@@ -168,6 +171,15 @@ namespace MonoTests.System.Reflection
 		}
 
 		[Test]
+		public void FieldInfoModule ()
+		{
+			Type type = typeof (FieldInfoTest);
+			FieldInfo field = type.GetField ("i");
+
+			Assert.AreEqual (type.Module, field.Module);
+		}
+
+		[Test]
 		public void GetCustomAttributes ()
 		{
 			object [] attrs;
@@ -229,7 +241,6 @@ namespace MonoTests.System.Reflection
 			}
 		}
 
-#if NET_2_0
 		[Test] // GetFieldFromHandle (RuntimeFieldHandle, RuntimeTypeHandle)
 		public void GetFieldFromHandle2_DeclaringType_Zero ()
 		{
@@ -312,7 +323,6 @@ namespace MonoTests.System.Reflection
 
 			FieldInfo fi2 = FieldInfo.GetFieldFromHandle (fh, th);
 		}
-#endif
 
 		[Test]
 		public void PseudoCustomAttributes ()
@@ -346,10 +356,12 @@ namespace MonoTests.System.Reflection
 			Assert.AreEqual (UnmanagedType.ByValTStr, attr.Value, "#E2");
 			Assert.AreEqual (100, attr.SizeConst, "#E3");
 
+#if FEATURE_COMINTEROP
 			attrs = typeof (Class2).GetField ("f3").GetCustomAttributes (true);
 			Assert.AreEqual (1, attrs.Length, "#F1");
 			attr = (MarshalAsAttribute) attrs [0];
 			Assert.AreEqual (UnmanagedType.CustomMarshaler, attr.Value, "#F2");
+
 			Assert.AreEqual ("5", attr.MarshalCookie, "#F3");
 			Assert.AreEqual (typeof (Marshal1), Type.GetType (attr.MarshalType), "#F4");
 
@@ -374,12 +386,16 @@ namespace MonoTests.System.Reflection
 			Assert.AreEqual (UnmanagedType.CustomMarshaler, attr.Value, "#I2");
 			Assert.AreEqual ("5", attr.MarshalCookie, "#I3");
 			Assert.AreEqual (typeof (Marshal1), Type.GetType (attr.MarshalType), "#I4");
+#endif
 		}
 
+		// Disable "field not used warning", this is intended.
+#pragma warning disable 649
 		class Foo {
 			public static int static_field;
 			public int field;
 		}
+#pragma warning restore 649
 
 		[ExpectedException (typeof (ArgumentException))]
 		public void GetValueWrongObject ()
@@ -397,7 +413,6 @@ namespace MonoTests.System.Reflection
 			typeof (Foo).GetField ("static_field").GetValue (typeof (int));
 		}
 
-#if !TARGET_JVM // ReflectionOnlyLoad not supported for TARGET_JVM
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))]
 		public void GetValueOnRefOnlyAssembly ()
@@ -417,7 +432,6 @@ namespace MonoTests.System.Reflection
 			FieldInfo f = t.GetField ("RefOnlyField", BindingFlags.Static | BindingFlags.NonPublic);
 			f.SetValue (null, 8);
 		}
-#endif // TARGET_JVM
 
 		const int literal = 42;
 
@@ -453,7 +467,6 @@ namespace MonoTests.System.Reflection
 			Assert.AreEqual (null, fi2.GetValue (t));
 		}
 	
-#if !TARGET_JVM // TypeBuilder not supported for TARGET_JVM
 		[Test]
 		public void NonPublicTests ()
 		{
@@ -468,7 +481,6 @@ namespace MonoTests.System.Reflection
 			fi = t.GetField ("protectedField", BindingFlags.NonPublic | BindingFlags.Instance);
 			Assert.IsNotNull (fi);
 		}
-#endif // TARGET_JVM
 
 		[Test]
 		public void GetRawDefaultValue ()
@@ -517,6 +529,10 @@ namespace MonoTests.System.Reflection
 		[Test]
 		public unsafe void GetSetValuePointers ()
 		{
+			Pointer p0 = (Pointer)typeof (FieldInfoTest).GetField ("ip").GetValue (null);
+			int *p0i = (int*)Pointer.Unbox (p0);
+			Assert.AreEqual (IntPtr.Zero, new IntPtr (p0i));
+
 			int i = 5;
 			void *p = &i;
 			typeof (FieldInfoTest).GetField ("ip").SetValue (null, (IntPtr)p);
@@ -1325,6 +1341,27 @@ namespace MonoTests.System.Reflection
 			Throws (field, instance, new int[] { 3 });
 		}
 
+		struct TestFields {
+			public int MaxValue;
+			public string str;
+		}
+
+		[Test]
+		public void SetValueDirect ()
+		{
+			TestFields fields = new TestFields { MaxValue = 1234, str = "A" };
+
+			FieldInfo info = fields.GetType ().GetField ("MaxValue");
+			TypedReference reference = __makeref(fields);
+			info.SetValueDirect (reference, 4096);
+			Assert.AreEqual (4096, fields.MaxValue);
+
+			info = fields.GetType ().GetField ("str");
+			reference = __makeref(fields);
+			info.SetValueDirect (reference, "B");
+			Assert.AreEqual ("B", fields.str);
+		}
+
 		public IntEnum PPP;
 
 		public class Foo<T>
@@ -1363,16 +1400,24 @@ namespace MonoTests.System.Reflection
 
 	}
 
+	// We do not refernece the field, that is expected
+#pragma warning disable 169
 	// Helper classes
 	class RefOnlyFieldClass 
 	{
 		// Helper property
 		static int RefOnlyField;
 	}
-
+#pragma warning restore 169
+	
 	class NonPublicFieldClass
 	{
 		protected int protectedField;
+
+		public void Dummy ()
+		{
+			protectedField = 1;
+		}
 	}
 
 	public class FieldInfoTest<T>

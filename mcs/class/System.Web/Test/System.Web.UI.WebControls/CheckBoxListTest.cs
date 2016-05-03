@@ -63,7 +63,6 @@ namespace MonoTests.System.Web.UI.WebControls {
 		}
 
 		
-#if NET_2_0
 		public new bool HasFooter
 		{
 			get
@@ -121,7 +120,6 @@ namespace MonoTests.System.Web.UI.WebControls {
 			base.RenderItem(itemType,repeatIndex,repeatInfo,writer);
 			return writer.InnerWriter.ToString ();
 		}
-#endif
 	}
 
 	[TestFixture]
@@ -150,28 +148,20 @@ namespace MonoTests.System.Web.UI.WebControls {
 			Assert.AreEqual (c.RepeatLayout,
 					RepeatLayout.Table, "A5");
 			Assert.AreEqual (c.TextAlign, TextAlign.Right, "A6");
-#if NET_2_0
 			Assert.AreEqual (false, c.HasFooter, "HasFooter");
 			Assert.AreEqual (false, c.HasHeader, "HasHeader");
 			Assert.AreEqual (false, c.HasSeparators, "HasSeparators");
 			Assert.AreEqual (0, c.RepeatedItemCount, "RepeatedItemCount");
 			Assert.AreEqual (null, c.DoGetItemStyle (ListItemType.Item, 0), "GetItemStyle");
-#endif
 		}
 
-#if NET_2_0
 		[Test]
 		public void CheckBoxList_Bug377703_1 ()
 		{
 			WebTest t = new WebTest ("CheckBoxList_Bug377703_1.aspx");
 			t.Invoker = PageInvoker.CreateOnInit (CheckBoxList_Bug377703_1_OnInit);
-#if NET_4_0
 			string origHtmlFirst = "<table id=\"cbxl1\">\r\n\t<tr>\r\n\t\t<td><input id=\"cbxl1_0\" type=\"checkbox\" name=\"cbxl1$0\" value=\"x\" /><label for=\"cbxl1_0\">x</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl1_1\" type=\"checkbox\" name=\"cbxl1$1\" value=\"y\" /><label for=\"cbxl1_1\">y</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl1_2\" type=\"checkbox\" name=\"cbxl1$2\" value=\"z\" /><label for=\"cbxl1_2\">z</label></td>\r\n\t</tr>\r\n</table>";
 			string origHtmlSecond = "<table id=\"cbxl1\">\r\n\t<tr>\r\n\t\t<td><input id=\"cbxl1_0\" type=\"checkbox\" name=\"cbxl1$0\" checked=\"checked\" value=\"x\" /><label for=\"cbxl1_0\">x</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl1_1\" type=\"checkbox\" name=\"cbxl1$1\" value=\"y\" /><label for=\"cbxl1_1\">y</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl1_2\" type=\"checkbox\" name=\"cbxl1$2\" value=\"z\" /><label for=\"cbxl1_2\">z</label></td>\r\n\t</tr>\r\n</table>";
-#else
-			string origHtmlFirst = "<table id=\"cbxl1\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><input id=\"cbxl1_0\" type=\"checkbox\" name=\"cbxl1$0\" /><label for=\"cbxl1_0\">x</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl1_1\" type=\"checkbox\" name=\"cbxl1$1\" /><label for=\"cbxl1_1\">y</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl1_2\" type=\"checkbox\" name=\"cbxl1$2\" /><label for=\"cbxl1_2\">z</label></td>\r\n\t</tr>\r\n</table>";
-			string origHtmlSecond = "<table id=\"cbxl1\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><input id=\"cbxl1_0\" type=\"checkbox\" name=\"cbxl1$0\" checked=\"checked\" /><label for=\"cbxl1_0\">x</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl1_1\" type=\"checkbox\" name=\"cbxl1$1\" /><label for=\"cbxl1_1\">y</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl1_2\" type=\"checkbox\" name=\"cbxl1$2\" /><label for=\"cbxl1_2\">z</label></td>\r\n\t</tr>\r\n</table>";
-#endif
 			string html = t.Run ();
 			string listHtml = HtmlDiff.GetControlFromPageHtml (html);
 
@@ -220,15 +210,9 @@ namespace MonoTests.System.Web.UI.WebControls {
 		{
 			WebTest t = new WebTest ("CheckBoxList_Bug377703_2.aspx");
 			t.Invoker = PageInvoker.CreateOnInit (CheckBoxList_Bug377703_2_OnInit);
-#if NET_4_0
 			string origHtmlFirst = "<table id=\"cbxl2\">\r\n\t<tr>\r\n\t\t<td><input id=\"cbxl2_0\" type=\"checkbox\" name=\"cbxl2$0\" value=\"x\" /><label for=\"cbxl2_0\">x</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl2_1\" type=\"checkbox\" name=\"cbxl2$1\" value=\"y\" /><label for=\"cbxl2_1\">y</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl2_2\" type=\"checkbox\" name=\"cbxl2$2\" value=\"z\" /><label for=\"cbxl2_2\">z</label></td>\r\n\t</tr>\r\n</table>";
 			string origHtmlSecond = "<table id=\"cbxl2\" class=\"aspNetDisabled\">\r\n\t<tr>\r\n\t\t<td><span class=\"aspNetDisabled\"><input id=\"cbxl2_0\" type=\"checkbox\" name=\"cbxl2$0\" checked=\"checked\" disabled=\"disabled\" value=\"x\" /><label for=\"cbxl2_0\">x</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span class=\"aspNetDisabled\"><input id=\"cbxl2_1\" type=\"checkbox\" name=\"cbxl2$1\" disabled=\"disabled\" value=\"y\" /><label for=\"cbxl2_1\">y</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span class=\"aspNetDisabled\"><input id=\"cbxl2_2\" type=\"checkbox\" name=\"cbxl2$2\" checked=\"checked\" disabled=\"disabled\" value=\"z\" /><label for=\"cbxl2_2\">z</label></span></td>\r\n\t</tr>\r\n</table>";
 			string origHtmlThird = "<table id=\"cbxl2\" class=\"aspNetDisabled\">\r\n\t<tr>\r\n\t\t<td><span class=\"aspNetDisabled\"><input id=\"cbxl2_0\" type=\"checkbox\" name=\"cbxl2$0\" checked=\"checked\" disabled=\"disabled\" value=\"x\" /><label for=\"cbxl2_0\">x</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span class=\"aspNetDisabled\"><input id=\"cbxl2_1\" type=\"checkbox\" name=\"cbxl2$1\" disabled=\"disabled\" value=\"y\" /><label for=\"cbxl2_1\">y</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span class=\"aspNetDisabled\"><input id=\"cbxl2_2\" type=\"checkbox\" name=\"cbxl2$2\" checked=\"checked\" disabled=\"disabled\" value=\"z\" /><label for=\"cbxl2_2\">z</label></span></td>\r\n\t</tr>\r\n</table>";
-#else
-			string origHtmlFirst = "<table id=\"cbxl2\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><input id=\"cbxl2_0\" type=\"checkbox\" name=\"cbxl2$0\" /><label for=\"cbxl2_0\">x</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl2_1\" type=\"checkbox\" name=\"cbxl2$1\" /><label for=\"cbxl2_1\">y</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"cbxl2_2\" type=\"checkbox\" name=\"cbxl2$2\" /><label for=\"cbxl2_2\">z</label></td>\r\n\t</tr>\r\n</table>";
-			string origHtmlSecond = "<table id=\"cbxl2\" disabled=\"disabled\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><span disabled=\"disabled\"><input id=\"cbxl2_0\" type=\"checkbox\" name=\"cbxl2$0\" checked=\"checked\" disabled=\"disabled\" /><label for=\"cbxl2_0\">x</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span disabled=\"disabled\"><input id=\"cbxl2_1\" type=\"checkbox\" name=\"cbxl2$1\" disabled=\"disabled\" /><label for=\"cbxl2_1\">y</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span disabled=\"disabled\"><input id=\"cbxl2_2\" type=\"checkbox\" name=\"cbxl2$2\" checked=\"checked\" disabled=\"disabled\" /><label for=\"cbxl2_2\">z</label></span></td>\r\n\t</tr>\r\n</table>";
-			string origHtmlThird = "<table id=\"cbxl2\" disabled=\"disabled\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><span disabled=\"disabled\"><input id=\"cbxl2_0\" type=\"checkbox\" name=\"cbxl2$0\" checked=\"checked\" disabled=\"disabled\" /><label for=\"cbxl2_0\">x</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span disabled=\"disabled\"><input id=\"cbxl2_1\" type=\"checkbox\" name=\"cbxl2$1\" disabled=\"disabled\" /><label for=\"cbxl2_1\">y</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span disabled=\"disabled\"><input id=\"cbxl2_2\" type=\"checkbox\" name=\"cbxl2$2\" checked=\"checked\" disabled=\"disabled\" /><label for=\"cbxl2_2\">z</label></span></td>\r\n\t</tr>\r\n</table>";
-#endif
 			string html = t.Run ();
 			string listHtml = HtmlDiff.GetControlFromPageHtml (html);
 
@@ -281,11 +265,7 @@ namespace MonoTests.System.Web.UI.WebControls {
 		{
 			WebTest t = new WebTest ("CheckBoxList_Bug578770.aspx");
 			t.Invoker = PageInvoker.CreateOnInit (CheckBoxList_Bug578770_OnInit);
-#if NET_4_0
 			string origHtml = "<table id=\"test\">\r\n\t<tr>\r\n\t\t<td><span class=\"aspNetDisabled\"><input id=\"test_0\" type=\"checkbox\" name=\"test$0\" disabled=\"disabled\" value=\"Sun\" /><label for=\"test_0\">Sun</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span><input id=\"test_1\" type=\"checkbox\" name=\"test$1\" value=\"Mon\" /><label for=\"test_1\">Mon</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span><input id=\"test_2\" type=\"checkbox\" name=\"test$2\" value=\"Tue\" /><label for=\"test_2\">Tue</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span><input id=\"test_3\" type=\"checkbox\" name=\"test$3\" value=\"Wed\" /><label for=\"test_3\">Wed</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span><input id=\"test_4\" type=\"checkbox\" name=\"test$4\" value=\"Thu\" /><label for=\"test_4\">Thu</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span><input id=\"test_5\" type=\"checkbox\" name=\"test$5\" value=\"Fri\" /><label for=\"test_5\">Fri</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><span><input id=\"test_6\" type=\"checkbox\" name=\"test$6\" value=\"Sat\" /><label for=\"test_6\">Sat</label></span></td>\r\n\t</tr>\r\n</table>";
-#else
-			string origHtml = "<table id=\"test\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><span disabled=\"disabled\"><input id=\"test_0\" type=\"checkbox\" name=\"test$0\" disabled=\"disabled\" /><label for=\"test_0\">Sun</label></span></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"test_1\" type=\"checkbox\" name=\"test$1\" /><label for=\"test_1\">Mon</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"test_2\" type=\"checkbox\" name=\"test$2\" /><label for=\"test_2\">Tue</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"test_3\" type=\"checkbox\" name=\"test$3\" /><label for=\"test_3\">Wed</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"test_4\" type=\"checkbox\" name=\"test$4\" /><label for=\"test_4\">Thu</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"test_5\" type=\"checkbox\" name=\"test$5\" /><label for=\"test_5\">Fri</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"test_6\" type=\"checkbox\" name=\"test$6\" /><label for=\"test_6\">Sat</label></td>\r\n\t</tr>\r\n</table>";
-#endif
 			string html = t.Run ();
 			string listHtml = HtmlDiff.GetControlFromPageHtml (html);
 
@@ -305,15 +285,9 @@ namespace MonoTests.System.Web.UI.WebControls {
 		public void CheckBoxList_Bug600415 ()
 		{
 			WebTest t = new WebTest ("CheckBoxList_Bug600415.aspx");
-#if NET_4_0
 			string origHtmlFirst = "<table id=\"checkBoxList\">\r\n\t<tr>\r\n\t\t<td><input id=\"checkBoxList_0\" type=\"checkbox\" name=\"checkBoxList$0\" checked=\"checked\" value=\"Item 1\" /><label for=\"checkBoxList_0\">Item 1</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_1\" type=\"checkbox\" name=\"checkBoxList$1\" value=\"Item 2\" /><label for=\"checkBoxList_1\">Item 2</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_2\" type=\"checkbox\" name=\"checkBoxList$2\" checked=\"checked\" value=\"Item 3\" /><label for=\"checkBoxList_2\">Item 3</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_3\" type=\"checkbox\" name=\"checkBoxList$3\" value=\"Item 4\" /><label for=\"checkBoxList_3\">Item 4</label></td>\r\n\t</tr>\r\n</table>";
 			string origHtmlSecond = "<table id=\"checkBoxList\">\r\n\t<tr>\r\n\t\t<td><input id=\"checkBoxList_0\" type=\"checkbox\" name=\"checkBoxList$0\" value=\"Item 1\" /><label for=\"checkBoxList_0\">Item 1</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_1\" type=\"checkbox\" name=\"checkBoxList$1\" value=\"Item 2\" /><label for=\"checkBoxList_1\">Item 2</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_2\" type=\"checkbox\" name=\"checkBoxList$2\" value=\"Item 3\" /><label for=\"checkBoxList_2\">Item 3</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_3\" type=\"checkbox\" name=\"checkBoxList$3\" value=\"Item 4\" /><label for=\"checkBoxList_3\">Item 4</label></td>\r\n\t</tr>\r\n</table>";
 			string origHtmlThird = "<table id=\"checkBoxList\">\r\n\t<tr>\r\n\t\t<td><input id=\"checkBoxList_0\" type=\"checkbox\" name=\"checkBoxList$0\" checked=\"checked\" value=\"Item 1\" /><label for=\"checkBoxList_0\">Item 1</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_1\" type=\"checkbox\" name=\"checkBoxList$1\" checked=\"checked\" value=\"Item 2\" /><label for=\"checkBoxList_1\">Item 2</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_2\" type=\"checkbox\" name=\"checkBoxList$2\" checked=\"checked\" value=\"Item 3\" /><label for=\"checkBoxList_2\">Item 3</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_3\" type=\"checkbox\" name=\"checkBoxList$3\" checked=\"checked\" value=\"Item 4\" /><label for=\"checkBoxList_3\">Item 4</label></td>\r\n\t</tr>\r\n</table>";
-#else
-			string origHtmlFirst = "<table id=\"checkBoxList\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><input id=\"checkBoxList_0\" type=\"checkbox\" name=\"checkBoxList$0\" checked=\"checked\" /><label for=\"checkBoxList_0\">Item 1</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_1\" type=\"checkbox\" name=\"checkBoxList$1\" /><label for=\"checkBoxList_1\">Item 2</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_2\" type=\"checkbox\" name=\"checkBoxList$2\" checked=\"checked\" /><label for=\"checkBoxList_2\">Item 3</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_3\" type=\"checkbox\" name=\"checkBoxList$3\" /><label for=\"checkBoxList_3\">Item 4</label></td>\r\n\t</tr>\r\n</table>";
-			string origHtmlSecond = "<table id=\"checkBoxList\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><input id=\"checkBoxList_0\" type=\"checkbox\" name=\"checkBoxList$0\" /><label for=\"checkBoxList_0\">Item 1</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_1\" type=\"checkbox\" name=\"checkBoxList$1\" /><label for=\"checkBoxList_1\">Item 2</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_2\" type=\"checkbox\" name=\"checkBoxList$2\" /><label for=\"checkBoxList_2\">Item 3</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_3\" type=\"checkbox\" name=\"checkBoxList$3\" /><label for=\"checkBoxList_3\">Item 4</label></td>\r\n\t</tr>\r\n</table>";
-			string origHtmlThird = "<table id=\"checkBoxList\" border=\"0\">\r\n\t<tr>\r\n\t\t<td><input id=\"checkBoxList_0\" type=\"checkbox\" name=\"checkBoxList$0\" checked=\"checked\" /><label for=\"checkBoxList_0\">Item 1</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_1\" type=\"checkbox\" name=\"checkBoxList$1\" checked=\"checked\" /><label for=\"checkBoxList_1\">Item 2</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_2\" type=\"checkbox\" name=\"checkBoxList$2\" checked=\"checked\" /><label for=\"checkBoxList_2\">Item 3</label></td>\r\n\t</tr><tr>\r\n\t\t<td><input id=\"checkBoxList_3\" type=\"checkbox\" name=\"checkBoxList$3\" checked=\"checked\" /><label for=\"checkBoxList_3\">Item 4</label></td>\r\n\t</tr>\r\n</table>";
-#endif
 			string html = t.Run ();
 			string listHtml = HtmlDiff.GetControlFromPageHtml (html);
 
@@ -391,13 +365,8 @@ namespace MonoTests.System.Web.UI.WebControls {
 		[Test]
 		public void RenderItem ()
 		{
-#if NET_4_0
 			string origHtml1 = "<input id=\"0\" type=\"checkbox\" name=\"0\" value=\"value1\" /><label for=\"0\">item1</label>";
 			string origHtml2 = "<input id=\"1\" type=\"checkbox\" name=\"1\" value=\"value2\" /><label for=\"1\">item2</label>";
-#else
-			string origHtml1 = "<input id=\"0\" type=\"checkbox\" name=\"0\" /><label for=\"0\">item1</label>";
-			string origHtml2 = "<input id=\"1\" type=\"checkbox\" name=\"1\" /><label for=\"1\">item2</label>";
-#endif
 			CheckBoxListPoker c = new CheckBoxListPoker ();
 			ListItem l1 = new ListItem ("item1", "value1");
 			ListItem l2 = new ListItem ("item2", "value2");
@@ -422,7 +391,6 @@ namespace MonoTests.System.Web.UI.WebControls {
 			Assert.AreEqual (2, c.RepeatedItemCount, "RepeatedItemCount#2");
 		}
 
-#endif
 
 
 		[Test]
@@ -567,11 +535,7 @@ namespace MonoTests.System.Web.UI.WebControls {
 		[Test]
 		public void RepeatInfoRenderItem ()
 		{
-#if NET_4_0
 			string origHtml = "<input id=\"0\" type=\"checkbox\" name=\"0\" value=\"one\" /><label for=\"0\">one</label>";
-#else
-			string origHtml = "<input id=\"0\" type=\"checkbox\" name=\"0\" /><label for=\"0\">one</label>";
-#endif
 			StringWriter sw = new StringWriter ();
 			HtmlTextWriter tw = new HtmlTextWriter (sw);
 			CheckBoxList c = new CheckBoxList ();
@@ -629,48 +593,25 @@ namespace MonoTests.System.Web.UI.WebControls {
 		{
 			CheckBoxList c = new CheckBoxList ();
 
-#if NET_2_0
 			Render (c, "", "A1");
-#else
-			Render (c, "<table border=\"0\">\n\n</table>", "A1");
-#endif
 			c.CellPadding = 1;
-#if NET_2_0
 			Render (c, "", "A2");
-#else
-			Render (c, "<table border=\"0\" cellpadding=\"1\">\n\n</table>", "A2");
-#endif
 
 			c = new CheckBoxList ();
 			c.CellPadding = 1;
-#if NET_2_0
 			Render (c, "", "A3");
-#else
-			Render (c, "<table border=\"0\" cellpadding=\"1\">\n\n</table>", "A3");
-#endif
 
 			c = new CheckBoxList ();
 			c.TextAlign = TextAlign.Left;
-#if NET_2_0
 			Render (c, "", "A4");
-#else
-			Render (c, "<table border=\"0\">\n\n</table>", "A4");
-#endif
 		}
 
 		[Test]
-#if NET_2_0
 		[Category("NotDotNet")] // MS's implementation throws NRE's from these
-#endif
 		public void Render ()
 		{
-#if NET_4_0
 			string origHtml1 = "<table>\n\t<tr>\n\t\t<td><input id=\"0\" name=\"0\" type=\"checkbox\" value=\"foo\"/><label for=\"0\">foo</label></td>\n\t</tr>\n</table>";
 			string origHtml2 = "<table>\n\t<tr>\n\t\t<td><input id=\"0\" name=\"0\" type=\"checkbox\" value=\"foo\"/><label for=\"0\">foo</label></td>\n\t</tr>\n</table>";
-#else
-			string origHtml1 = "<table border=\"0\">\n\t<tr>\n\t\t<td><input id=\"0\" name=\"0\" type=\"checkbox\" /><label for=\"0\">foo</label></td>\n\t</tr>\n</table>";
-			string origHtml2 = "<table border=\"0\">\n\t<tr>\n\t\t<td><input id=\"0\" name=\"0\" type=\"checkbox\" /><label for=\"0\">foo</label></td>\n\t</tr>\n</table>";
-#endif
 			CheckBoxList c;
 			c = new CheckBoxList ();
 			c.Items.Add ("foo");
@@ -684,56 +625,35 @@ namespace MonoTests.System.Web.UI.WebControls {
 
 		// bug 51648
 		[Test]
-#if NET_2_0
 		[Category("NotDotNet")] // MS's implementation throws NRE's from these
-#endif
 		public void TestTabIndex ()
 		{
 			CheckBoxList c = new CheckBoxList ();
 			c.TabIndex = 5;
 			c.Items.Add ("Item1");
-#if NET_4_0
 			string exp = @"<table>
 	<tr>
 		<td><input id=""0"" name=""0"" tabindex=""5"" type=""checkbox"" value=""Item1""/><label for=""0"">Item1</label></td>
 	</tr>
 </table>";
-#else
-			string exp = @"<table border=""0"">
-	<tr>
-		<td><input id=""0"" name=""0"" tabindex=""5"" type=""checkbox"" /><label for=""0"">Item1</label></td>
-	</tr>
-</table>";
-#endif
 			Render (c, exp, "B1");
 		}
 
 		// bug 48802
 		[Test]
-#if NET_2_0
 		[Category("NotDotNet")] // MS's implementation throws NRE's from these
-#endif
 		public void TestDisabled ()
 		{
 			CheckBoxList c = new CheckBoxList ();
 			c.Enabled = false;
 			c.Items.Add ("Item1");
-#if NET_4_0
 			string exp = @"<table class=""aspNetDisabled"">
 	<tr>
 		<td><span class=""aspNetDisabled""><input disabled=""disabled"" id=""0"" name=""0"" type=""checkbox"" value=""Item1""/><label for=""0"">Item1</label></span></td>
 	</tr>
 </table>";
-#else
-			string exp = @"<table border=""0"" disabled=""disabled"">
-	<tr>
-		<td><span disabled=""disabled""><input disabled=""disabled"" id=""0"" name=""0"" type=""checkbox"" /><label for=""0"">Item1</label></span></td>
-	</tr>
-</table>";
-#endif
 			Render (c, exp, "C1");
 		}	
-#if NET_2_0
 	class TestCheckBoxList : CheckBoxList
 	{
 	    public void CallVerifyMultiSelect()
@@ -752,7 +672,6 @@ namespace MonoTests.System.Web.UI.WebControls {
 		{
 			WebTest.Unload ();
 		}
-#endif
 	}
 }
 

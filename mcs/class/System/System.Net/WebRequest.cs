@@ -39,9 +39,9 @@ using System.Net.Configuration;
 using System.Net.Security;
 using System.Net.Cache;
 using System.Security.Principal;
-#if NET_4_5
 using System.Threading.Tasks;
-#endif
+using System.Text.RegularExpressions;
+using Mono.Net;
 
 #if NET_2_1
 using ConfigurationException = System.ArgumentException;
@@ -211,6 +211,13 @@ namespace System.Net
 				isDefaultWebProxySet = true;
 			}
 		}
+
+		internal static IWebProxy InternalDefaultWebProxy {
+			get {
+				return DefaultWebProxy;
+			}
+		}
+
 		
 		[MonoTODO("Needs to respect Module, Proxy.AutoDetect, and Proxy.ScriptLocation config settings")]
 		static IWebProxy GetDefaultWebProxy ()
@@ -286,7 +293,6 @@ namespace System.Net
 				throw new ArgumentNullException ("requestUri");
 			return GetCreator (requestUri.Scheme).Create (requestUri);
 		}
-#if NET_4_0
 		static HttpWebRequest SharedCreateHttp (Uri uri)
 		{
 			if (uri.Scheme != "http" && uri.Scheme != "https")
@@ -308,7 +314,6 @@ namespace System.Net
 				throw new ArgumentNullException ("requestUri");
 			return SharedCreateHttp (requestUri);
 		}
-#endif
 		public virtual Stream EndGetRequestStream (IAsyncResult asyncResult)
 		{
 			throw GetMustImplement ();
@@ -329,6 +334,19 @@ namespace System.Net
 			throw GetMustImplement ();
 		}
 		
+		// Takes an ArrayList of fileglob-formatted strings and returns an array of Regex-formatted strings
+		private static string[] CreateBypassList (ArrayList al)
+		{
+			string[] result = al.ToArray (typeof (string)) as string[];
+			for (int c = 0; c < result.Length; c++)
+			{
+				result [c] = "^" +
+					Regex.Escape (result [c]).Replace (@"\*", ".*").Replace (@"\?", ".") +
+					"$";
+			}
+			return result;
+		}
+
 		[MonoTODO("Look in other places for proxy config info")]
 		public static IWebProxy GetSystemWebProxy ()
 		{
@@ -372,7 +390,7 @@ namespace System.Net
 						}
 					}
 					
-					return new WebProxy (strHttpProxy, bBypassOnLocal, al.ToArray (typeof(string)) as string[]);
+					return new WebProxy (strHttpProxy, bBypassOnLocal, CreateBypassList (al));
 				}
 			} else {
 #endif
@@ -422,7 +440,7 @@ namespace System.Net
 							}
 						}
 						
-						return new WebProxy (uri, bBypassOnLocal, al.ToArray (typeof(string)) as string[]);
+						return new WebProxy (uri, bBypassOnLocal, CreateBypassList (al));
 					} catch (UriFormatException) {
 					}
 				}
@@ -516,7 +534,6 @@ namespace System.Net
 			prefixes [prefix] = o;
 		}
 
-#if NET_4_5
 		public virtual Task<Stream> GetRequestStreamAsync ()
 		{
 			return Task<Stream>.Factory.FromAsync (BeginGetRequestStream, EndGetRequestStream, null);
@@ -526,7 +543,6 @@ namespace System.Net
 		{
 			return Task<WebResponse>.Factory.FromAsync (BeginGetResponse, EndGetResponse, null);
 		}
-#endif
 
 	}
 }

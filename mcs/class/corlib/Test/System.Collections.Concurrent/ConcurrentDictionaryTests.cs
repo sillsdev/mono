@@ -1,4 +1,3 @@
-#if NET_4_0
 // ConcurrentDictionaryTests.cs
 //
 // Copyright (c) 2008 Jérémie "Garuma" Laval
@@ -353,6 +352,18 @@ namespace MonoTests.System.Collections.Concurrent
 			} catch (ArgumentNullException ex) {
 			}
 		}
+		
+		[Test]
+		public void ContainsKeyPairTest ()
+		{
+			var validKeyPair = new KeyValuePair<string, string> ("key", "validValue");
+			var wrongKeyPair = new KeyValuePair<string, string> ("key", "wrongValue");
+
+			IDictionary<string, string> dict = new ConcurrentDictionary<string, string> ();
+			dict.Add (validKeyPair);
+
+			Assert.IsTrue (dict.Contains (validKeyPair));
+			Assert.IsFalse (dict.Contains (wrongKeyPair));
+		}
 	}
 }
-#endif

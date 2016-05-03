@@ -35,6 +35,8 @@ using NUnit.Framework;
 
 using WebServiceMoonlightTest.ServiceReference1;
 
+using MonoTests.Helpers;
+
 namespace MonoTests.System.ServiceModel.Dispatcher
 {
 	[TestFixture]
@@ -44,7 +46,8 @@ namespace MonoTests.System.ServiceModel.Dispatcher
 		public void Bug652331_2 () // test in one of the comment
 		{
 			// Init service
-			ServiceHost serviceHost = new ServiceHost (typeof (Service1), new Uri ("http://localhost:37564/Service1"));
+			int port = NetworkHelpers.FindFreePort ();
+			ServiceHost serviceHost = new ServiceHost (typeof (Service1), new Uri ("http://localhost:" + port + "/Service1"));
 			serviceHost.AddServiceEndpoint (typeof (IService1), new BasicHttpBinding (), string.Empty);
 
 			// Enable metadata exchange (WSDL publishing)
@@ -54,24 +57,33 @@ namespace MonoTests.System.ServiceModel.Dispatcher
 			serviceHost.AddServiceEndpoint (typeof (IMetadataExchange), MetadataExchangeBindings.CreateMexHttpBinding (), "mex");
 
 			serviceHost.Open ();
+			Thread.Sleep (2000);  // let WCF spin up
 
 			try {
 				// client
 				var binding = new BasicHttpBinding ();
-				var remoteAddress = new EndpointAddress ("http://localhost:37564/Service1");
+				var remoteAddress = new EndpointAddress ("http://localhost:" + port + "/Service1");
 				var client = new Service1Client (binding, remoteAddress);
 
 				var wait = new ManualResetEvent (false);
+
+				Exception error = null;
+				object result = null;
+
 				client.GetDataCompleted += delegate (object o, GetDataCompletedEventArgs e) {
-					if (e.Error != null)
-						throw e.Error;
-					Assert.AreEqual ("A", ((DataType1) e.Result).Id, "#1");
-					wait.Set ();
+					try {
+						error = e.Error;
+						result = e.Error == null ? e.Result : null;
+					} finally {
+						wait.Set ();
+					}
 				};
 
 				client.GetDataAsync ();
-				if (!wait.WaitOne (TimeSpan.FromSeconds (10)))
-					Assert.Fail ("timeout");
+
+				Assert.IsTrue (wait.WaitOne (TimeSpan.FromSeconds (20)), "timeout");
+				Assert.IsNull (error, "#1, inner exception: {0}", error);
+				Assert.AreEqual ("A", ((DataType1) result).Id, "#2");
 			} finally {
 				serviceHost.Close ();
 			}

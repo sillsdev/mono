@@ -40,6 +40,11 @@ static char sccsid[] = "@(#)reader.c	5.7 (Berkeley) 1/20/91";
 
 #include "defs.h"
 
+/* this resolves "unresolved symbol _snprintf" on Windows */	
+#if defined (_MSC_VER)
+#define snprintf _snprintf
+#endif
+
 /*  The line size must be a positive integer.  One hundred was chosen	*/
 /*  because few lines in Yacc input grammars exceed 100 characters.	*/
 /*  Note that if a line exceeds LINESIZE characters, the line buffer	*/
@@ -874,6 +879,7 @@ expand_items()
     maxitems += 300;
     pitem = (bucket **) REALLOC(pitem, maxitems*sizeof(bucket *));
     if (pitem == 0) no_space();
+    memset(pitem+maxitems-300, 0, 300*sizeof(bucket *));
 }
 
 
@@ -958,6 +964,8 @@ end_rule()
 {
     register int i;
 
+    if (nitems >= maxitems) expand_items();
+
     if (!last_was_action && plhs[nrules]->tag)
     {
 	for (i = nitems - 1; pitem[i]; --i) continue;
@@ -966,7 +974,6 @@ end_rule()
     }					/** bug: could be superclass... **/
 
     last_was_action = 0;
-    if (nitems >= maxitems) expand_items();
     pitem[nitems] = 0;
     ++nitems;
     ++nrules;
@@ -1279,9 +1286,10 @@ loop:
 
 	if ((lineno - (a_lineno + comment_lines)) > 2)
 	{
-		char mname[20];
-		char line_define[256];
+		char mname[28];
+		char *line_define;
 
+		// the maximum size of of an unsigned int in characters is 20, with 8 for 'case_()\0'
 		sprintf(mname, "case_%d()", nrules - 2);
 
 		putc(' ', f); putc(' ', f);
@@ -1298,6 +1306,7 @@ loop:
 			methods = REALLOC (methods, maxmethods*sizeof(char *));
 		}
 
+		line_define = NEW2(snprintf(NULL, 0, line_format, a_lineno, input_file_name)+1, char);
 		sprintf(line_define, line_format, a_lineno, input_file_name);
 
 		mbody = NEW2(5+strlen(line_define)+1+strlen(mname)+strlen(buffer)+1, char);
@@ -1307,6 +1316,8 @@ loop:
 		strcat(mbody, line_define);
 		strcat(mbody, buffer);
 		methods[nmethods++] = mbody;
+
+		FREE(line_define);
 	}
 	else
 	{

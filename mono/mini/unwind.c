@@ -33,7 +33,7 @@ typedef struct {
 
 #define ALIGN_TO(val,align) ((((size_t)val) + ((align) - 1)) & ~((align) - 1))
 
-static CRITICAL_SECTION unwind_mutex;
+static mono_mutex_t unwind_mutex;
 
 static MonoUnwindInfo **cached_info;
 static int cached_info_next, cached_info_size;
@@ -41,8 +41,8 @@ static GSList *cached_info_list;
 /* Statistics */
 static int unwind_info_size;
 
-#define unwind_lock() EnterCriticalSection (&unwind_mutex)
-#define unwind_unlock() LeaveCriticalSection (&unwind_mutex)
+#define unwind_lock() mono_os_mutex_lock (&unwind_mutex)
+#define unwind_unlock() mono_os_mutex_unlock (&unwind_mutex)
 
 #ifdef TARGET_AMD64
 static int map_hw_reg_to_dwarf_reg [] = { 0, 2, 1, 3, 7, 6, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
@@ -51,22 +51,29 @@ static int map_hw_reg_to_dwarf_reg [] = { 0, 2, 1, 3, 7, 6, 4, 5, 8, 9, 10, 11, 
 #define DWARF_PC_REG (mono_hw_reg_to_dwarf_reg (AMD64_RIP))
 #elif defined(TARGET_ARM)
 // http://infocenter.arm.com/help/topic/com.arm.doc.ihi0040a/IHI0040A_aadwarf.pdf
-/* Assign d8..d15 to hregs 16..24 */
+/* Assign d8..d15 to hregs 16..24 (dwarf regs 264..271) */
 static int map_hw_reg_to_dwarf_reg [] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 264, 265, 266, 267, 268, 269, 270, 271 };
 #define NUM_REGS 272
 #define DWARF_DATA_ALIGN (-4)
 #define DWARF_PC_REG (mono_hw_reg_to_dwarf_reg (ARMREG_LR))
+#define IS_DOUBLE_REG(dwarf_reg) (((dwarf_reg) >= 264) && ((dwarf_reg) <= 271))
+#elif defined(TARGET_ARM64)
+#define NUM_REGS 96
+#define DWARF_DATA_ALIGN (-8)
+/* LR */
+#define DWARF_PC_REG 30
+static int map_hw_reg_to_dwarf_reg [] = {
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+	16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+	/* v8..v15 */
+	72, 73, 74, 75, 76, 77, 78, 79,
+};
 #elif defined (TARGET_X86)
-#ifdef __APPLE__
 /*
- * LLVM seems to generate unwind info where esp is encoded as 5, and ebp as 4, ie see this line:
- *   def ESP : RegisterWithSubRegs<"esp", [SP]>, DwarfRegNum<[-2, 5, 4]>;
- * in lib/Target/X86/X86RegisterInfo.td in the llvm sources.
+ * ebp and esp are swapped:
+ * http://lists.cs.uiuc.edu/pipermail/lldb-dev/2014-January/003101.html
  */
 static int map_hw_reg_to_dwarf_reg [] = { 0, 1, 2, 3, 5, 4, 6, 7, 8 };
-#else
-static int map_hw_reg_to_dwarf_reg [] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
-#endif
 /* + 1 is for IP */
 #define NUM_REGS X86_NREG + 1
 #define DWARF_DATA_ALIGN (-4)
@@ -101,6 +108,10 @@ static int map_hw_reg_to_dwarf_reg [16];
 #define NUM_REGS 16
 #define DWARF_DATA_ALIGN 0
 #define DWARF_PC_REG -1
+#endif
+
+#ifndef IS_DOUBLE_REG
+#define IS_DOUBLE_REG(dwarf_reg) 0
 #endif
 
 static gboolean dwarf_reg_to_hw_reg_inited;
@@ -298,9 +309,22 @@ mono_print_unwind_info (guint8 *unwind_info, int unwind_info_len)
 				offset = decode_sleb128 (p, &p) * DWARF_DATA_ALIGN;
 				printf ("CFA: [%x] offset_extended_sf: %s at cfa-0x%x\n", pos, mono_arch_regname (mono_dwarf_reg_to_hw_reg (reg)), -offset);
 				break;
+			case DW_CFA_same_value:
+				reg = decode_uleb128 (p, &p);
+				printf ("CFA: [%x] same_value: %s\n", pos, mono_arch_regname (mono_dwarf_reg_to_hw_reg (reg)));
+				break;
 			case DW_CFA_advance_loc4:
 				pos += read32 (p);
 				p += 4;
+				break;
+			case DW_CFA_remember_state:
+				printf ("CFA: [%x] remember_state\n", pos);
+				break;
+			case DW_CFA_restore_state:
+				printf ("CFA: [%x] restore_state\n", pos);
+				break;
+			case DW_CFA_mono_advance_loc:
+				printf ("CFA: [%x] mono_advance_loc\n", pos);
 				break;
 			default:
 				g_assert_not_reached ();
@@ -314,34 +338,59 @@ mono_print_unwind_info (guint8 *unwind_info, int unwind_info_len)
 }
 
 /*
- * mono_unwind_ops_encode:
+ * mono_unwind_ops_encode_full:
  *
  *   Encode the unwind ops in UNWIND_OPS into the compact DWARF encoding.
  * Return a pointer to malloc'ed memory.
+ * If ENABLE_EXTENSIONS is FALSE, avoid encoding the mono extension
+ * opcode (DW_CFA_mono_advance_loc).
  */
 guint8*
-mono_unwind_ops_encode (GSList *unwind_ops, guint32 *out_len)
+mono_unwind_ops_encode_full (GSList *unwind_ops, guint32 *out_len, gboolean enable_extensions)
 {
 	GSList *l;
 	MonoUnwindOp *op;
 	int loc;
-	guint8 *buf, *p, *res;
+	guint8 buf [4096];
+	guint8 *p, *res;
 
-	p = buf = g_malloc0 (4096);
+	p = buf;
 
 	loc = 0;
 	l = unwind_ops;
 	for (; l; l = l->next) {
 		int reg;
 
-		op = l->data;
+		op = (MonoUnwindOp *)l->data;
 
 		/* Convert the register from the hw encoding to the dwarf encoding */
 		reg = mono_hw_reg_to_dwarf_reg (op->reg);
 
+		if (op->op == DW_CFA_mono_advance_loc) {
+			/* This advances loc to its location */
+			loc = op->when;
+		}
+
 		/* Emit an advance_loc if neccesary */
 		while (op->when > loc) {
-			if (op->when - loc < 32) {
+			if (op->when - loc > 65536) {
+				*p ++ = DW_CFA_advance_loc4;
+				*(guint32*)p = (guint32)(op->when - loc);
+				g_assert (read32 (p) == (guint32)(op->when - loc));
+				p += 4;
+				loc = op->when;
+			} else if (op->when - loc > 256) {
+				*p ++ = DW_CFA_advance_loc2;
+				*(guint16*)p = (guint16)(op->when - loc);
+				g_assert (read16 (p) == (guint32)(op->when - loc));
+				p += 2;
+				loc = op->when;
+			} else if (op->when - loc >= 32) {
+				*p ++ = DW_CFA_advance_loc1;
+				*(guint8*)p = (guint8)(op->when - loc);
+				p += 1;
+				loc = op->when;
+			} else if (op->when - loc < 32) {
 				*p ++ = DW_CFA_advance_loc | (op->when - loc);
 				loc = op->when;
 			} else {
@@ -364,6 +413,10 @@ mono_unwind_ops_encode (GSList *unwind_ops, guint32 *out_len)
 			*p ++ = op->op;
 			encode_uleb128 (reg, p, &p);
 			break;
+		case DW_CFA_same_value:
+			*p ++ = op->op;
+			encode_uleb128 (reg, p, &p);
+			break;
 		case DW_CFA_offset:
 			if (reg > 63) {
 				*p ++ = DW_CFA_offset_extended_sf;
@@ -374,6 +427,17 @@ mono_unwind_ops_encode (GSList *unwind_ops, guint32 *out_len)
 				encode_uleb128 (op->val / DWARF_DATA_ALIGN, p, &p);
 			}
 			break;
+		case DW_CFA_remember_state:
+		case DW_CFA_restore_state:
+			*p ++ = op->op;
+			break;
+		case DW_CFA_mono_advance_loc:
+			if (!enable_extensions)
+				break;
+			/* Only one location is supported */
+			g_assert (op->val == 0);
+			*p ++ = op->op;
+			break;
 		default:
 			g_assert_not_reached ();
 			break;
@@ -382,10 +446,15 @@ mono_unwind_ops_encode (GSList *unwind_ops, guint32 *out_len)
 	
 	g_assert (p - buf < 4096);
 	*out_len = p - buf;
-	res = g_malloc (p - buf);
+	res = (guint8 *)g_malloc (p - buf);
 	memcpy (res, buf, p - buf);
-	g_free (buf);
 	return res;
+}
+
+guint8*
+mono_unwind_ops_encode (GSList *unwind_ops, guint32 *out_len)
+{
+	return mono_unwind_ops_encode_full (unwind_ops, out_len, TRUE);
 }
 
 #if 0
@@ -407,6 +476,12 @@ print_dwarf_state (int cfa_reg, int cfa_offset, int ip, int nregs, Loc *location
 	printf ("\n");
 }
 
+typedef struct {
+	Loc locations [NUM_REGS];
+	guint8 reg_saved [NUM_REGS];
+	int cfa_reg, cfa_offset;
+} UnwindState;
+
 /*
  * Given the state of the current frame as stored in REGS, execute the unwind 
  * operations in unwind_info until the location counter reaches POS. The result is 
@@ -414,26 +489,33 @@ print_dwarf_state (int cfa_reg, int cfa_offset, int ip, int nregs, Loc *location
  * If SAVE_LOCATIONS is non-NULL, it should point to an array of size SAVE_LOCATIONS_LEN.
  * On return, the nth entry will point to the address of the stack slot where register
  * N was saved, or NULL, if it was not saved by this frame.
+ * MARK_LOCATIONS should contain the locations marked by mono_emit_unwind_op_mark_loc (), if any.
  * This function is signal safe.
  */
 void
 mono_unwind_frame (guint8 *unwind_info, guint32 unwind_info_len, 
-				   guint8 *start_ip, guint8 *end_ip, guint8 *ip, mgreg_t *regs, int nregs,
+				   guint8 *start_ip, guint8 *end_ip, guint8 *ip, guint8 **mark_locations,
+				   mono_unwind_reg_t *regs, int nregs,
 				   mgreg_t **save_locations, int save_locations_len,
 				   guint8 **out_cfa)
 {
 	Loc locations [NUM_REGS];
 	guint8 reg_saved [NUM_REGS];
-	int i, pos, reg, cfa_reg, cfa_offset, offset;
+	int i, pos, reg, cfa_reg = -1, cfa_offset = 0, offset;
 	guint8 *p;
 	guint8 *cfa_val;
+	UnwindState state_stack [1];
+	int state_stack_pos;
 
 	memset (reg_saved, 0, sizeof (reg_saved));
+	state_stack [0].cfa_reg = -1;
+	state_stack [0].cfa_offset = 0;
 
 	p = unwind_info;
 	pos = 0;
 	cfa_reg = -1;
 	cfa_offset = -1;
+	state_stack_pos = 0;
 	while (pos <= ip - start_ip && p < unwind_info + unwind_info_len) {
 		int op = *p & 0xc0;
 
@@ -480,9 +562,41 @@ mono_unwind_frame (guint8 *unwind_info, guint32 unwind_info_len,
 				locations [reg].loc_type = LOC_OFFSET;
 				locations [reg].offset = offset * DWARF_DATA_ALIGN;
 				break;
+			case DW_CFA_same_value:
+				reg = decode_uleb128 (p, &p);
+				locations [reg].loc_type = LOC_SAME;
+				break;
+			case DW_CFA_advance_loc1:
+				pos += *p;
+				p += 1;
+				break;
+			case DW_CFA_advance_loc2:
+				pos += read16 (p);
+				p += 2;
+				break;
 			case DW_CFA_advance_loc4:
 				pos += read32 (p);
 				p += 4;
+				break;
+			case DW_CFA_remember_state:
+				g_assert (state_stack_pos == 0);
+				memcpy (&state_stack [0].locations, &locations, sizeof (locations));
+				memcpy (&state_stack [0].reg_saved, &reg_saved, sizeof (reg_saved));
+				state_stack [0].cfa_reg = cfa_reg;
+				state_stack [0].cfa_offset = cfa_offset;
+				state_stack_pos ++;
+				break;
+			case DW_CFA_restore_state:
+				g_assert (state_stack_pos == 1);
+				state_stack_pos --;
+				memcpy (&locations, &state_stack [0].locations, sizeof (locations));
+				memcpy (&reg_saved, &state_stack [0].reg_saved, sizeof (reg_saved));
+				cfa_reg = state_stack [0].cfa_reg;
+				cfa_offset = state_stack [0].cfa_offset;
+				break;
+			case DW_CFA_mono_advance_loc:
+				g_assert (mark_locations [0]);
+				pos = mark_locations [0] - start_ip;
 				break;
 			default:
 				g_assert_not_reached ();
@@ -497,12 +611,16 @@ mono_unwind_frame (guint8 *unwind_info, guint32 unwind_info_len,
 	if (save_locations)
 		memset (save_locations, 0, save_locations_len * sizeof (mgreg_t*));
 
+	g_assert (cfa_reg != -1);
 	cfa_val = (guint8*)regs [mono_dwarf_reg_to_hw_reg (cfa_reg)] + cfa_offset;
 	for (i = 0; i < NUM_REGS; ++i) {
 		if (reg_saved [i] && locations [i].loc_type == LOC_OFFSET) {
 			int hreg = mono_dwarf_reg_to_hw_reg (i);
 			g_assert (hreg < nregs);
-			regs [hreg] = *(mgreg_t*)(cfa_val + locations [i].offset);
+			if (IS_DOUBLE_REG (i))
+				regs [hreg] = *(guint64*)(cfa_val + locations [i].offset);
+			else
+				regs [hreg] = *(mgreg_t*)(cfa_val + locations [i].offset);
 			if (save_locations && hreg < save_locations_len)
 				save_locations [hreg] = (mgreg_t*)(cfa_val + locations [i].offset);
 		}
@@ -514,7 +632,7 @@ mono_unwind_frame (guint8 *unwind_info, guint32 unwind_info_len,
 void
 mono_unwind_init (void)
 {
-	InitializeCriticalSection (&unwind_mutex);
+	mono_os_mutex_init_recursive (&unwind_mutex);
 
 	mono_counters_register ("Unwind info size", MONO_COUNTER_JIT | MONO_COUNTER_INT, &unwind_info_size);
 }
@@ -524,7 +642,7 @@ mono_unwind_cleanup (void)
 {
 	int i;
 
-	DeleteCriticalSection (&unwind_mutex);
+	mono_os_mutex_destroy (&unwind_mutex);
 
 	if (!cached_info)
 		return;
@@ -534,8 +652,12 @@ mono_unwind_cleanup (void)
 
 		g_free (cached);
 	}
-
 	g_free (cached_info);
+
+	for (GSList *cursor = cached_info_list; cursor != NULL; cursor = cursor->next)
+		g_free (cursor->data);
+
+	g_slist_free (cached_info_list);
 }
 
 /*
@@ -546,7 +668,7 @@ mono_unwind_cleanup (void)
  * A copy is made of the unwind info.
  * This function is useful for two reasons:
  * - many methods have the same unwind info
- * - MonoJitInfo->used_regs is an int so it can't store the pointer to the unwind info
+ * - MonoJitInfo->unwind_info is an int so it can't store the pointer to the unwind info
  */
 guint32
 mono_cache_unwind_info (guint8 *unwind_info, guint32 unwind_info_len)
@@ -570,30 +692,29 @@ mono_cache_unwind_info (guint8 *unwind_info, guint32 unwind_info_len)
 		}
 	}
 
-	info = g_malloc (sizeof (MonoUnwindInfo) + unwind_info_len);
+	info = (MonoUnwindInfo *)g_malloc (sizeof (MonoUnwindInfo) + unwind_info_len);
 	info->len = unwind_info_len;
 	memcpy (&info->info, unwind_info, unwind_info_len);
 
 	i = cached_info_next;
 	
 	if (cached_info_next >= cached_info_size) {
-		MonoUnwindInfo **old_table, **new_table;
+		MonoUnwindInfo **new_table;
 
 		/*
 		 * Avoid freeing the old table so mono_get_cached_unwind_info ()
 		 * doesn't need locks/hazard pointers.
 		 */
 
-		old_table = cached_info;
 		new_table = g_new0 (MonoUnwindInfo*, cached_info_size * 2);
 
 		memcpy (new_table, cached_info, cached_info_size * sizeof (MonoUnwindInfo*));
 
 		mono_memory_barrier ();
 
-		cached_info = new_table;
-
 		cached_info_list = g_slist_prepend (cached_info_list, cached_info);
+
+		cached_info = new_table;
 
 		cached_info_size *= 2;
 	}
@@ -764,11 +885,11 @@ decode_lsda (guint8 *lsda, guint8 *code, MonoJitExceptionInfo **ex_info, guint32
 	p = (guint8*)ALIGN_TO ((mgreg_t)p, 4);
 
 	if (ex_info) {
-		*ex_info = g_malloc0 (ncall_sites * sizeof (MonoJitExceptionInfo));
+		*ex_info = (MonoJitExceptionInfo *)g_malloc0 (ncall_sites * sizeof (MonoJitExceptionInfo));
 		*ex_info_len = ncall_sites;
 	}
 	if (type_info)
-		*type_info = g_malloc0 (ncall_sites * sizeof (gpointer));
+		*type_info = (gpointer *)g_malloc0 (ncall_sites * sizeof (gpointer));
 
 	for (i = 0; i < ncall_sites; ++i) {
 		int block_start_offset, block_size, landing_pad;
@@ -810,7 +931,7 @@ guint8*
 mono_unwind_decode_fde (guint8 *fde, guint32 *out_len, guint32 *code_len, MonoJitExceptionInfo **ex_info, guint32 *ex_info_len, gpointer **type_info, int *this_reg, int *this_offset)
 {
 	guint8 *p, *cie, *fde_current, *fde_aug = NULL, *code, *fde_cfi, *cie_cfi;
-	gint32 fde_len, cie_offset, pc_begin, pc_range, aug_len, fde_data_len;
+	gint32 fde_len, cie_offset, pc_begin, pc_range, aug_len;
 	gint32 cie_len, cie_id, cie_version, code_align, data_align, return_reg;
 	gint32 i, cie_aug_len, buf_len;
 	char *cie_aug_str;
@@ -820,6 +941,8 @@ mono_unwind_decode_fde (guint8 *fde, guint32 *out_len, guint32 *code_len, MonoJi
 	/* 
 	 * http://refspecs.freestandards.org/LSB_3.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
 	 */
+
+	/* This is generated by JITDwarfEmitter::EmitEHFrame () */
 
 	*type_info = NULL;
 	*this_reg = -1;
@@ -905,7 +1028,6 @@ mono_unwind_decode_fde (guint8 *fde, guint32 *out_len, guint32 *code_len, MonoJi
 		aug_len = 0;
 	}
 	fde_cfi = p;
-	fde_data_len = fde + 4 + fde_len - p;
 
 	if (code_len)
 		*code_len = pc_range;
@@ -940,7 +1062,7 @@ mono_unwind_decode_fde (guint8 *fde, guint32 *out_len, guint32 *code_len, MonoJi
 	g_assert (return_reg == DWARF_PC_REG);
 
 	buf_len = (cie + cie_len + 4 - cie_cfi) + (fde + fde_len + 4 - fde_cfi);
-	buf = g_malloc0 (buf_len);
+	buf = (guint8 *)g_malloc0 (buf_len);
 
 	i = 0;
 	p = cie_cfi;
@@ -966,7 +1088,7 @@ mono_unwind_decode_fde (guint8 *fde, guint32 *out_len, guint32 *code_len, MonoJi
 
 	*out_len = i;
 
-	return g_realloc (buf, i);
+	return (guint8 *)g_realloc (buf, i);
 }
 
 /*
@@ -989,7 +1111,7 @@ mono_unwind_decode_llvm_mono_fde (guint8 *fde, int fde_len, guint8 *cie, guint8 
 	res->this_reg = -1;
 	res->this_offset = -1;
 
-	/* fde points to data emitted by LLVM in DwarfException::EmitMonoEHFrame () */
+	/* fde points to data emitted by LLVM in DwarfMonoException::EmitMonoEHFrame () */
 	p = fde;
 	has_aug = *p;
 	p ++;
@@ -1040,7 +1162,7 @@ mono_unwind_decode_llvm_mono_fde (guint8 *fde, int fde_len, guint8 *cie, guint8 
 	cie_cfi_len = p - cie_cfi;
 	fde_cfi_len = (fde + fde_len - fde_cfi);
 
-	buf = g_malloc0 (cie_cfi_len + fde_cfi_len);
+	buf = (guint8 *)g_malloc0 (cie_cfi_len + fde_cfi_len);
 	memcpy (buf, cie_cfi, cie_cfi_len);
 	memcpy (buf + cie_cfi_len, fde_cfi, fde_cfi_len);
 
@@ -1056,7 +1178,7 @@ mono_unwind_decode_llvm_mono_fde (guint8 *fde, int fde_len, guint8 *cie, guint8 
 GSList*
 mono_unwind_get_cie_program (void)
 {
-#if defined(TARGET_AMD64) || defined(TARGET_X86) || defined(TARGET_POWERPC)
+#if defined(TARGET_AMD64) || defined(TARGET_X86) || defined(TARGET_POWERPC) || defined(TARGET_ARM)
 	return mono_arch_get_cie_program ();
 #else
 	return NULL;

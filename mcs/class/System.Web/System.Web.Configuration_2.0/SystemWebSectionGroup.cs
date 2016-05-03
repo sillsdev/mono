@@ -28,7 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Configuration;
@@ -65,12 +64,10 @@ namespace System.Web.Configuration
 			get { return (ClientTargetSection)Sections ["clientTarget"]; }
 		}
 
-#if !TARGET_JVM
 		[ConfigurationProperty ("compilation")]
 		public CompilationSection Compilation {
 			get { return (CompilationSection)Sections ["compilation"]; }
 		}
-#endif
 
 		[ConfigurationProperty ("customErrors")]
 		public CustomErrorsSection CustomErrors {
@@ -138,9 +135,7 @@ namespace System.Web.Configuration
 		}
 
 		[ConfigurationProperty ("mobileControls")]
-#if NET_4_0
 		[Obsolete ("System.Web.Mobile.dll is obsolete.")]
-#endif
 		public ConfigurationSection MobileControls {
 			get { return Sections ["MobileControls"]; }
 		}
@@ -224,4 +219,3 @@ namespace System.Web.Configuration
 	}
 }
 
-#endif

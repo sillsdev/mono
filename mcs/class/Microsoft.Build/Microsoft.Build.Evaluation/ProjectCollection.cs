@@ -42,6 +42,8 @@ using System.Linq;
 using System.Xml;
 using System.Reflection;
 using System.Globalization;
+using Mono.XBuild.Utilities;
+using Microsoft.Build.Internal;
 
 namespace Microsoft.Build.Evaluation
 {
@@ -67,11 +69,7 @@ namespace Microsoft.Build.Evaluation
 
 		static ProjectCollection ()
 		{
-			#if NET_4_5
 			global_project_collection = new ProjectCollection (new ReadOnlyDictionary<string, string> (new Dictionary<string, string> ()));
-			#else
-			global_project_collection = new ProjectCollection (new Dictionary<string, string> ());
-			#endif
 		}
 
 		public static string Escape (string unescapedString)
@@ -249,20 +247,24 @@ namespace Microsoft.Build.Evaluation
 		//FIXME: should also support config file, depending on ToolsetLocations
 		void LoadDefaultToolsets ()
 		{
+			AddToolset (new Toolset ("4.0",
+				ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version40), this, null));
+#if XBUILD_12
+			AddToolset (new Toolset ("12.0", ToolLocationHelper.GetPathToBuildTools ("12.0"), this, null));
+#endif
+#if XBUILD_14
+			AddToolset (new Toolset ("14.0", ToolLocationHelper.GetPathToBuildTools ("14.0"), this, null));
+#endif
+
+			// We don't support these anymore
 			AddToolset (new Toolset ("2.0",
 				ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version20), this, null));
 			AddToolset (new Toolset ("3.0",
 				ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version30), this, null));
 			AddToolset (new Toolset ("3.5",
 				ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version35), this, null));
-#if NET_4_0
-			AddToolset (new Toolset ("4.0",
-				ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version40), this, null));
-#endif
-#if XBUILD_12
-			AddToolset (new Toolset ("12.0", ToolLocationHelper.GetPathToBuildTools ("12.0"), this, null));
-#endif
-			default_tools_version = toolsets.First ().ToolsVersion;
+
+			default_tools_version = toolsets [0].ToolsVersion;
 		}
 		
 		[MonoTODO ("not verified at all")]
@@ -346,13 +348,31 @@ namespace Microsoft.Build.Evaluation
 		
 		static IEnumerable<T> GetWellKnownProperties<T> (Func<string,string,T> create)
 		{
+			yield return create ("OS", OS);
 			var ext = Environment.GetEnvironmentVariable ("MSBuildExtensionsPath") ?? DefaultExtensionsPath;
 			yield return create ("MSBuildExtensionsPath", ext);
-			var ext32 = Environment.GetEnvironmentVariable ("MSBuildExtensionsPath32") ?? DefaultExtensionsPath;
+			var ext32 = Environment.GetEnvironmentVariable ("MSBuildExtensionsPath32") ?? ext;
 			yield return create ("MSBuildExtensionsPath32", ext32);
-			var ext64 = Environment.GetEnvironmentVariable ("MSBuildExtensionsPath64") ?? DefaultExtensionsPath;
+			var ext64 = Environment.GetEnvironmentVariable ("MSBuildExtensionsPath64") ?? ext;
 			yield return create ("MSBuildExtensionsPath64", ext64);
 		}
+
+		static string OS {
+			get {
+				PlatformID pid = Environment.OSVersion.Platform;
+				switch ((int) pid) {
+				case 128:
+				case 4:
+					return "Unix";
+				case 6:
+					return "OSX";
+				default:
+					return "Windows_NT";
+				}
+			}
+		}
+
+		#region Extension Paths resolution
 
 		static string extensions_path;
 		internal static string DefaultExtensionsPath {
@@ -372,7 +392,69 @@ namespace Microsoft.Build.Evaluation
 				return extensions_path;
 			}
 		}
-		
+
+		static string DotConfigExtensionsPath = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.ApplicationData),
+			Path.Combine ("xbuild", "tasks"));
+		const string MacOSXExternalXBuildDir = "/Library/Frameworks/Mono.framework/External/xbuild";
+		static string PathSeparatorAsString = Path.PathSeparator.ToString ();
+
+		// Gives a list of extensions paths to try for $(MSBuildExtensionsPath),
+		// *in-order*
+		internal static IEnumerable<string> GetApplicableExtensionsPaths (Action<string> logMessage)
+		{
+			string envvar = String.Join (PathSeparatorAsString, new string [] {
+				// For mac osx, look in the 'External' dir on macosx,
+				// see bug #663180
+				MSBuildUtils.RunningOnMac ? MacOSXExternalXBuildDir : String.Empty,
+				DotConfigExtensionsPath,
+				DefaultExtensionsPath});
+
+			var pathsTable = new Dictionary<string, string> ();
+			foreach (string extn_path in envvar.Split (new char [] {Path.PathSeparator}, StringSplitOptions.RemoveEmptyEntries)) {
+				if (pathsTable.ContainsKey (extn_path))
+					continue;
+
+				if (!Directory.Exists (extn_path)) {
+					logMessage (string.Format ("Extension path '{0}' not found, ignoring.", extn_path));
+					continue;
+				}
+
+				pathsTable [extn_path] = extn_path;
+				yield return extn_path;
+			}
+		}
+
+		internal static string FindFileInSeveralExtensionsPath (ref string extensionsPathOverride, Func<string,string> expandString, string file, Action<string> logMessage)
+		{
+			string ret = null;
+			string ex = extensionsPathOverride;
+			Func<bool> action = () => {
+				string path = WindowsCompatibilityExtensions.FindMatchingPath (expandString (file));
+				if (File.Exists (path))
+					ret = path;
+				else
+					return false;
+				return true;
+			};
+
+			try {
+				if (!action ()) {
+					foreach (var s in ProjectCollection.GetApplicableExtensionsPaths (logMessage)) {
+						extensionsPathOverride = s;
+						ex = s;
+						if (action ())
+							break;
+					}
+				}
+			} finally {
+				extensionsPathOverride = null;
+			}
+
+			return ret ?? WindowsCompatibilityExtensions.FindMatchingPath (expandString (file));
+		}
+
+		#endregion
+
 		internal IEnumerable<ReservedProjectProperty> GetReservedProperties (Toolset toolset, Project project)
 		{
 			Func<string,Func<string>,ReservedProjectProperty> create = (name, value) => new ReservedProjectProperty (project, name, value);
@@ -412,6 +494,11 @@ namespace Microsoft.Build.Evaluation
 				});
 			yield return create ("MSBuildToolsPath", () => toolset.ToolsPath);
 			yield return create ("MSBuildToolsVersion", () => toolset.ToolsVersion);
+
+			// This is an implementation specific special property for this Microsoft.Build.dll to differentiate
+			// the build from Microsoft.Build.Engine.dll. It is significantly used in some *.targets file we share
+			// between old and new build engine.
+			yield return create ("MonoUseMicrosoftBuildDll", () => "True");
 		}
 		
 		// These are required for reserved property, represents dynamically changing property values.

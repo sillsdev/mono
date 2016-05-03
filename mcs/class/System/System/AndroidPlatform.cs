@@ -25,44 +25,35 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-#if SECURITY_DEP
-extern alias MonoSecurity;
-#endif
-
 #if MONODROID
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 #if SECURITY_DEP
-using MSX = MonoSecurity::Mono.Security.X509;
+using MSX = Mono.Security.X509;
 #endif
 
 namespace System {
 
 	internal static class AndroidPlatform {
-
+		delegate int GetInterfaceAddressesDelegate (out IntPtr ifap);
+		delegate void FreeInterfaceAddressesDelegate (IntPtr ifap);
+		
 #if SECURITY_DEP
-		static readonly Converter<MSX.X509CertificateCollection, bool> trustEvaluateSsl;
-		static readonly Func<MSX.X509CertificateCollection, object, X509Certificate2, X509Chain, SslPolicyErrors, bool> trustEvaluateSsl2;
+		static readonly Converter<List <byte[]>, bool> trustEvaluateSsl;
 #endif  // SECURITY_DEP
 		static readonly Func<IWebProxy> getDefaultProxy;
-
+		static readonly GetInterfaceAddressesDelegate getInterfaceAddresses;
+		static readonly FreeInterfaceAddressesDelegate freeInterfaceAddresses;
 
 		static AndroidPlatform ()
 		{
 			var t = Type.GetType ("Android.Runtime.AndroidEnvironment, Mono.Android", throwOnError:true);
 #if SECURITY_DEP
-			trustEvaluateSsl2 = (Func<MSX.X509CertificateCollection, object, X509Certificate2, X509Chain, SslPolicyErrors, bool>)
-				Delegate.CreateDelegate (
-						typeof (Func<MSX.X509CertificateCollection, object, X509Certificate2, X509Chain, SslPolicyErrors, bool>),
-						t,
-						"TrustEvaluateSsl2",
-						ignoreCase:false,
-						throwOnBindFailure:false);
-			if (trustEvaluateSsl2 == null)
-				trustEvaluateSsl = (Converter<MSX.X509CertificateCollection, bool>)
-					Delegate.CreateDelegate (typeof (Converter<MSX.X509CertificateCollection, bool>),
+			trustEvaluateSsl = (Converter<List<byte[]>, bool>)
+				Delegate.CreateDelegate (typeof (Converter<List<byte[]>, bool>),
 							t,
 							"TrustEvaluateSsl",
 							ignoreCase:false,
@@ -72,20 +63,48 @@ namespace System {
 				typeof (Func<IWebProxy>), t, "GetDefaultProxy",
 				ignoreCase:false,
 				throwOnBindFailure:true);
+
+			getInterfaceAddresses = (GetInterfaceAddressesDelegate)Delegate.CreateDelegate (
+				typeof (GetInterfaceAddressesDelegate), t, "GetInterfaceAddresses",
+				ignoreCase: false,
+				throwOnBindFailure: false);
+			
+			freeInterfaceAddresses = (FreeInterfaceAddressesDelegate)Delegate.CreateDelegate (
+				typeof (FreeInterfaceAddressesDelegate), t, "FreeInterfaceAddresses",
+				ignoreCase: false,
+				throwOnBindFailure: false);
 		}
 
 #if SECURITY_DEP
-		internal static bool TrustEvaluateSsl (MSX.X509CertificateCollection collection, object sender, X509Certificate2 certificate, X509Chain chain, SslPolicyErrors errors)
+		internal static bool TrustEvaluateSsl (X509CertificateCollection collection)
 		{
-			if (trustEvaluateSsl2 != null)
-				return trustEvaluateSsl2 (collection, sender, certificate, chain, errors);
-			return trustEvaluateSsl (collection);
+			var certsRawData = new List <byte[]> (collection.Count);
+			foreach (var cert in collection)
+				certsRawData.Add (cert.GetRawCertData ());
+			return trustEvaluateSsl (certsRawData);
 		}
 #endif  // SECURITY_DEP
 
 		internal static IWebProxy GetDefaultProxy ()
 		{
 			return getDefaultProxy ();
+		}
+
+		internal static int GetInterfaceAddresses (out IntPtr ifap)
+		{
+			ifap = IntPtr.Zero;
+			if (getInterfaceAddresses == null)
+				return -1;
+
+			return getInterfaceAddresses (out ifap);
+		}
+
+		internal static void FreeInterfaceAddresses (IntPtr ifap)
+		{
+			if (freeInterfaceAddresses == null)
+				return;
+
+			freeInterfaceAddresses (ifap);
 		}
 	}
 }

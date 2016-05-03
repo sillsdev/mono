@@ -8,12 +8,26 @@ include $(XBUILD_DIR)/xbuild.make
 LIBRARY = Microsoft.Build.Utilities.dll
 LIBRARY_NAME = Microsoft.Build.Utilities$(NAME_SUFFIX).dll
 
+LIB_REFS = System System.Core System.Xml
 LIB_MCS_FLAGS = \
 	/r:$(corlib)				\
 	/r:System.dll				\
+	/r:System.Core.dll			\
+	/r:System.Xml.dll			\
 	/r:$(XBUILD_FRAMEWORK)
 
-TEST_MCS_FLAGS = /r:$(XBUILD_ENGINE) /r:$(XBUILD_FRAMEWORK) -r:System.dll -r:System.Core.dll
+TEST_RESX_RESOURCES = Test/Microsoft.Build.Utilities/Strings.resources
+
+TEST_MCS_FLAGS = /r:$(XBUILD_ENGINE) /r:$(XBUILD_FRAMEWORK) -r:System.dll -r:System.Core.dll $(TEST_RESX_RESOURCES:%=-resource:%)
 
 include $(XBUILD_DIR)/xbuild_test.make
 include ../../build/library.make
+
+EXTRA_DISTFILES = $(TEST_RESX_RESOURCES:.resources=.resx)
+
+CLEAN_FILES += $(TEST_RESX_RESOURCES)
+
+$(TEST_RESX_RESOURCES): %.resources: %.resx
+	$(RESGEN) $< || cp $@.prebuilt $@
+
+$(test_lib): $(TEST_RESX_RESOURCES)

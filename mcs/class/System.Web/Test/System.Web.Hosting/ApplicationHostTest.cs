@@ -115,9 +115,6 @@ namespace MonoTests.System.Web.Hosting {
 
 		[Test]
 		[ExpectedException(typeof(SerializationException))]
-#if TARGET_JVM //System.Security.Policy.Evidence not implemented
-		[Category ("NotWorking")]
-#endif
 		public void Constructor_PlainType ()
 		{
 			ApplicationHost.CreateApplicationHost (typeof (ApplicationHostTest), "/app", Environment.CurrentDirectory);
@@ -172,11 +169,7 @@ namespace MonoTests.System.Web.Hosting {
 			//Assert.AreEqual (LoaderOptimization.NotSpecified, setup.LoaderOptimization);
 			p ("LoaderOptimization is: ", setup.LoaderOptimization);
 			Assert.AreEqual (0, string.Compare (
-#if NET_2_0
 				String.Format ("{0}{1}bin", tb, Path.DirectorySeparatorChar),
-#else
-				"bin",
-#endif
 				setup.PrivateBinPath, true), "D9"
 			);
 			Assert.AreEqual (setup.PrivateBinPathProbe, "*", "D10");

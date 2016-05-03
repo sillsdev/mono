@@ -6,12 +6,14 @@
 //
 // (C) 2006 Novell
 
-#if NET_2_0
 
 using System;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 
 using NUnit.Framework;
 
@@ -317,10 +319,12 @@ namespace MonoTests.System.Reflection.Emit
 			m1.Invoke(null, new object[] { 5 });
 		}
 
+		// Disabl known warning, the Field is never used directly from C#
+		#pragma warning disable 414
 		class Host {
 			static string Field = "foo";
 		}
-
+		#pragma warning restore 414
 		[Test]
 		[Category ("NotDotNet")] // https://connect.microsoft.com/VisualStudio/feedback/ViewFeedback.aspx?FeedbackID=297416
 		public void TestOwnerMemberAccess ()
@@ -450,7 +454,163 @@ namespace MonoTests.System.Reflection.Emit
 			Assert.AreEqual (dm.Name, res.Name, "#1");
 
 		}
+
+		[StructLayout (LayoutKind.Explicit)]
+		struct SizeOfTarget {
+			[FieldOffset (0)] public int X;
+			[FieldOffset (4)] public int Y;
+		}
+
+		[Test]
+		public void SizeOf ()
+		{
+			var method = new DynamicMethod ("", typeof (int), Type.EmptyTypes);
+			var il = method.GetILGenerator ();
+			il.Emit (OpCodes.Sizeof, typeof (SizeOfTarget));
+			il.Emit (OpCodes.Ret);
+
+			var func = (Func<int>) method.CreateDelegate (typeof (Func<int>));
+			var point_size = func ();
+
+			Assert.AreEqual (8, point_size);
+		}
+
+		class TypedRefTarget {
+			public string Name;
+		}
+
+		class ExceptionHandling_Test_Support
+		{
+			public static Exception Caught;
+			public static string CaughtStackTrace;
+
+			public static void ThrowMe ()
+			{
+				Caught = null;
+				CaughtStackTrace = null;
+				throw new Exception("test");
+			}
+
+			public static void Handler (Exception e)
+			{
+				Caught = e;
+				CaughtStackTrace = e.StackTrace.ToString ();
+			}
+		}
+
+		[Test]
+		public void ExceptionHandling ()
+		{
+			var method = new DynamicMethod ("", typeof(void), new[] { typeof(int) }, typeof (DynamicMethodTest));
+			var ig = method.GetILGenerator ();
+
+			ig.BeginExceptionBlock();
+			ig.Emit(OpCodes.Call, typeof(ExceptionHandling_Test_Support).GetMethod("ThrowMe"));
+
+			ig.BeginCatchBlock(typeof(Exception));
+			ig.Emit(OpCodes.Call, typeof(ExceptionHandling_Test_Support).GetMethod("Handler"));
+			ig.EndExceptionBlock();
+
+			ig.Emit(OpCodes.Ret);
+
+			var invoke = (Action<int>) method.CreateDelegate (typeof(Action<int>));
+			invoke (456324);
+
+			Assert.IsNotNull (ExceptionHandling_Test_Support.Caught, "#1");
+			Assert.AreEqual (2, ExceptionHandling_Test_Support.CaughtStackTrace.Split (new[] { Environment.NewLine }, StringSplitOptions.None).Length, "#2");
+
+			var st = new StackTrace (ExceptionHandling_Test_Support.Caught, 0, true);
+
+			// Caught stack trace when dynamic method is gone
+			Assert.AreEqual (ExceptionHandling_Test_Support.CaughtStackTrace, st.ToString (), "#3");
+
+			// Catch handler stack trace inside dynamic method match
+			Assert.AreEqual (ExceptionHandling_Test_Support.Caught.StackTrace, st.ToString (), "#4");
+		}
+
+		class ExceptionHandlingWithExceptionDispatchInfo_Test_Support
+		{
+			public static Exception Caught;
+			public static string CaughtStackTrace;
+
+			public static void ThrowMe ()
+			{
+				Caught = null;
+				CaughtStackTrace = null;
+
+				Exception e;
+				try {
+					throw new Exception("test");
+				} catch (Exception e2) {
+					e = e2;
+				}
+
+				var edi = ExceptionDispatchInfo.Capture(e);
+
+				edi.Throw();
+			}
+
+			public static void Handler (Exception e)
+			{
+				var split = e.StackTrace.Split (new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+				Assert.AreEqual (5, split.Length, "#1");
+				Assert.IsTrue (split [1].Contains ("---"), "#2");
+			}
+		}
+
+		[Test]
+		public void ExceptionHandlingWithExceptionDispatchInfo ()
+		{
+			var method = new DynamicMethod ("", typeof(void), new[] { typeof(int) }, typeof (DynamicMethodTest));
+			var ig = method.GetILGenerator ();
+
+			ig.BeginExceptionBlock();
+			ig.Emit(OpCodes.Call, typeof(ExceptionHandlingWithExceptionDispatchInfo_Test_Support).GetMethod("ThrowMe"));
+
+			ig.BeginCatchBlock(typeof(Exception));
+			ig.Emit(OpCodes.Call, typeof(ExceptionHandlingWithExceptionDispatchInfo_Test_Support).GetMethod("Handler"));
+			ig.EndExceptionBlock();
+
+			ig.Emit(OpCodes.Ret);
+
+			var invoke = (Action<int>) method.CreateDelegate (typeof(Action<int>));
+			invoke (444);
+		}
+
+#if !MONODROID
+		// RUNTIME: crash
+		[Test]
+		public void TypedRef ()
+		{
+			var method = new DynamicMethod ("", typeof (TypedRefTarget), new [] {typeof (TypedRefTarget)}, true);
+			var il = method.GetILGenerator ();
+			var tr = il.DeclareLocal (typeof (TypedReference));
+
+			il.Emit (OpCodes.Ldarga, 0);
+			il.Emit (OpCodes.Mkrefany, typeof (TypedRefTarget));
+			il.Emit (OpCodes.Stloc, tr);
+
+			il.Emit (OpCodes.Ldloc, tr);
+			il.Emit (OpCodes.Call, GetType ().GetMethod ("AssertTypedRef", BindingFlags.NonPublic | BindingFlags.Static));
+
+			il.Emit (OpCodes.Ldloc, tr);
+			il.Emit (OpCodes.Refanyval, typeof (TypedRefTarget));
+			il.Emit (OpCodes.Ldobj, typeof (TypedRefTarget));
+			il.Emit (OpCodes.Ret);
+
+			var f = (Func<TypedRefTarget, TypedRefTarget>) method.CreateDelegate (typeof (Func<TypedRefTarget, TypedRefTarget>));
+
+			var target = new TypedRefTarget { Name = "Foo" };
+			var rt = f (target);
+
+			Assert.AreEqual (target, rt);
+		}
+
+		private static void AssertTypedRef (TypedReference tr)
+		{
+			Assert.AreEqual (typeof (TypedRefTarget), TypedReference.GetTargetType (tr));
+		}
+#endif
 	}
 }
 
-#endif

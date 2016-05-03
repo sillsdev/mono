@@ -29,7 +29,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Globalization;
@@ -105,6 +104,13 @@ namespace System.Web.Hosting {
 			get { return vpath_provider; }
 		}
 
+		public static bool InClientBuildManager {
+			get {
+				// Mono doesn't have a ClientBuildManager, so we can't be in it. Simple as that.
+				return false;
+			}
+		}
+
 		public static void DecrementBusyCount ()
 		{
 			Interlocked.Decrement (ref busy_count);
@@ -160,7 +166,9 @@ namespace System.Web.Hosting {
 		{
 			if (obj == null)
 				throw new ArgumentNullException ("obj");
-			Host.RegisterObject (obj, false);
+
+			if (Host != null)
+				Host.RegisterObject (obj, false);
 		}
 
 		public static void RegisterVirtualPathProvider (VirtualPathProvider virtualPathProvider)
@@ -200,9 +208,10 @@ namespace System.Web.Hosting {
 		{
 			if (obj == null)
 				throw new ArgumentNullException ("obj");
-			Host.UnregisterObject (obj);
+
+			if (Host != null)
+				Host.UnregisterObject (obj);
 		}
 	}
 }
 
-#endif

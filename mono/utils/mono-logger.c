@@ -4,28 +4,30 @@
 #include <glib.h>
 
 #include "mono-compiler.h"
-#include "mono-logger-internal.h"
+#include "mono-logger-internals.h"
 
 typedef struct {
 	GLogLevelFlags	level;
 	MonoTraceMask	mask;
 } MonoLogLevelEntry;
 
-static GLogLevelFlags current_level		= G_LOG_LEVEL_ERROR;
-static MonoTraceMask current_mask		= MONO_TRACE_ALL;
+GLogLevelFlags mono_internal_current_level		= INT_MAX;
+MonoTraceMask  mono_internal_current_mask		= MONO_TRACE_ALL;
 
-static const char	*mono_log_domain	= "Mono";
 static GQueue		*level_stack		= NULL;
+static const char	*mono_log_domain	= "Mono";
+static MonoPrintCallback print_callback, printerr_callback;
 
 /**
  * mono_trace_init:
  *
  * Initializes the mono tracer.
  */
-static void 
+void 
 mono_trace_init (void)
 {
 	if(level_stack == NULL) {
+		mono_internal_current_level = G_LOG_LEVEL_ERROR;
 		level_stack = g_queue_new();
 
 		mono_trace_set_mask_string(g_getenv("MONO_LOG_MASK"));
@@ -52,29 +54,6 @@ mono_trace_cleanup (void)
 }
 
 /**
- * mono_trace:
- *
- *	@level: Verbose level of the specified message
- *	@mask: Type of the specified message
- *
- * Traces a new message, depending on the current logging level
- * and trace mask.
- */
-void
-mono_trace(GLogLevelFlags level, MonoTraceMask mask, const char *format, ...) 
-{
-	if(level_stack == NULL)
-		mono_trace_init();
-
-	if(level <= current_level && mask & current_mask) {
-		va_list args;
-		va_start (args, format);
-		g_logv (mono_log_domain, level, format, args);
-		va_end (args);
-	}
-}
-
-/**
  * mono_tracev:
  *
  *	@level: Verbose level of the specified message
@@ -84,13 +63,15 @@ mono_trace(GLogLevelFlags level, MonoTraceMask mask, const char *format, ...)
  * and trace mask.
  */
 void 
-mono_tracev (GLogLevelFlags level, MonoTraceMask mask, const char *format, va_list args)
+mono_tracev_inner (GLogLevelFlags level, MonoTraceMask mask, const char *format, va_list args)
 {
-	if (level_stack == NULL)
+	if (level_stack == NULL) {
 		mono_trace_init ();
+		if(level > mono_internal_current_level || !(mask & mono_internal_current_mask))
+			return;
+	}
 
-	if(level <= current_level && mask & current_mask)
-		g_logv (mono_log_domain, level, format, args);
+	g_logv (mono_log_domain, level, format, args);
 }
 
 /**
@@ -108,7 +89,7 @@ mono_trace_set_level (GLogLevelFlags level)
 	if(level_stack == NULL)
 		mono_trace_init();
 
-	current_level = level;
+	mono_internal_current_level = level;
 }
 
 /**
@@ -126,7 +107,7 @@ mono_trace_set_mask (MonoTraceMask mask)
 	if(level_stack == NULL)
 		mono_trace_init();
 
-	current_mask	= mask;
+	mono_internal_current_mask	= mask;
 }
 
 /**
@@ -144,16 +125,16 @@ mono_trace_push (GLogLevelFlags level, MonoTraceMask mask)
 	if(level_stack == NULL)
 		g_error("%s: cannot use mono_trace_push without calling mono_trace_init first.", __func__);
 	else {
-		MonoLogLevelEntry *entry = g_malloc(sizeof(MonoLogLevelEntry));
-		entry->level	= current_level;
-		entry->mask		= current_mask;
+		MonoLogLevelEntry *entry = (MonoLogLevelEntry *) g_malloc(sizeof(MonoLogLevelEntry));
+		entry->level	= mono_internal_current_level;
+		entry->mask		= mono_internal_current_mask;
 
 		g_queue_push_head (level_stack, (gpointer)entry);
 
 		/* Set the new level and mask
 		 */
-		current_level = level;
-		current_mask  = mask;
+		mono_internal_current_level = level;
+		mono_internal_current_mask  = mask;
 	}
 }
 
@@ -173,8 +154,8 @@ mono_trace_pop (void)
 
 			/*	Restore previous level and mask
 			 */
-			current_level = entry->level;
-			current_mask  = entry->mask;
+			mono_internal_current_level = entry->level;
+			mono_internal_current_mask  = entry->mask;
 
 			g_free (entry);
 		}
@@ -212,10 +193,10 @@ mono_trace_set_mask_string (const char *value)
 	const char *tok;
 	guint32 flags = 0;
 
-	const char *valid_flags[] = {"asm", "type", "dll", "gc", "cfg", "aot", "security", "all", NULL};
+	const char *valid_flags[] = {"asm", "type", "dll", "gc", "cfg", "aot", "security", "threadpool", "io-threadpool", "io-layer", "all", NULL};
 	const MonoTraceMask	valid_masks[] = {MONO_TRACE_ASSEMBLY, MONO_TRACE_TYPE, MONO_TRACE_DLLIMPORT,
-						 MONO_TRACE_GC, MONO_TRACE_CONFIG, MONO_TRACE_AOT, MONO_TRACE_SECURITY, 
-						 MONO_TRACE_ALL };
+						 MONO_TRACE_GC, MONO_TRACE_CONFIG, MONO_TRACE_AOT, MONO_TRACE_SECURITY,
+						 MONO_TRACE_THREADPOOL, MONO_TRACE_IO_THREADPOOL, MONO_TRACE_IO_LAYER, MONO_TRACE_ALL };
 
 	if(!value)
 		return;
@@ -241,7 +222,7 @@ mono_trace_set_mask_string (const char *value)
 		}
 	}
 
-	mono_trace_set_mask (flags);
+	mono_trace_set_mask ((MonoTraceMask) flags);
 }
 
 /*
@@ -252,5 +233,89 @@ mono_trace_set_mask_string (const char *value)
 gboolean
 mono_trace_is_traced (GLogLevelFlags level, MonoTraceMask mask)
 {
-	return (level <= current_level && mask & current_mask);
+	return (level <= mono_internal_current_level && mask & mono_internal_current_mask);
+}
+
+static MonoLogCallback log_callback;
+
+static const char*
+log_level_get_name (GLogLevelFlags log_level)
+{
+	switch (log_level & G_LOG_LEVEL_MASK) {
+	case G_LOG_LEVEL_ERROR: return "error";
+	case G_LOG_LEVEL_CRITICAL: return "critical";
+	case G_LOG_LEVEL_WARNING: return "warning";
+	case G_LOG_LEVEL_MESSAGE: return "message";
+	case G_LOG_LEVEL_INFO: return "info";
+	case G_LOG_LEVEL_DEBUG: return "debug";
+	default: return "unknown";
+	}
+}
+
+static void
+log_adapter (const gchar *log_domain, GLogLevelFlags log_level, const gchar *message, gpointer user_data)
+{
+	log_callback (log_domain, log_level_get_name (log_level), message, log_level & G_LOG_LEVEL_ERROR, user_data);
+}
+
+/**
+ * mono_trace_set_log_handler:
+ *
+ *  @callback The callback that will replace the default logging handler
+ *  @user_data Argument passed to @callback
+ *
+ * The log handler replaces the default runtime logger. All logging requests with be routed to it.
+ * If the fatal argument in the callback is true, the callback must abort the current process. The runtime expects that
+ * execution will not resume after a fatal error.
+ */
+void
+mono_trace_set_log_handler (MonoLogCallback callback, void *user_data)
+{
+	g_assert (callback);
+	log_callback = callback;
+	g_log_set_default_handler (log_adapter, user_data);
+}
+
+static void
+print_handler (const char *string)
+{
+	print_callback (string, TRUE);
+}
+
+static void
+printerr_handler (const char *string)
+{
+	printerr_callback (string, FALSE);
+}
+
+/**
+ * mono_trace_set_print_handler:
+ *
+ * @callback The callback that will replace the default runtime behavior for stdout output.
+ *
+ * The print handler replaces the default runtime stdout output handler. This is used by free form output done by the runtime.
+ *
+ */
+void
+mono_trace_set_print_handler (MonoPrintCallback callback)
+{
+	g_assert (callback);
+	print_callback = callback;
+	g_set_print_handler (print_handler);
+}
+
+/**
+ * mono_trace_set_printerr_handler:
+ *
+ * @callback The callback that will replace the default runtime behavior for stderr output.
+ *
+ * The print handler replaces the default runtime stderr output handler. This is used by free form output done by the runtime.
+ *
+ */
+void
+mono_trace_set_printerr_handler (MonoPrintCallback callback)
+{
+	g_assert (callback);
+	printerr_callback = callback;
+	g_set_printerr_handler (printerr_handler);
 }

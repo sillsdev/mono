@@ -1,4 +1,3 @@
-#if NET_2_0
 // It is automatically generated
 using System;
 using System.Xml;
@@ -2479,7 +2478,6 @@ namespace System.Web.Services.Description
 		}
 	}
 
-	#if !TARGET_JVM
 	internal class XmlSerializerContract : System.Xml.Serialization.XmlSerializerImplementation
 	{
 		System.Collections.Hashtable readMethods = null;
@@ -2550,7 +2548,5 @@ namespace System.Web.Services.Description
 		}
 	}
 
-	#endif
 }
 
-#endif

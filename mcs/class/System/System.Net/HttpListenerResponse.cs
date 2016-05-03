@@ -218,61 +218,8 @@ namespace System.Net {
 				if (value < 100 || value > 999)
 					throw new ProtocolViolationException ("StatusCode must be between 100 and 999.");
 				status_code = value;
-				status_description = GetStatusDescription (value);
+				status_description = HttpListenerResponseHelper.GetStatusDescription (value);
 			}
-		}
-
-		internal static string GetStatusDescription (int code)
-		{
-			switch (code){
-			case 100: return "Continue";
-			case 101: return "Switching Protocols";
-			case 102: return "Processing";
-			case 200: return "OK";
-			case 201: return "Created";
-			case 202: return "Accepted";
-			case 203: return "Non-Authoritative Information";
-			case 204: return "No Content";
-			case 205: return "Reset Content";
-			case 206: return "Partial Content";
-			case 207: return "Multi-Status";
-			case 300: return "Multiple Choices";
-			case 301: return "Moved Permanently";
-			case 302: return "Found";
-			case 303: return "See Other";
-			case 304: return "Not Modified";
-			case 305: return "Use Proxy";
-			case 307: return "Temporary Redirect";
-			case 400: return "Bad Request";
-			case 401: return "Unauthorized";
-			case 402: return "Payment Required";
-			case 403: return "Forbidden";
-			case 404: return "Not Found";
-			case 405: return "Method Not Allowed";
-			case 406: return "Not Acceptable";
-			case 407: return "Proxy Authentication Required";
-			case 408: return "Request Timeout";
-			case 409: return "Conflict";
-			case 410: return "Gone";
-			case 411: return "Length Required";
-			case 412: return "Precondition Failed";
-			case 413: return "Request Entity Too Large";
-			case 414: return "Request-Uri Too Long";
-			case 415: return "Unsupported Media Type";
-			case 416: return "Requested Range Not Satisfiable";
-			case 417: return "Expectation Failed";
-			case 422: return "Unprocessable Entity";
-			case 423: return "Locked";
-			case 424: return "Failed Dependency";
-			case 500: return "Internal Server Error";
-			case 501: return "Not Implemented";
-			case 502: return "Bad Gateway";
-			case 503: return "Service Unavailable";
-			case 504: return "Gateway Timeout";
-			case 505: return "Http Version Not Supported";
-			case 507: return "Insufficient Storage";
-			}
-			return "";
 		}
 
 		public string StatusDescription {
@@ -475,7 +422,7 @@ namespace System.Net {
 
 			if (cookies != null) {
 				foreach (Cookie cookie in cookies)
-					headers.SetInternal ("Set-Cookie", cookie.ToClientString ());
+					headers.SetInternal ("Set-Cookie", CookieToClientString (cookie));
 			}
 
 			StreamWriter writer = new StreamWriter (ms, encoding, 256);
@@ -492,6 +439,51 @@ namespace System.Net {
 			HeadersSent = true;
 		}
 
+		static string CookieToClientString (Cookie cookie)
+		{
+			if (cookie.Name.Length == 0)
+				return String.Empty;
+
+			StringBuilder result = new StringBuilder (64);
+
+			if (cookie.Version > 0)
+				result.Append ("Version=").Append (cookie.Version).Append (";");
+
+			result.Append (cookie.Name).Append ("=").Append (cookie.Value);
+
+			if (cookie.Path != null && cookie.Path.Length != 0)
+				result.Append (";Path=").Append (QuotedString (cookie, cookie.Path));
+
+			if (cookie.Domain != null && cookie.Domain.Length != 0)
+				result.Append (";Domain=").Append (QuotedString (cookie, cookie.Domain));			
+
+			if (cookie.Port != null && cookie.Port.Length != 0)
+				result.Append (";Port=").Append (cookie.Port);	
+
+			return result.ToString ();
+		}
+
+		static string QuotedString (Cookie cookie, string value)
+		{
+			if (cookie.Version == 0 || IsToken (value))
+				return value;
+			else 
+				return "\"" + value.Replace("\"", "\\\"") + "\"";
+		}	
+
+		static string tspecials = "()<>@,;:\\\"/[]?={} \t";   // from RFC 2965, 2068
+
+	    static bool IsToken (string value) 
+		{
+			int len = value.Length;
+			for (int i = 0; i < len; i++) {
+			    char c = value [i];
+				if (c < 0x20 || c >= 0x7f || tspecials.IndexOf (c) != -1)
+			      		return false;
+			}
+			return true;
+		}
+
 		public void SetCookie (Cookie cookie)
 		{
 			if (cookie == null)
@@ -505,6 +497,64 @@ namespace System.Net {
 			}
 
 			cookies.Add (cookie);
+		}
+	}
+
+	// do not inline into HttpListenerResponse as this recursively brings everything that's 
+	// reachable by IDisposable.Dispose (and that's quite a lot in this case). 
+	static class HttpListenerResponseHelper {
+
+		internal static string GetStatusDescription (int code)
+		{
+			switch (code){
+			case 100: return "Continue";
+			case 101: return "Switching Protocols";
+			case 102: return "Processing";
+			case 200: return "OK";
+			case 201: return "Created";
+			case 202: return "Accepted";
+			case 203: return "Non-Authoritative Information";
+			case 204: return "No Content";
+			case 205: return "Reset Content";
+			case 206: return "Partial Content";
+			case 207: return "Multi-Status";
+			case 300: return "Multiple Choices";
+			case 301: return "Moved Permanently";
+			case 302: return "Found";
+			case 303: return "See Other";
+			case 304: return "Not Modified";
+			case 305: return "Use Proxy";
+			case 307: return "Temporary Redirect";
+			case 400: return "Bad Request";
+			case 401: return "Unauthorized";
+			case 402: return "Payment Required";
+			case 403: return "Forbidden";
+			case 404: return "Not Found";
+			case 405: return "Method Not Allowed";
+			case 406: return "Not Acceptable";
+			case 407: return "Proxy Authentication Required";
+			case 408: return "Request Timeout";
+			case 409: return "Conflict";
+			case 410: return "Gone";
+			case 411: return "Length Required";
+			case 412: return "Precondition Failed";
+			case 413: return "Request Entity Too Large";
+			case 414: return "Request-Uri Too Long";
+			case 415: return "Unsupported Media Type";
+			case 416: return "Requested Range Not Satisfiable";
+			case 417: return "Expectation Failed";
+			case 422: return "Unprocessable Entity";
+			case 423: return "Locked";
+			case 424: return "Failed Dependency";
+			case 500: return "Internal Server Error";
+			case 501: return "Not Implemented";
+			case 502: return "Bad Gateway";
+			case 503: return "Service Unavailable";
+			case 504: return "Gateway Timeout";
+			case 505: return "Http Version Not Supported";
+			case 507: return "Insufficient Storage";
+			}
+			return "";
 		}
 	}
 }

@@ -19,12 +19,13 @@
     <TargetFrameworkVersion>v@FX_VERSION</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
+  @SIGNATURE@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <NoWarn>@DISABLEDWARNINGS@</NoWarn>
     <Optimize>false</Optimize>
-    <DefineConstants>DEBUG;TRACE;@DEFINECONSTANTS@</DefineConstants>
+    <DefineConstants>TRACE;@DEFINECONSTANTS@</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -53,12 +54,8 @@
   </Target>
   -->
   <PropertyGroup>
-    <PreBuildEvent>
 @PREBUILD@
-    </PreBuildEvent>
-    <PostBuildEvent>
 @POSTBUILD@
-  </PostBuildEvent>
   </PropertyGroup>
   <ItemGroup>
 @REFERENCES@  </ItemGroup>

@@ -19,7 +19,7 @@ struct GFoo<T> {
 }
 
 struct GFoo2<T> {
-	public T t, t2;
+	public T t, t2, t3;
 }
 
 class GFoo3<T> {
@@ -40,15 +40,21 @@ class GFoo3<T> {
 // The tests use arrays to pass/receive values to keep the calling convention of the methods stable, which is a current limitation of the runtime support for gsharedvt.
 //
 
+//
+// Interfaces are used to prevent the AOT compiler from discovering instantiations, thus forcing the usage of the gsharedvt
+// versions of methods. Unused vtype type arguments are used to test gsharedvt methods with ref type arguments, i.e.
+// when calling foo<T,T2> as foo<object,bool>, the gsharedvt version is used, but with a ref type argument.
+//
+
 // FIXME: Add mixed ref/noref tests, i.e. Dictionary<string, int>
 
-#if MOBILE
+#if __MOBILE__
 public class GSharedTests
 #else
 public class Tests
 #endif
 {
-#if !MOBILE
+#if !__MOBILE__
 	public static int Main (String[] args) {
 		return TestDriver.RunTests (typeof (Tests), args);
 	}
@@ -221,6 +227,9 @@ public class Tests
 		res = iface.Unbox<AnEnum, int> (AnEnum.One, 0, AnEnum.Two);
 		if (res != AnEnum.Two)
 			return 2;
+		int res2 = iface.Unbox<int, AnEnum> (0, AnEnum.One, AnEnum.Two);
+		if (res2 != 1)
+			return 3;
 		return 0;
 	}
 
@@ -384,6 +393,16 @@ public class Tests
 		return t;
 	}
 
+	interface IFaceGSharedVtIn {
+		T return_t<T> (T t);
+	}
+
+	class ClassGSharedVtIn : IFaceGSharedVtIn {
+		public T return_t<T> (T t) {
+			return t;
+		}
+	}
+
 	public static int test_0_gsharedvt_in () {
 		// Check that the non-generic argument is passed at the correct stack position
 		int r = args_simple<bool> (true, 42);
@@ -427,14 +446,34 @@ public class Tests
 		var v2 = return_t<GFoo2<int>> (v);
 		if (v2.t != 55 || v2.t2 != 32)
 			return 6;
+		IFaceGSharedVtIn o = new ClassGSharedVtIn ();
+		var v3 = new GFoo2<long> () { t = 55, t2 = 32 };
+		var v4 = o.return_t<GFoo2<long>> (v3);
+		if (v4.t != 55 || v4.t2 != 32)
+			return 7;
 		i = new GSharedTests ().return_this_t<int> (42);
 		if (i != 42)
-			return 7;
+			return 8;
 		return 0;
 	}
 
 	public static int test_0_gsharedvt_in_delegates () {
 		Func<int, int> f = new Func<int, int> (return_t<int>);
+		if (f (42) != 42)
+			return 1;
+		return 0;
+	}
+
+	class DelClass {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public static T return_t<T> (T t) {
+			return t;
+		}
+	}
+
+	public static int test_0_gsharedvt_in_delegates_reflection () {
+		var m = typeof(DelClass).GetMethod ("return_t").MakeGenericMethod (new Type [] { typeof (int) });
+		Func<int, int> f = (Func<int, int>)Delegate.CreateDelegate (typeof (Func<int,int>), null, m, false);
 		if (f (42) != 42)
 			return 1;
 		return 0;
@@ -920,6 +959,47 @@ public class Tests
 		return 0;
 	}
 
+	public interface IFace1<T> {
+		void m1 ();
+		void m2 ();
+		void m3 ();
+		void m4 ();
+		void m5 ();
+	}
+
+	public class ClassIFace<T> : IFace1<T> {
+		public void m1 () {
+		}
+		public void m2 () {
+		}
+		public void m3 () {
+		}
+		public void m4 () {
+		}
+		public void m5 () {
+		}
+	}
+
+	interface IFaceIFaceCall {
+		void call<T, T2> (IFace1<object> iface);
+	}
+
+	class MakeIFaceCall : IFaceIFaceCall {
+		public void call<T, T2> (IFace1<object> iface) {
+			iface.m1 ();
+		}
+	}
+
+	// Check normal interface calls from gsharedvt call to fully instantiated methods
+	public static int test_0_instatiated_iface_call () {
+		ClassIFace<object> c1 = new ClassIFace<object> ();
+
+		IFaceIFaceCall c = new MakeIFaceCall ();
+
+		c.call<object, int> (c1);
+		return 0;
+	}
+
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	static string to_string<T, T2>(T t, T2 t2) {
 		return t.ToString ();
@@ -983,6 +1063,11 @@ public class Tests
 		public Type gettype<T, T2>(T t, T2 t2) {
 			return t.GetType ();
 		}
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public Type gettype2<T>(T t) {
+			return t.GetType ();
+		}
 	}
 
 	public static int test_0_constrained_gettype () {
@@ -991,10 +1076,43 @@ public class Tests
 			return 1;
 		if (c.gettype<string, int> ("A", 1) != typeof (string))
 			return 2;
+		/* Partial sharing */
+		var c2 = new CGetType ();
+		if (c2.gettype2<long> (1) != typeof (long))
+			return 3;
 		return 0;
 	}
 
-	struct Pair<T1, T2> {
+	interface IConstrainedCalls {
+		Pair<int, int> vtype_ret<T, T2>(T t, T2 t2) where T: IReturnVType;
+	}
+
+	public interface IReturnVType {
+		Pair<int, int> return_vtype ();
+	}
+
+	public class CConstrainedCalls : IConstrainedCalls {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public Pair<int, int> vtype_ret<T, T2>(T t, T2 t2) where T : IReturnVType {
+			return t.return_vtype ();
+		}
+	}
+
+	class ReturnVType : IReturnVType {
+		public Pair<int, int> return_vtype () {
+			return new Pair<int, int> () { First = 1, Second = 2 };
+		}
+	}
+
+	public static int test_0_constrained_vtype_ret () {
+		IConstrainedCalls c = new CConstrainedCalls ();
+		var r = c.vtype_ret<ReturnVType, int> (new ReturnVType (), 1);
+		if (r.First != 1 || r.Second != 2)
+			return 1;
+		return 0;
+	}
+
+	public struct Pair<T1, T2> {
 		public T1 First;
 		public T2 Second;
 	}
@@ -1004,6 +1122,7 @@ public class Tests
 		return action(null, state);
 	}
 
+	[Category ("!FULLAOT")]
 	public static int test_0_delegate_wrappers () {
 		Func<object, Pair<int, int>, Pair<int, int>> del1 = delegate (object o, Pair<int, int> p) { return p; };
 		Func<object, Pair<int, int>, Pair<int, int>> del2 = delegate (object o, Pair<int, int> p) { return p; };
@@ -1196,12 +1315,19 @@ public class Tests
 
 	interface IFaceBox {
 		object box<T> (T t);
+		bool is_null<T> (T t);
 	}
 
 	class ClassBox : IFaceBox {
 		public object box<T> (T t) {
 			object o = t;
 			return o;
+		}
+
+		public bool is_null<T> (T t) {
+			if (!(default(T) == null))
+				return false;
+			return true;
 		}
 	}
 
@@ -1223,6 +1349,15 @@ public class Tests
 		if (c.box<string> (s) != (object)s)
 			return 5;
 		return 0;
+	}
+
+	public static int test_0_nullable_box_brtrue_opt () {
+		IFaceBox c = new ClassBox ();
+
+		if (c.is_null<double?> (null))
+			return 0;
+		else
+			return 1;
 	}
 
 	interface IFaceUnbox2 {
@@ -1444,6 +1579,204 @@ public class Tests
 		var c = new ReadOnlyCollection<AnEnum> (arr);
 		return c.Contains (AnEnum.Two) == false ? 0 : 1;
 	}
+
+	interface IFaceCallPatching {
+		bool caller<T, T2> ();
+	}
+
+	class CallPatching2<T> {
+		T t;
+		public object o;
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public bool callee () {
+			return (string)o == "ABC";
+		}
+	}
+
+	class CallPatching : IFaceCallPatching {
+		public bool caller<T, T2> () {
+			var c = new CallPatching2<T> ();
+			c.o = "ABC";
+			return c.callee ();
+		}
+	}
+
+	//
+	// This tests that generic calls made from gsharedvt methods are not patched normally.
+	// If they are, the first call to 'caller' would patch in the gshared version of
+	// 'callee', causing the second call to fail because the gshared version of callee
+	// wouldn't work with CallPatching2<bool> since it has a different object layout.
+	//
+	public static int test_0_call_patching () {
+		IFaceCallPatching c = new CallPatching ();
+		c.caller<object, bool> ();
+		if (!c.caller<bool, bool> ())
+			return 1;
+		return 0;
+	}
+
+	struct EmptyStruct {
+	}
+
+	public struct BStruct {
+		public int a, b, c, d;
+	}
+
+	interface IFoo3<T> {
+		int Bytes (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+				   byte b1, byte b2, byte b3, byte b4, byte b5, byte b6, byte b7, byte b8);
+		int SBytes (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+					sbyte b1, sbyte b2, sbyte b3, sbyte b4);
+		int Shorts (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+					short b1, short b2, short b3, short b4);
+		int UShorts (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+					ushort b1, ushort b2, ushort b3, ushort b4);
+		int Ints (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+				  int i1, int i2, int i3, int i4);
+		int UInts (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+				   uint i1, uint i2, uint i3, uint i4);
+		int Structs (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+					 BStruct s);
+	}
+
+	class Foo3<T> : IFoo3<T> {
+		public int Bytes (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+						  byte b1, byte b2, byte b3, byte b4, byte b5, byte b6, byte b7, byte b8) {
+			return b1 + b2 + b3 + b4 + b5 + b6 + b7 + b8;
+		}
+		public int SBytes (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+						  sbyte b1, sbyte b2, sbyte b3, sbyte b4) {
+			return b1 + b2 + b3 + b4;
+		}
+		public int Shorts (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+						   short b1, short b2, short b3, short b4) {
+			return b1 + b2 + b3 + b4;
+		}
+		public int UShorts (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+							ushort b1, ushort b2, ushort b3, ushort b4) {
+			return b1 + b2 + b3 + b4;
+		}
+		public int Ints (T t, int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8,
+						   int i1, int i2, int i3, int i4) {
+			return i1 + i2 + i3 + i4;
+		}
+		public int UInts (T t, int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8,
+						  uint i1, uint i2, uint i3, uint i4) {
+			return (int)(i1 + i2 + i3 + i4);
+		}
+		public int Structs (T t, int dummy1, int a2, int a3, int a4, int a5, int a6, int a7, int dummy8,
+							BStruct s) {
+			return s.a + s.b + s.c + s.d;
+		}
+	}
+
+	// Passing small normal arguments on the stack
+	public static int test_0_arm64_small_stack_args () {
+		IFoo3<EmptyStruct> o = (IFoo3<EmptyStruct>)Activator.CreateInstance (typeof (Foo3<>).MakeGenericType (new Type [] { typeof (EmptyStruct) }));
+		int res = o.Bytes (new EmptyStruct (), 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+		if (res != 36)
+			return 1;
+		int res2 = o.SBytes (new EmptyStruct (), 1, 2, 3, 4, 5, 6, 7, 8, -1, -2, -3, -4);
+		if (res2 != -10)
+			return 2;
+		int res3 = o.Shorts (new EmptyStruct (), 1, 2, 3, 4, 5, 6, 7, 8, -1, -2, -3, -4);
+		if (res3 != -10)
+			return 3;
+		int res4 = o.UShorts (new EmptyStruct (), 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4);
+		if (res4 != 10)
+			return 4;
+		int res5 = o.Ints (new EmptyStruct (), 1, 2, 3, 4, 5, 6, 7, 8, -1, -2, -3, -4);
+		if (res5 != -10)
+			return 5;
+		int res6 = o.UInts (new EmptyStruct (), 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4);
+		if (res6 != 10)
+			return 6;
+		return 0;
+	}
+
+	interface ISmallArg {
+		T foo<T> (string s1, string s2, string s3, string s4, string s5, string s6, string s7, string s8,
+				  string s9, string s10, string s11, string s12, string s13, T t);
+	}
+
+	class SmallArgClass : ISmallArg {
+			public T foo<T> (string s1, string s2, string s3, string s4, string s5, string s6, string s7, string s8,
+							 string s9, string s10, string s11, string s12, string s13, T t) {
+				return t;
+			}
+		}
+
+	public static int test_1_small_gsharedvt_stack_arg_ios () {
+		ISmallArg o = new SmallArgClass ();
+		return o.foo<int> ("", "", "", "", "", "", "", "", "", "", "", "", "", 1);
+	}
+
+	// Passing vtype normal arguments on the stack
+	public static int test_0_arm64_vtype_stack_args () {
+		IFoo3<EmptyStruct> o = (IFoo3<EmptyStruct>)Activator.CreateInstance (typeof (Foo3<>).MakeGenericType (new Type [] { typeof (EmptyStruct) }));
+		int res = o.Structs (new EmptyStruct (), 1, 2, 3, 4, 5, 6, 7, 8, new BStruct () { a = 1, b = 2, c = 3, d = 4 });
+		if (res != 10)
+			return 1;
+		return 0;
+	}
+
+	interface IFoo4<T> {
+		T Get(T[,] arr, T t);
+	}
+
+	class Foo4<T> : IFoo4<T> {
+		public T Get(T[,] arr, T t) {
+			arr [1, 1] = t;
+			return arr [1, 1];
+		}
+	}
+
+	struct AStruct {
+		public int a, b;
+	}
+
+	public static int test_0_multi_dim_arrays_2 () {
+		IFoo4<int> foo = new Foo4<int> ();
+		var arr = new int [10, 10];
+		int res = foo.Get (arr, 10);
+		if (res != 10)
+			return 1;
+
+		IFoo4<AStruct> foo2 = new Foo4<AStruct> ();
+		var arr2 = new AStruct [10, 10];
+		var res2 = foo2.Get (arr2, new AStruct () { a = 1, b = 2 });
+		if (res2.a != 1 || res2.b != 2)
+			return 2;
+		return 0;
+	}
+
+	public interface IFaceTest {
+		int iface_method ();
+	}
+
+	public interface IFaceConstrainedIFace {
+		int foo<T, T2> (ref T val) where T: IFaceTest;
+	}
+
+	class ConstrainedIFace : IFaceConstrainedIFace {
+		public int foo<T, T2> (ref T val) where T: IFaceTest {
+			return val.iface_method ();
+		}
+	}
+
+	class ClassTest : IFaceTest {
+		public int iface_method () {
+			return 42;
+		}
+	}
+
+	// Test constrained calls on an interface made from gsharedvt methods
+	public static int test_42_gsharedvt_constrained_iface () {
+		IFaceConstrainedIFace obj = new ConstrainedIFace ();
+		IFaceTest t = new ClassTest ();
+		return obj.foo<IFaceTest, int> (ref t);
+	}
 }
 
 // #13191
@@ -1461,7 +1794,7 @@ public class MobileServiceCollection<TTable, TCol>
 	}
 }
 
-#if !MOBILE
+#if !__MOBILE__
 public class GSharedTests : Tests {
 }
 #endif

@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#if NET_2_0
 
 using NUnit.Framework;
 using System;
@@ -74,7 +73,6 @@ namespace MonoTests.System.Web.UI.WebControls
 	[TestFixture]
 	public class MasterPageTest
 	{
-#if NET_4_0
 		class MyTemplate : ITemplate
 		{
 			public const string MyText = "|MyTemplate.InstantiateIn called|";
@@ -94,7 +92,6 @@ namespace MonoTests.System.Web.UI.WebControls
 				container.Controls.Add (new LiteralControl (MyText));
 			}
 		}
-#endif
 		[TestFixtureSetUp]
 		public void CopyTestResources ()
 		{
@@ -216,7 +213,6 @@ namespace MonoTests.System.Web.UI.WebControls
 			if (PageRenderHtml.IndexOf ("FromMasterMethod") < 0)
 				Assert.Fail ("MasterType TypeName test failed");
 		}
-#if NET_4_0
 		[Test]
 		public void InstantiateInContentPlaceHolder ()
 		{
@@ -296,7 +292,6 @@ namespace MonoTests.System.Web.UI.WebControls
 			return false;
 		}
 
-#endif
 		public static void _RenderDefault (Page p)
 		{
 			p.Form.Controls.Add(new LiteralControl("Page dynamic text"));
@@ -319,4 +314,3 @@ namespace MonoTests.System.Web.UI.WebControls
 		}
 	}
 }
-#endif

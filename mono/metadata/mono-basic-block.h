@@ -2,7 +2,9 @@
 #define __MONO_METADATA_BASIC_BLOCK_H__
 
 #include <glib.h>
-
+#include <mono/metadata/metadata.h>
+#include <mono/utils/mono-compiler.h>
+#include <mono/utils/mono-error.h>
 
 G_BEGIN_DECLS
 
@@ -16,20 +18,19 @@ struct _MonoSimpleBasicBlock {
 	unsigned dead     : 1;
 };
 
-
 MonoSimpleBasicBlock*
-mono_basic_block_split (MonoMethod *method, MonoError *error) MONO_INTERNAL;
+mono_basic_block_split (MonoMethod *method, MonoError *error, MonoMethodHeader *header);
 
 void
-mono_basic_block_free (MonoSimpleBasicBlock *bb) MONO_INTERNAL;
+mono_basic_block_free (MonoSimpleBasicBlock *bb);
 
 
 /*This function is here because opcodes.h is a public header*/
 int
-mono_opcode_value_and_size (const unsigned char **ip, const unsigned char *end, int *value) MONO_INTERNAL;
+mono_opcode_value_and_size (const unsigned char **ip, const unsigned char *end, int *value);
 
 int
-mono_opcode_size (const unsigned char *ip, const unsigned char *end) MONO_INTERNAL;
+mono_opcode_size (const unsigned char *ip, const unsigned char *end);
 
 G_END_DECLS
 

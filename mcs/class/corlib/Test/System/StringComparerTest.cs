@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Globalization;
@@ -43,17 +42,10 @@ namespace MonoTests.System
 	{
 		private CultureInfo old_culture;
 
-#if TARGET_JVM // BinaryFormatter is Java based under TARGET_JVM.
-		private BinaryFormatter CreateBinaryFormatter()
-		{
-			return (BinaryFormatter)vmw.@internal.remoting.BinaryFormatterUtils.CreateBinaryFormatter (false);
-		}
-#else
 		private BinaryFormatter CreateBinaryFormatter()
 		{
 			return new BinaryFormatter();
 		}
-#endif // TARGET_JVM
 
 		[SetUp]
 		public void SetUp ()
@@ -223,6 +215,20 @@ namespace MonoTests.System
 			StringComparer.Ordinal.GetHashCode (null);
 		}
 
+		[Test]
+		[SetCulture("en-us")]
+		public void OrdinarCultureSwitch ()
+		{
+			var cmp1 = StringComparer.OrdinalIgnoreCase;
+			var h1 = cmp1.GetHashCode ("w");
+
+			global::System.Threading.Thread.CurrentThread.CurrentCulture = new global::System.Globalization.CultureInfo ("fi");
+
+			var cmp2 = StringComparer.OrdinalIgnoreCase;
+			var h2 = cmp2.GetHashCode ("w");
+			Assert.AreEqual (h1, h2);
+		}
+
 		private static readonly byte [] _serializedCurrentCulture = new byte [] {
 			0x00, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x01, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00,
@@ -328,4 +334,3 @@ namespace MonoTests.System
 	}
 }
 
-#endif

@@ -127,6 +127,23 @@ namespace System.Net.Http.Headers
 				}
 
 				list.Add (element);
+
+				// Separator parsing
+				switch (lexer.PeekChar ()) {
+				case ' ':
+				case '\t':
+					lexer.EatChar ();
+					continue;
+				case -1:
+					if (minimalCount <= list.Count) {
+						result = list;
+						return true;
+					}
+
+					break;
+				}
+					
+				return false;
 			}
 		}
 
@@ -154,13 +171,17 @@ namespace System.Net.Http.Headers
 			var value = new ProductHeaderValue ();
 			value.Name = lexer.GetStringValue (t);
 
+			var pos = lexer.Position;
 			t = lexer.Scan ();
 			if (t == Token.Type.SeparatorSlash) {
+
 				t = lexer.Scan ();
 				if (t != Token.Type.Token)
 					return false;
 
 				value.Version = lexer.GetStringValue (t);
+			} else {
+				lexer.Position = pos;
 			}
 
 			parsedValue = new ProductInfoHeaderValue (value);

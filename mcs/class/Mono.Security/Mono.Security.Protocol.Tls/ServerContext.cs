@@ -28,6 +28,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 using Mono.Security.Protocol.Tls.Handshake;
+using Mono.Security.Interface;
 using MonoX509 = Mono.Security.X509;
 
 namespace Mono.Security.Protocol.Tls
@@ -83,19 +84,33 @@ namespace Mono.Security.Protocol.Tls
 
 			this.ServerSettings.UpdateCertificateRSA();
 
-			// Add requested certificate types
-			this.ServerSettings.CertificateTypes = new ClientCertificateType[1];
-			this.ServerSettings.CertificateTypes[0] = ClientCertificateType.RSA;
+			if (CertificateValidationHelper.SupportsX509Chain) {
+				// Build the chain for the certificate and if the chain is correct, add all certificates 
+				// (except the root certificate [FIRST ONE] ... the client is supposed to know that one,
+				// otherwise the whole concept of a trusted chain doesn't work out ... 
+				MonoX509.X509Chain chain = new MonoX509.X509Chain (MonoX509.X509StoreManager.IntermediateCACertificates);
 
-			// Add certificate authorities
-			MonoX509.X509CertificateCollection trusted = MonoX509.X509StoreManager.TrustedRootCertificates;
-			string[] list = new string [trusted.Count];
-			int i = 0;
-			foreach (MonoX509.X509Certificate root in trusted)
-			{
-				list [i++] = root.IssuerName;
+				if (chain.Build (cert)) {
+					for (int j = chain.Chain.Count - 1; j > 0; j--)
+						ServerSettings.Certificates.Add (chain.Chain [j]);
+				}
 			}
-			this.ServerSettings.DistinguisedNames = list;
+
+			// Add requested certificate types
+			ServerSettings.CertificateTypes = new ClientCertificateType [ServerSettings.Certificates.Count];
+			for (int j = 0; j < this.ServerSettings.CertificateTypes.Length; j++)
+				ServerSettings.CertificateTypes [j] = ClientCertificateType.RSA;
+
+			if (CertificateValidationHelper.SupportsX509Chain) {
+				// Add certificate authorities
+				MonoX509.X509CertificateCollection trusted = MonoX509.X509StoreManager.TrustedRootCertificates;
+				string[] list = new string [trusted.Count];
+				int i = 0;
+				foreach (MonoX509.X509Certificate root in trusted) {
+					list [i++] = root.IssuerName;
+				}
+				this.ServerSettings.DistinguisedNames = list;
+			}
 		}
 
 		#endregion

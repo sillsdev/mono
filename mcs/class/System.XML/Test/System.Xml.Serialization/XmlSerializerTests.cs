@@ -34,9 +34,8 @@ using System.Xml;
 using System.Data;
 using System.Xml.Schema;
 using System.Xml.Serialization;
-#if NET_2_0
+using System.Reflection;
 using System.Collections.Generic;
-#endif
 
 using NUnit.Framework;
 
@@ -279,7 +278,7 @@ namespace MonoTests.System.XmlSerialization
 		}
 
 		[Test]
-		[Category ("NotWorking")]
+		[Category ("MobileNotWorking")]
 		public void TestSerializeEnumeration_FromValue_Encoded ()
 		{
 			SerializeEncoded ((int) SimpleEnumeration.SECOND, typeof (SimpleEnumeration));
@@ -377,7 +376,7 @@ namespace MonoTests.System.XmlSerialization
 		}
 
 		[Test]
-		[Category ("NotWorking")]
+		[Category ("MobileNotWorking")]
 		public void TestSerializeEnumDefaultValue_Encoded ()
 		{
 			SerializeEncoded (new EnumDefaultValue ());
@@ -558,7 +557,6 @@ namespace MonoTests.System.XmlSerialization
 		[Test]
 		public void TestSerializeEnumDefaultValue_InvalidValue2 ()
 		{
-#if NET_2_0
 			try {
 				Serialize (5, typeof (EnumDefaultValue));
 				Assert.Fail ("#1");
@@ -570,16 +568,11 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.InnerException.Message.IndexOf ("'5'") != -1, "#6");
 				Assert.IsTrue (ex.InnerException.Message.IndexOf (typeof (EnumDefaultValue).FullName) != -1, "#7");
 			}
-#else
-			Serialize (5, typeof (EnumDefaultValue));
-			Assert.AreEqual (Infoset ("<EnumDefaultValue>5</EnumDefaultValue>"), WriterText);
-#endif
 		}
 
 		[Test]
 		public void TestSerializeEnumDefaultValueNF_InvalidValue1 ()
 		{
-#if NET_2_0
 			try {
 				Serialize (new EnumDefaultValueNF ());
 				Assert.Fail ("#1");
@@ -591,16 +584,11 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.InnerException.Message.IndexOf ("'0'") != -1, "#6");
 				Assert.IsTrue (ex.InnerException.Message.IndexOf (typeof (EnumDefaultValueNF).FullName) != -1, "#7");
 			}
-#else
-			Serialize (new EnumDefaultValueNF ());
-			Assert.AreEqual (Infoset ("<EnumDefaultValueNF>0</EnumDefaultValueNF>"), WriterText);
-#endif
 		}
 
 		[Test]
 		public void TestSerializeEnumDefaultValueNF_InvalidValue2 ()
 		{
-#if NET_2_0
 			try {
 				Serialize (15, typeof (EnumDefaultValueNF));
 				Assert.Fail ("#1");
@@ -612,10 +600,6 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.InnerException.Message.IndexOf ("'15'") != -1, "#6");
 				Assert.IsTrue (ex.InnerException.Message.IndexOf (typeof (EnumDefaultValueNF).FullName) != -1, "#7");
 			}
-#else
-			Serialize (15, typeof (EnumDefaultValueNF));
-			Assert.AreEqual (Infoset ("<EnumDefaultValueNF>15</EnumDefaultValueNF>"), WriterText);
-#endif
 		}
 
 		[Test]
@@ -725,7 +709,6 @@ namespace MonoTests.System.XmlSerialization
 			f.Modifiers3 = (MapModifiers) 0;
 			f.Modifiers4 = (MapModifiers) 888;
 			f.Modifiers5 = (MapModifiers) 999;
-#if NET_2_0
 			try {
 				Serialize (f, typeof (Field));
 				Assert.Fail ("#E1");
@@ -743,33 +726,19 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.InnerException.Message.IndexOf (typeof (FlagEnum).FullName) != -1, "#E8");
 				Assert.IsNull (ex.InnerException.InnerException, "#E9");
 			}
-#else
-			Serialize (f, typeof (Field));
-			Assert.AreEqual (Infoset (string.Format (CultureInfo.InvariantCulture,
-				"<field xmlns:xsd='{0}' xmlns:xsi='{1}' flag1='one two' flag2='444'" +
-				" flag3='555' flag4='one two four' modifiers='666' modifiers2='777'" +
-				" modifiers4='888' modifiers5='999' names='a b' />",
-				XmlSchema.Namespace, XmlSchema.InstanceNamespace)), WriterText, "#E");
-#endif
 		}
 
 		[Test]
-		[Category ("NotDotNet")] // MS bug
+		[Category ("NotWorking")] // MS bug
 		public void TestSerializeField_Encoded ()
 		{
 			Field_Encoded f = new Field_Encoded ();
 			SerializeEncoded (f, typeof (Field_Encoded));
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<?xml version='1.0' encoding='utf-16'?>" +
-#if NET_2_0
-				"<q1:field xmlns:xsi='{1}' xmlns:xsd='{0}' id='id1' flag1=''" +
-				" flag2='' flag3='' flag4='' modifiers='PuBlIc'" +
-				" modifiers2='PuBlIc' modifiers4='PuBlIc' xmlns:q1='some:urn' />",
-#else
 				"<q1:field xmlns:xsd='{0}' xmlns:xsi='{1}' id='id1' flag1=''" +
 				" flag2='' flag3='' flag4='' modifiers='PuBlIc'" +
 				" modifiers2='PuBlIc' modifiers4='PuBlIc' xmlns:q1='some:urn' />",
-#endif
 				XmlSchema.Namespace, XmlSchema.InstanceNamespace),
 				sw.GetStringBuilder ().ToString (), "#A");
 
@@ -784,15 +753,9 @@ namespace MonoTests.System.XmlSerialization
 			SerializeEncoded (f, typeof (Field_Encoded));
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<?xml version='1.0' encoding='utf-16'?>" +
-#if NET_2_0
-				"<q1:field xmlns:xsi='{1}' xmlns:xsd='{0}' id='id1' flag3='two'" +
-				" flag4='' modifiers='Protected' modifiers2='PuBlIc'" +
-				" xmlns:q1='some:urn' />",
-#else
 				"<q1:field xmlns:xsd='{0}' xmlns:xsi='{1}' id='id1' flag3='two'" +
 				" flag4='' modifiers='Protected' modifiers2='PuBlIc'" +
 				" xmlns:q1='some:urn' />",
-#endif
 				XmlSchema.Namespace, XmlSchema.InstanceNamespace),
 				sw.GetStringBuilder ().ToString (), "#B");
 
@@ -807,17 +770,10 @@ namespace MonoTests.System.XmlSerialization
 			SerializeEncoded (f, typeof (Field_Encoded));
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<?xml version='1.0' encoding='utf-16'?>" +
-#if NET_2_0
-				"<q1:field xmlns:xsi='{1}' xmlns:xsd='{0}' id='id1' flag1='two'" +
-				" flag2='two' flag4='' modifiers='PuBlIc' modifiers2='Protected'" +
-				" modifiers3='Protected' modifiers4='PuBlIc' modifiers5='Protected'" +
-				" xmlns:q1='some:urn' />",
-#else
 				"<q1:field xmlns:xsd='{0}' xmlns:xsi='{1}' id='id1' flag1='two'" +
 				" flag2='two' flag4='' modifiers='PuBlIc' modifiers2='Protected'" +
 				" modifiers3='Protected' modifiers4='PuBlIc' modifiers5='Protected'" +
 				" xmlns:q1='some:urn' />",
-#endif
 				XmlSchema.Namespace, XmlSchema.InstanceNamespace),
 				sw.GetStringBuilder ().ToString (), "#C");
 
@@ -829,11 +785,8 @@ namespace MonoTests.System.XmlSerialization
 			f.Modifiers3 = (MapModifiers) 0;
 			f.Modifiers4 = (MapModifiers) 888;
 			f.Modifiers5 = (MapModifiers) 999;
-#if NET_2_0
 			try {
-#endif
 			SerializeEncoded (f, typeof (Field_Encoded));
-#if NET_2_0
 				Assert.Fail ("#D1");
 			} catch (InvalidOperationException ex) {
 				// There was an error generating the XML document
@@ -849,21 +802,9 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.InnerException.Message.IndexOf (typeof (FlagEnum_Encoded).FullName) != -1, "#D8");
 				Assert.IsNull (ex.InnerException.InnerException, "#D9");
 			}
-#else
-			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
-				"<?xml version='1.0' encoding='utf-16'?>" +
-				"<q1:field xmlns:xsd='{0}' xmlns:xsi='{1}' id='id1' flag2='444'" +
-				" flag3='555' flag4='' modifiers='666' modifiers2='777'" +
-				" modifiers4='888' modifiers5='999' xmlns:q1='some:urn' />",
-				XmlSchema.Namespace, XmlSchema.InstanceNamespace),
-				sw.GetStringBuilder ().ToString (), "#D");
-#endif
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Ignore ("JVM returns fields in different order")]
-#endif
 		public void TestSerializeGroup ()
 		{
 			Group myGroup = new Group ();
@@ -932,7 +873,6 @@ namespace MonoTests.System.XmlSerialization
 		[Test]
 		public void TestSerializeZeroFlagEnum_InvalidValue ()
 		{
-#if NET_2_0
 			try {
 				Serialize (4, typeof (ZeroFlagEnum)); // corresponding enum field is marked XmlIgnore
 				Assert.Fail ("#1");
@@ -944,10 +884,6 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.InnerException.Message.IndexOf ("'4'") != -1, "#6");
 				Assert.IsTrue (ex.InnerException.Message.IndexOf (typeof (ZeroFlagEnum).FullName) != -1, "#7");
 			}
-#else
-			Serialize (4, typeof (ZeroFlagEnum)); // corresponding enum field is marked XmlIgnore
-			Assert.AreEqual (Infoset ("<ZeroFlagEnum>4</ZeroFlagEnum>"), WriterText);
-#endif
 		}
 
 		[Test]
@@ -986,11 +922,7 @@ namespace MonoTests.System.XmlSerialization
 			TimeZone tz = TimeZone.CurrentTimeZone;
 			TimeSpan off = tz.GetUtcOffset (d);
 			string sp = string.Format ("{0}{1:00}:{2:00}", off.Ticks >= 0 ? "+" : "", off.Hours, off.Minutes);
-#if NET_2_0
 			Assert.AreEqual (Infoset ("<dateTime>0001-01-01T00:00:00</dateTime>"), WriterText);
-#else
-			Assert.AreEqual (Infoset ("<dateTime>0001-01-01T00:00:00.0000000" + sp + "</dateTime>"), WriterText);
-#endif
 		}
 
 		/*
@@ -1044,11 +976,7 @@ namespace MonoTests.System.XmlSerialization
 			Serialize (optionalValue);
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<?xml version='1.0' encoding='utf-16'?>" +
-#if NET_2_0
-				"<optionalValue xmlns:xsi='{1}' xmlns:xsd='{0}' xmlns='{2}' />",
-#else
 				"<optionalValue xmlns:xsd='{0}' xmlns:xsi='{1}' xmlns='{2}' />",
-#endif
 				XmlSchema.Namespace, XmlSchema.InstanceNamespace, AnotherNamespace),
 				sw.ToString (), "#1");
 
@@ -1062,11 +990,7 @@ namespace MonoTests.System.XmlSerialization
 			Serialize (optionalValue, overrides);
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<?xml version='1.0' encoding='utf-16'?>" +
-#if NET_2_0
-				"<optionalValue xmlns:xsi='{1}' xmlns:xsd='{0}' xmlns='{2}'>" +
-#else
 				"<optionalValue xmlns:xsd='{0}' xmlns:xsi='{1}' xmlns='{2}'>" +
-#endif
 				"<Attributes xmlns='{3}'>one four</Attributes>" +
 				"</optionalValue>", XmlSchema.Namespace, XmlSchema.InstanceNamespace,
 				AnotherNamespace, ANamespace), sw.ToString (), "#2");
@@ -1075,18 +999,33 @@ namespace MonoTests.System.XmlSerialization
 			Serialize (optionalValue, overrides);
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<?xml version='1.0' encoding='utf-16'?>" +
-#if NET_2_0
-				"<optionalValue xmlns:xsi='{1}' xmlns:xsd='{0}' xmlns='{2}'>" +
-#else
 				"<optionalValue xmlns:xsd='{0}' xmlns:xsi='{1}' xmlns='{2}'>" +
-#endif
 				"<Attributes xmlns='{3}'>one four</Attributes>" +
 				"<Flags xmlns='{3}'>one</Flags>" +
 				"</optionalValue>",
 				XmlSchema.Namespace, XmlSchema.InstanceNamespace, AnotherNamespace,
 				ANamespace), sw.ToString (), "#3");
 		}
-
+		
+		[Test]
+		public void TestRoundTripSerializeOptionalValueTypeContainer ()
+		{
+			var source = new OptionalValueTypeContainer ();
+			source.IsEmpty = true;
+			source.IsEmptySpecified = true;
+			var ser = new XmlSerializer (typeof (OptionalValueTypeContainer));
+			string xml;
+			using (var t = new StringWriter ()) {
+				ser.Serialize (t, source);
+				xml = t.ToString();
+			}
+			using (var s = new StringReader (xml)) {
+				var obj = (OptionalValueTypeContainer) ser.Deserialize(s);
+				Assert.AreEqual (source.IsEmpty, obj.IsEmpty, "#1");
+				Assert.AreEqual (source.IsEmptySpecified, obj.IsEmptySpecified, "#2");
+			}
+		}
+		
 		[Test]
 		public void TestSerializePlainContainer ()
 		{
@@ -1615,7 +1554,6 @@ namespace MonoTests.System.XmlSerialization
 		}
 
 		[Test]
-		[Category ("NotWorking")] // SerializationCodeGenerator outputs wrong xsi:type for flagencoded in #C1
 		public void TestSerializeDefaultValueAttribute_Encoded ()
 		{
 			SoapAttributeOverrides overrides = new SoapAttributeOverrides ();
@@ -1782,7 +1720,6 @@ namespace MonoTests.System.XmlSerialization
 			// technically XmlSchemaForm.None has an XmlIgnore attribute,
 			// but it is not being serialized as a member.
 
-#if NET_2_0
 			try {
 				Serialize (XmlSchemaForm.None);
 				Assert.Fail ("#1");
@@ -1794,10 +1731,6 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.InnerException.Message.IndexOf ("'0'") != -1, "#6");
 				Assert.IsTrue (ex.InnerException.Message.IndexOf (typeof (XmlSchemaForm).FullName) != -1, "#7");
 			}
-#else
-			Serialize (XmlSchemaForm.None);
-			Assert.AreEqual (Infoset ("<XmlSchemaForm>0</XmlSchemaForm>"), WriterText);
-#endif
 		}
 
 		[Test]
@@ -1818,7 +1751,7 @@ namespace MonoTests.System.XmlSerialization
 
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))]
-		[Category ("NotWorking")]
+		[Category ("MobileNotWorking")]
 		public void TestSerializeXmlNodeArrayIncludesAttribute ()
 		{
 			XmlDocument doc = new XmlDocument ();
@@ -1833,7 +1766,6 @@ namespace MonoTests.System.XmlSerialization
 			Assert.AreEqual (Infoset ("<anyType><elem1/><elem2/></anyType>"), WriterText);
 		}
 
-#if NET_2_0
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))] // List<XmlNode> is not supported
 		public void TestSerializeGenericListOfNode ()
@@ -1851,7 +1783,6 @@ namespace MonoTests.System.XmlSerialization
 			Serialize (new List<XmlElement> (new XmlElement [] { doc.CreateElement ("elem1"), doc.CreateElement ("elem2") }), typeof (object));
 			Assert.AreEqual (Infoset ("<anyType><elem1/><elem2/></anyType>"), WriterText);
 		}
-#endif
 		[Test]
 		public void TestSerializeXmlDocument ()
 		{
@@ -2008,6 +1939,17 @@ namespace MonoTests.System.XmlSerialization
 			Assert.AreEqual (Infoset (res), WriterText);
 		}
 
+		[Test] // Covers #36829
+		public void TestSubclassElementList ()
+		{
+			var o = new SubclassTestList () { Items = new List<object> () { new SubclassTestSub () } };
+			Serialize (o);
+
+			string res = "<SubclassTestList xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>";
+			res += "<b xsi:type=\"SubclassTestSub\"/></SubclassTestList>";
+			Assert.AreEqual (Infoset (res), WriterText);
+		}
+
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))]
 		public void TestArrayAttributeWithWrongDataType ()
@@ -2022,11 +1964,7 @@ namespace MonoTests.System.XmlSerialization
 			Serialize (new PrimitiveTypesContainer ());
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<?xml version='1.0' encoding='utf-16'?>" +
-#if NET_2_0
 				"<PrimitiveTypesContainer xmlns:xsi='{1}' xmlns:xsd='{0}' xmlns='some:urn'>" +
-#else
-				"<PrimitiveTypesContainer xmlns:xsd='{0}' xmlns:xsi='{1}' xmlns='some:urn'>" +
-#endif
 				"<Number>2004</Number>" +
 				"<Name>some name</Name>" +
 				"<Index>56</Index>" +
@@ -2038,11 +1976,7 @@ namespace MonoTests.System.XmlSerialization
 			SerializeEncoded (new PrimitiveTypesContainer ());
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<?xml version='1.0' encoding='utf-16'?>" +
-#if NET_2_0
 				"<q1:PrimitiveTypesContainer xmlns:xsi='{1}' xmlns:xsd='{0}' id='id1' xmlns:q1='{2}'>" +
-#else
-				"<q1:PrimitiveTypesContainer xmlns:xsd='{0}' xmlns:xsi='{1}' id='id1' xmlns:q1='{2}'>" +
-#endif
 				"<Number xsi:type='xsd:int'>2004</Number>" +
 				"<Name xsi:type='xsd:string'>some name</Name>" +
 				"<Index xsi:type='xsd:unsignedByte'>56</Index>" +
@@ -2196,7 +2130,7 @@ namespace MonoTests.System.XmlSerialization
 			ser.Deserialize (new XmlTextReader (xml, XmlNodeType.Document, null));
 		}
 
-#if !TARGET_JVM && !MOBILE
+#if !MOBILE
 		[Test]
 		public void GenerateSerializerGenerics ()
 		{
@@ -2311,14 +2245,14 @@ namespace MonoTests.System.XmlSerialization
 		}
 
 		[Test]
-		[ExpectedException (typeof (InvalidOperationException))]
+		[Category ("MobileNotWorking")]
 		public void XmlArrayAttributeUnqualifiedWithNamespace ()
 		{
 			new XmlSerializer (typeof (XmlArrayUnqualifiedWithNamespace));
 		}
 
 		[Test]
-		[ExpectedException (typeof (InvalidOperationException))]
+		[Category ("MobileNotWorking")]
 		public void XmlArrayItemAttributeUnqualifiedWithNamespace ()
 		{
 			new XmlSerializer (typeof (XmlArrayItemUnqualifiedWithNamespace));
@@ -2383,16 +2317,12 @@ namespace MonoTests.System.XmlSerialization
 		}
 
 		[Test]
-#if !NET_2_0
-		[ExpectedException (typeof (ApplicationException))]
-#endif
 		public void SerializeErrorneousIXmlSerializable ()
 		{
 			Serialize (new ErrorneousGetSchema ());
 			Assert.AreEqual ("<:ErrorneousGetSchema></>", Infoset (sw.ToString ()));
 		}
 
-#if NET_2_0
 		public void DateTimeRoundtrip ()
 		{
 			// bug #337729
@@ -2402,7 +2332,6 @@ namespace MonoTests.System.XmlSerialization
 			DateTime d = (DateTime) ser.Deserialize (new StringReader (sw.ToString ()));
 			Assert.AreEqual (DateTimeKind.Utc, d.Kind);
 		}
-#endif
 
 		[Test]
 		public void SupportIXmlSerializableImplicitlyConvertible ()
@@ -2451,7 +2380,6 @@ namespace MonoTests.System.XmlSerialization
 
 		#region GenericsSeralizationTests
 
-#if NET_2_0
 		[Test]
 		public void TestSerializeGenSimpleClassString ()
 		{
@@ -2898,10 +2826,92 @@ namespace MonoTests.System.XmlSerialization
 				xs.Serialize (xw, obj);
 			Assert.IsTrue (sw.ToString ().IndexOf ("foo") > 0, "#1");
 		}
-#endif
+
+		public class AnotherArrayListType
+		{
+			[XmlAttribute]
+			public string one = "aaa";
+			[XmlAttribute]
+			public string another = "bbb";
+		}
+
+		public class DerivedArrayListType : AnotherArrayListType
+		{
+
+		}
+
+		public class ClassWithArrayList
+		{
+			[XmlElement (Type = typeof(int), ElementName = "int_elem")]
+			[XmlElement (Type = typeof(string), ElementName = "string_elem")]
+			[XmlElement (Type = typeof(AnotherArrayListType), ElementName = "another_elem")]
+			[XmlElement (Type = typeof(DerivedArrayListType), ElementName = "derived_elem")]
+			public ArrayList list;
+		}
+
+		public class ClassWithArray
+		{
+			[XmlElement (Type = typeof(int), ElementName = "int_elem")]
+			[XmlElement (Type = typeof(string), ElementName = "string_elem")]
+			[XmlElement (Type = typeof(AnotherArrayListType), ElementName = "another_elem")]
+			[XmlElement (Type = typeof(DerivedArrayListType), ElementName = "derived_elem")]
+			public object[] list;
+
+		}
+
+		[Test]
+		public void MultipleXmlElementAttributesOnArrayList()
+		{
+			var test = new ClassWithArrayList();
+
+			test.list = new ArrayList();
+			test.list.Add(3);
+			test.list.Add("apepe");
+			test.list.Add(new AnotherArrayListType());
+			test.list.Add(new DerivedArrayListType());
+
+			Serialize(test);
+			var expected_text = "<:ClassWithArrayList http://www.w3.org/2000/xmlns/:xsd='http://www.w3.org/2001/XMLSchema' http://www.w3.org/2000/xmlns/:xsi='http://www.w3.org/2001/XMLSchema-instance'><:int_elem>3</><:string_elem>apepe</><:another_elem :another='bbb' :one='aaa'></><:derived_elem :another='bbb' :one='aaa'></></>";
+
+			Assert.AreEqual(WriterText, expected_text, WriterText);
+		}
+
+		[Test]
+		public void MultipleXmlElementAttributesOnArray()
+		{
+			var test = new ClassWithArray();
+
+			test.list = new object[] { 3, "apepe", new AnotherArrayListType(), new DerivedArrayListType() };
+
+			Serialize(test);
+			var expected_text = "<:ClassWithArray http://www.w3.org/2000/xmlns/:xsd='http://www.w3.org/2001/XMLSchema' http://www.w3.org/2000/xmlns/:xsi='http://www.w3.org/2001/XMLSchema-instance'><:int_elem>3</><:string_elem>apepe</><:another_elem :another='bbb' :one='aaa'></><:derived_elem :another='bbb' :one='aaa'></></>";
+
+			Assert.AreEqual(WriterText, expected_text, WriterText);
+		}
+
 
 		#endregion //GenericsSeralizationTests
+		#region XmlInclude on abstract class tests (Bug #18558)
+		[Test]
+		public void TestSerializeIntermediateType ()
+		{
+			string expectedXml = "<ContainerTypeForTest xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><XmlIntermediateType intermediate=\"false\"/></ContainerTypeForTest>";
+			var obj = new ContainerTypeForTest();
+			obj.MemberToUseInclude = new IntermediateTypeForTest ();
+			Serialize (obj);
+			Assert.AreEqual (Infoset (expectedXml), WriterText, "Serialized Output : " + WriterText);
+		}
 
+		[Test]
+		public void TestSerializeSecondType ()
+		{
+			string expectedXml = "<ContainerTypeForTest xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><XmlSecondType intermediate=\"false\"/></ContainerTypeForTest>";
+			var obj = new ContainerTypeForTest();
+			obj.MemberToUseInclude = new SecondDerivedTypeForTest ();
+			Serialize (obj);
+			Assert.AreEqual (Infoset (expectedXml), WriterText, "Serialized Output : " + WriterText);
+		}
+		#endregion
 		public class XmlArrayOnInt
 		{
 			[XmlArray]
@@ -2997,7 +3007,6 @@ namespace MonoTests.System.XmlSerialization
 			public TimeSpan StringDuration = TimeSpan.FromSeconds (1);
 		}
 
-#if NET_2_0
 		public class Bug80759
 		{
 			public string Test;
@@ -3083,7 +3092,6 @@ namespace MonoTests.System.XmlSerialization
 			}
 		}
 
-#endif
 
 		void CDataTextNodes_BadNode (object s, XmlNodeEventArgs e)
 		{
@@ -3160,5 +3168,389 @@ namespace MonoTests.System.XmlSerialization
 			SoapReflectionImporter importer = new SoapReflectionImporter (ao, defaultNamespace);
 			return importer.ImportTypeMapping (type);
 		}
+
+		[XmlSchemaProvider (null, IsAny = true)]
+		public class AnySchemaProviderClass : IXmlSerializable {
+
+			public string Text;
+
+			void IXmlSerializable.WriteXml (XmlWriter writer)
+			{
+				writer.WriteElementString ("text", Text);
+			}
+
+			void IXmlSerializable.ReadXml (XmlReader reader)
+			{
+				Text = reader.ReadElementString ("text");
+			}
+
+			XmlSchema IXmlSerializable.GetSchema ()
+			{
+				return null;
+			}
+		}
+
+		[Test]
+		public void SerializeAnySchemaProvider ()
+		{
+			string expected = "<?xml version=\"1.0\" encoding=\"utf-16\"?>" +
+				Environment.NewLine + "<text>test</text>";
+
+			var ser = new XmlSerializer (typeof (AnySchemaProviderClass));
+
+			var obj = new AnySchemaProviderClass {
+				Text = "test",
+			};
+
+			using (var t = new StringWriter ()) {
+				ser.Serialize (t, obj);
+				Assert.AreEqual (expected, t.ToString ());
+			}
+		}
+
+		[Test]
+		public void DeserializeAnySchemaProvider ()
+		{
+			string expected = "<?xml version=\"1.0\" encoding=\"utf-16\"?>" +
+				Environment.NewLine + "<text>test</text>";
+
+			var ser = new XmlSerializer (typeof (AnySchemaProviderClass));
+
+			using (var t = new StringReader (expected)) {
+				var obj = (AnySchemaProviderClass) ser.Deserialize (t);
+				Assert.AreEqual ("test", obj.Text);
+			}
+		}
+
+		public class SubNoParameterlessConstructor : NoParameterlessConstructor
+		{
+			public SubNoParameterlessConstructor ()
+				: base ("")
+			{
+			}
+		}
+
+		public class NoParameterlessConstructor
+		{
+			[XmlElement ("Text")]
+			public string Text;
+
+			public NoParameterlessConstructor (string parameter)
+			{
+			}
+		}
+
+		[Test]
+		public void BaseClassWithoutParameterlessConstructor ()
+		{
+			var ser = new XmlSerializer (typeof (SubNoParameterlessConstructor));
+
+			var obj = new SubNoParameterlessConstructor {
+				Text = "test",
+			};
+
+			using (var w = new StringWriter ()) {
+				ser.Serialize (w, obj);
+				using (var r = new StringReader ( w.ToString ())) {
+					var desObj = (SubNoParameterlessConstructor) ser.Deserialize (r);
+					Assert.AreEqual (obj.Text, desObj.Text);
+				}
+			}
+		}
+
+		public class ClassWithXmlAnyElement
+		{
+			[XmlAnyElement ("Contents")]
+			public XmlNode Contents;
+		}
+
+		[Test] // bug #3211
+		public void TestClassWithXmlAnyElement ()
+		{
+			var d = new XmlDocument ();
+			var e = d.CreateElement ("Contents");
+			e.AppendChild (d.CreateElement ("SomeElement"));
+
+			var c = new ClassWithXmlAnyElement {
+				Contents = e,
+			};
+
+			var ser = new XmlSerializer (typeof (ClassWithXmlAnyElement));
+			using (var sw = new StringWriter ())
+				ser.Serialize (sw, c);
+		}
+
+		[Test]
+		public void ClassWithImplicitlyConvertibleElement ()
+		{
+			var ser = new XmlSerializer (typeof (ObjectWithElementRequiringImplicitCast));
+
+			var obj = new ObjectWithElementRequiringImplicitCast ("test");
+
+			using (var w = new StringWriter ()) {
+				ser.Serialize (w, obj);
+				using (var r = new StringReader ( w.ToString ())) {
+					var desObj = (ObjectWithElementRequiringImplicitCast) ser.Deserialize (r);
+					Assert.AreEqual (obj.Object.Text, desObj.Object.Text);
+				}
+			}
+		}
+
+		public class ClassWithOptionalMethods
+		{
+			private readonly bool shouldSerializeX;
+			private readonly bool xSpecified;
+
+			[XmlAttribute]
+			public int X { get; set; }
+
+			public bool ShouldSerializeX () { return shouldSerializeX; }
+
+			public bool XSpecified
+			{
+				get { return xSpecified; }
+			}
+
+			public ClassWithOptionalMethods ()
+			{
+			}
+
+			public ClassWithOptionalMethods (int x, bool shouldSerializeX, bool xSpecified)
+			{
+				this.X = x;
+				this.shouldSerializeX = shouldSerializeX;
+				this.xSpecified = xSpecified;
+			}
+		}
+
+		[Test]
+		public void OptionalMethods ()
+		{
+			var ser = new XmlSerializer (typeof (ClassWithOptionalMethods));
+
+			var expectedValueWithoutX = Infoset ("<?xml version=\"1.0\" encoding=\"utf-16\"?>" + Environment.NewLine +
+				"<ClassWithOptionalMethods xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" />");
+
+			var expectedValueWithX = Infoset ("<?xml version=\"1.0\" encoding=\"utf-16\"?>" + Environment.NewLine +
+				"<ClassWithOptionalMethods xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" X=\"11\" />");
+
+			using (var t = new StringWriter ()) {
+				var obj = new ClassWithOptionalMethods (11, false, false);
+				ser.Serialize (t, obj);
+				Assert.AreEqual (expectedValueWithoutX, Infoset (t.ToString ()));
+			}
+
+			using (var t = new StringWriter ()) {
+				var obj = new ClassWithOptionalMethods (11, true, false);
+				ser.Serialize (t, obj);
+				Assert.AreEqual (expectedValueWithoutX, Infoset (t.ToString ()));
+			}
+
+			using (var t = new StringWriter ()) {
+				var obj = new ClassWithOptionalMethods (11, false, true);
+				ser.Serialize (t, obj);
+				Assert.AreEqual (expectedValueWithoutX, Infoset (t.ToString ()));
+			}
+
+			using (var t = new StringWriter ()) {
+				var obj = new ClassWithOptionalMethods (11, true, true);
+				ser.Serialize (t, obj);
+				Assert.AreEqual (expectedValueWithX, Infoset (t.ToString ()));
+			}
+		}
+
+		public class ClassWithShouldSerializeGeneric
+		{
+			[XmlAttribute]
+			public int X { get; set; }
+
+			public bool ShouldSerializeX<T> () { return false; }
+		}
+
+		[Test]
+		[Category("NotWorking")]
+		public void ShouldSerializeGeneric ()
+		{
+			var ser = new XmlSerializer (typeof (ClassWithShouldSerializeGeneric));
+
+			var expectedValueWithX = Infoset ("<?xml version=\"1.0\" encoding=\"utf-16\"?>" + Environment.NewLine +
+				"<ClassWithShouldSerializeGeneric xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" X=\"11\" />");
+
+			using (var t = new StringWriter ()) {
+				var obj = new ClassWithShouldSerializeGeneric { X = 11 };
+				ser.Serialize (t, obj);
+				Assert.AreEqual (expectedValueWithX, Infoset (t.ToString ()));
+			}
+		}
+
+		[Test]
+		public void NullableArrayItems ()
+		{
+			var ser = new XmlSerializer (typeof (ObjectWithNullableArrayItems));
+
+			var obj = new ObjectWithNullableArrayItems ();
+			obj.Elements = new List <SimpleClass> ();
+			obj.Elements.Add (new SimpleClass { something = "Hello" });
+			obj.Elements.Add (null);
+			obj.Elements.Add (new SimpleClass { something = "World" });
+
+			using (var w = new StringWriter ()) {
+				ser.Serialize (w, obj);
+				using (var r = new StringReader ( w.ToString ())) {
+					var desObj = (ObjectWithNullableArrayItems) ser.Deserialize (r);
+					Assert.IsNull (desObj.Elements [1]);
+				}
+			}
+		}
+
+		[Test]
+		public void NonNullableArrayItems ()
+		{
+			var ser = new XmlSerializer (typeof (ObjectWithNonNullableArrayItems));
+
+			var obj = new ObjectWithNonNullableArrayItems ();
+			obj.Elements = new List <SimpleClass> ();
+			obj.Elements.Add (new SimpleClass { something = "Hello" });
+			obj.Elements.Add (null);
+			obj.Elements.Add (new SimpleClass { something = "World" });
+
+			using (var w = new StringWriter ()) {
+				ser.Serialize (w, obj);
+				using (var r = new StringReader ( w.ToString ())) {
+					var desObj = (ObjectWithNonNullableArrayItems) ser.Deserialize (r);
+					Assert.IsNotNull (desObj.Elements [1]);
+				}
+			}
+		}
+
+		[Test]
+		public void NotSpecifiedNullableArrayItems ()
+		{
+			var ser = new XmlSerializer (typeof (ObjectWithNotSpecifiedNullableArrayItems));
+
+			var obj = new ObjectWithNotSpecifiedNullableArrayItems ();
+			obj.Elements = new List <SimpleClass> ();
+			obj.Elements.Add (new SimpleClass { something = "Hello" });
+			obj.Elements.Add (null);
+			obj.Elements.Add (new SimpleClass { something = "World" });
+
+			using (var w = new StringWriter ()) {
+				ser.Serialize (w, obj);
+				using (var r = new StringReader ( w.ToString ())) {
+					var desObj = (ObjectWithNotSpecifiedNullableArrayItems) ser.Deserialize (r);
+					Assert.IsNull (desObj.Elements [1]);
+				}
+			}
+		}
+
+		private static void TestClassWithDefaultTextNotNullAux (string value, string expected)
+		{
+			var obj = new ClassWithDefaultTextNotNull (value);
+			var ser = new XmlSerializer (typeof (ClassWithDefaultTextNotNull));
+
+			using (var mstream = new MemoryStream ())
+			using (var writer = new XmlTextWriter (mstream, Encoding.ASCII)) {
+				ser.Serialize (writer, obj);
+
+				mstream.Seek (0, SeekOrigin.Begin);
+				using (var reader = new XmlTextReader (mstream)) {
+					var result = (ClassWithDefaultTextNotNull) ser.Deserialize (reader);
+					Assert.AreEqual (expected, result.Value);
+				}
+			}
+		}
+
+		[Test]
+		public void TestClassWithDefaultTextNotNull ()
+		{
+			TestClassWithDefaultTextNotNullAux ("my_text", "my_text");
+			TestClassWithDefaultTextNotNullAux ("", ClassWithDefaultTextNotNull.DefaultValue);
+			TestClassWithDefaultTextNotNullAux (null, ClassWithDefaultTextNotNull.DefaultValue);
+		}
 	}
+
+	// Test generated serialization code.
+	public class XmlSerializerGeneratorTests : XmlSerializerTests {
+
+		private FieldInfo backgroundGeneration;
+		private FieldInfo generationThreshold;
+		private FieldInfo generatorFallback;
+
+		private bool backgroundGenerationOld;
+		private int generationThresholdOld;
+		private bool generatorFallbackOld;
+
+		[SetUp]
+		public void SetUp ()
+		{
+			// Make sure XmlSerializer static constructor is called
+			XmlSerializer.FromTypes (new Type [] {});
+
+			const BindingFlags binding = BindingFlags.Static | BindingFlags.NonPublic;
+			backgroundGeneration = typeof (XmlSerializer).GetField ("backgroundGeneration", binding);
+			generationThreshold = typeof (XmlSerializer).GetField ("generationThreshold", binding);
+			generatorFallback = typeof (XmlSerializer).GetField ("generatorFallback", binding);
+
+			if (backgroundGeneration == null)
+				Assert.Ignore ("Unable to access field backgroundGeneration");
+			if (generationThreshold == null)
+				Assert.Ignore ("Unable to access field generationThreshold");
+			if (generatorFallback == null)
+				Assert.Ignore ("Unable to access field generatorFallback");
+
+			backgroundGenerationOld = (bool) backgroundGeneration.GetValue (null);
+			generationThresholdOld = (int) generationThreshold.GetValue (null);
+			generatorFallbackOld = (bool) generatorFallback.GetValue (null);
+
+			backgroundGeneration.SetValue (null, false);
+			generationThreshold.SetValue (null, 0);
+			generatorFallback.SetValue (null, false);
+		}
+
+		[TearDown]
+		public void TearDown ()
+		{
+			if (backgroundGeneration == null || generationThreshold == null || generatorFallback == null)
+				return;
+
+			backgroundGeneration.SetValue (null, backgroundGenerationOld);
+			generationThreshold.SetValue (null, generationThresholdOld);
+			generatorFallback.SetValue (null, generatorFallbackOld);
+		}
+	}
+
+#region XmlInclude on abstract class test classes
+
+	[XmlType]
+	public class ContainerTypeForTest
+	{
+		[XmlElement ("XmlSecondType", typeof (SecondDerivedTypeForTest))]
+		[XmlElement ("XmlIntermediateType", typeof (IntermediateTypeForTest))]
+		[XmlElement ("XmlFirstType", typeof (FirstDerivedTypeForTest))]
+		public AbstractTypeForTest MemberToUseInclude { get; set; }
+	}
+
+	[XmlInclude (typeof (SecondDerivedTypeForTest))]
+	[XmlInclude (typeof (IntermediateTypeForTest))]
+	[XmlInclude (typeof (FirstDerivedTypeForTest))]
+	public abstract class AbstractTypeForTest
+	{
+	}
+
+	public class IntermediateTypeForTest : AbstractTypeForTest
+	{
+		[XmlAttribute (AttributeName = "intermediate")]
+		public bool IntermediateMember { get; set; }
+	}
+
+	public class FirstDerivedTypeForTest : AbstractTypeForTest
+	{
+		public string FirstMember { get; set; }
+	}
+
+	public class SecondDerivedTypeForTest : IntermediateTypeForTest
+	{
+		public string SecondMember { get; set; }
+	}
+#endregion
 }

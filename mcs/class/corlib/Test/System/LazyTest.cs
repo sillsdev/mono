@@ -26,11 +26,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0
-
 using System;
 using System.Reflection;
-using System.Reflection.Emit;
 using System.Threading;
 using NUnit.Framework;
 
@@ -114,26 +111,37 @@ namespace MonoTests.System
 		static int counter;
 
 		[Test]
-		public void EnsureSingleThreadSafeExecution () {
+		public void EnsureSingleThreadSafeExecution ()
+		{
 			counter = 42;
+			bool started = false;
 
 			var l = new Lazy<int> (delegate () { return counter ++; }, true);
-
+			bool failed = false;
 			object monitor = new object ();
-			var threads = new Thread [10];
-			for (int i = 0; i < 10; ++i) {
+			var threads = new Thread [4];
+			for (int i = 0; i < threads.Length; ++i) {
 				threads [i] = new Thread (delegate () {
 						lock (monitor) {
-							Monitor.Wait (monitor);
+							if (!started) {
+								if (!Monitor.Wait (monitor, 2000))
+									failed = true;
+							}
 						}
 						int val = l.Value;
 					});
 			}
-			for (int i = 0; i < 10; ++i)
+			for (int i = 0; i < threads.Length; ++i)
 				threads [i].Start ();
-			lock (monitor)
+			lock (monitor) {
+				started = true;
 				Monitor.PulseAll (monitor);
-			
+			}
+
+			for (int i = 0; i < threads.Length; ++i)
+				threads [i].Join ();
+
+			Assert.IsFalse (failed);
 			Assert.AreEqual (42, l.Value);
 		}
 		
@@ -270,7 +278,49 @@ namespace MonoTests.System
 			Assert.AreEqual (22, x.Value, "#1");
 		}
 
+		[Test]
+		public void ConcurrentInitialization ()
+		{
+			var init = new AutoResetEvent (false);
+			var e1_set = new AutoResetEvent (false);
+
+			var lazy = new Lazy<string> (() => {
+				init.Set ();
+				Thread.Sleep (10);
+				throw new ApplicationException ();
+			});
+
+			Exception e1 = null;
+			var thread = new Thread (() => {
+				try {
+					string value = lazy.Value;
+				} catch (Exception ex) {
+					e1 = ex;
+					e1_set.Set ();
+				}
+			});
+			thread.Start ();
+
+			Assert.IsTrue (init.WaitOne (3000), "#1");
+
+			Exception e2 = null;
+			try {
+				string value = lazy.Value;
+			} catch (Exception ex) {
+				e2 = ex;
+			}
+
+			Exception e3 = null;
+			try {
+				string value = lazy.Value;
+			} catch (Exception ex) {
+				e3 = ex;
+			}
+
+			Assert.IsTrue (e1_set.WaitOne (3000), "#2");
+			Assert.AreSame (e1, e2, "#3");
+			Assert.AreSame (e1, e3, "#4");
+		}
+
 	}
 }
-
-#endif
