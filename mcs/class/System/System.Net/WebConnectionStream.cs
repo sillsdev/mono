@@ -711,7 +711,7 @@ namespace System.Net
 		void WriteRequestAsyncCB (IAsyncResult ar)
 		{
 			var result = (WebAsyncResult)ar;
-			var innerResult = (WebAsyncResult)result.InnerAsyncResult;
+			var innerResult = result.InnerAsyncResult as WebAsyncResult;
 			result.InnerAsyncResult = null;
 
 			if (innerResult != null && innerResult.GotException) {
