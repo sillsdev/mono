@@ -1,0 +1,7 @@
+Verified+1: Jenkins CI <jenkins@sil.org>
+Code-Review+2: Eberhard Beilharz <eb1@sil.org>
+Submitted-by: Stephen McConnel <stephen_mcconnel@sil.org>
+Submitted-at: Fri, 24 Jun 2016 17:42:17 +0000
+Reviewed-on: https://gerrit.lsdev.sil.org/4326
+Project: mono
+Branch: refs/heads/release/mono-sil-3.4
