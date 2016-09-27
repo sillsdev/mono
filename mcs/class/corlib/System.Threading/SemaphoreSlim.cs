@@ -152,10 +152,11 @@ namespace System.Threading
 
 					if (result > 0)
 						shouldWait = false;
-					else
+					else {
 						if (stopCondition ())
 							return false;
 						break;
+					}
 				} while (Interlocked.CompareExchange (ref currCount, result - 1, result) != result);
 
 				if (!shouldWait) {
