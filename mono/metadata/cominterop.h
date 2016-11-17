@@ -63,4 +63,7 @@ mono_free_bstr (gpointer bstr);
 MonoClass*
 mono_class_try_get_com_object_class (void);
 
+void*
+mono_cominterop_get_com_interface (MonoObject* object, MonoClass* ic);
+
 #endif /* __MONO_COMINTEROP_H__ */
