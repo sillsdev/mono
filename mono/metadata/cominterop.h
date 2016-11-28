@@ -53,4 +53,7 @@ mono_string_from_bstr (gpointer bstr);
 MONO_API void 
 mono_free_bstr (gpointer bstr);
 
+void*
+mono_cominterop_get_com_interface (MonoObject* object, MonoClass* ic);
+
 #endif /* __MONO_COMINTEROP_H__ */

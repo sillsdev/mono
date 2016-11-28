@@ -3311,3 +3311,48 @@ ves_icall_System_Runtime_InteropServices_Marshal_FreeBSTR (gpointer ptr)
 
 	mono_free_bstr (ptr);
 }
+
+void*
+mono_cominterop_get_com_interface (MonoObject* object, MonoClass* ic)
+{
+#ifndef DISABLE_COM
+	if (!object)
+		return NULL;
+
+	if (cominterop_object_is_rcw (object)) {
+		MonoClass *klass = NULL;
+		MonoRealProxy* real_proxy = NULL;
+		if (!object)
+			return NULL;
+		klass = mono_object_class (object);
+		if (!mono_class_is_transparent_proxy (klass)) {
+			g_assert_not_reached ();
+			return NULL;
+		}
+
+		real_proxy = ((MonoTransparentProxy*)object)->rp;
+		if (!real_proxy) {
+			g_assert_not_reached ();
+			return NULL;
+		}
+
+		klass = mono_object_class (real_proxy);
+		if (klass != mono_class_get_interop_proxy_class ()) {
+			g_assert_not_reached ();
+			return NULL;
+		}
+
+		if (!((MonoComInteropProxy*)real_proxy)->com_object) {
+			g_assert_not_reached ();
+			return NULL;
+		}
+
+		return cominterop_get_interface (((MonoComInteropProxy*)real_proxy)->com_object, ic, TRUE);
+	}
+	else {
+		return cominterop_get_ccw (object, ic);
+	}
+#else
+	g_assert_not_reached ();
+#endif
+}
