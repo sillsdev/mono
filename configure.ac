@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 #AC_PREREQ([2.62])
 
-AC_INIT(mono, [5.12.0],
+AC_INIT(mono, [5.12.0.1],
         [https://github.com/mono/mono/issues/new])
 
 AC_CONFIG_SRCDIR([README.md])
@@ -100,7 +100,7 @@ extra_runtime_ldflags=""
 # Hack for WASM
 # Current autotools (v1.15) doesn't have a triplet we can use for wasm so the kludge we do is to
 # work around it by using a feature flag instead
-AC_ARG_ENABLE(wasm,[  --enable-wasm    Hack to set the current runtime to target wasm], enable_wasm=$enableval)
+AC_ARG_ENABLE(wasm,[  --enable-wasm	Hack to set the current runtime to target wasm], enable_wasm=$enableval)
 
 # Thread configuration inspired by sleepycat's db
 AC_MSG_CHECKING([host platform characteristics])
@@ -356,7 +356,7 @@ case "$host" in
 			arm*-darwin*)
 				platform_ios=yes
 				has_dtrace=no
-				;;
+				;;			
 			aarch64*-darwin*)
 				platform_ios=yes
 				;;
@@ -4100,7 +4100,7 @@ AC_SEARCH_LIBS(dlopen, dl)
 old_ldflags="${LDFLAGS}"
 # GNU specific option, this confuses IBM ld, but do offer alternatives when possible
 if test $lt_cv_prog_gnu_ld = yes; then
-	LDFLAGS="${LDFLAGS} -Wl,-export-dynamic"
+LDFLAGS="${LDFLAGS} -Wl,-export-dynamic"
 else
 	case $host in
 	*-*-aix*|*-*-os400*)
@@ -4132,7 +4132,7 @@ fi
 AC_SUBST(G_HAVE_ISO_VARARGS)
 
 AC_CHECK_HEADERS(getopt.h sys/select.h sys/time.h sys/wait.h pwd.h iconv.h localcharset.h sys/types.h sys/resource.h)
-AC_CHECK_LIB([iconv], [locale_charset],[],[AC_CHECK_LIB([charset], [locale_charset],[LIBS+=" -liconv -lcharset"])])
+AC_CHECK_LIB([iconv], [locale_charset],[],[AC_CHECK_LIB([charset], [locale_charset],[LIBS+="-liconv -lcharset"])])
 AC_CHECK_HEADER(alloca.h, [HAVE_ALLOCA_H=1], [HAVE_ALLOCA_H=0])
 AC_SUBST(HAVE_ALLOCA_H)
 
