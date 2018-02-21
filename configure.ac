@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 #AC_PREREQ([2.62])
 
-AC_INIT(mono, [5.16.0],
+AC_INIT(mono, [5.16.0.1],
         [https://github.com/mono/mono/issues/new])
 
 AC_CONFIG_SRCDIR([README.md])
@@ -3172,7 +3172,7 @@ if test x$host_win32 = xno; then
 	AC_MSG_CHECKING(for shm_open that works well enough with mmap)
 	if test "x$ac_cv_func_shm_open" = "xno" -o "x$ac_cv_func_shm_open_working_with_mmap" = "xno" ; then
 		AC_MSG_RESULT(no)
-	else
+else
 		AC_TRY_RUN([
 			#include <sys/mman.h>
 			#include <fcntl.h>
@@ -4034,7 +4034,7 @@ case "$host" in
 			TARGET=POWERPC64;
 			CPPFLAGS="$CPPFLAGS -D__mono_ppc__ -D__mono_ppc64__"
 			if ! (echo $CC | grep -q -- 'clang'); then
-				CFLAGS="$CFLAGS -mminimal-toc"
+			CFLAGS="$CFLAGS -mminimal-toc"
 			fi
 		else
 			TARGET=POWERPC;
