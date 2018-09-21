@@ -254,6 +254,9 @@ public class Tests
 	[DllImport ("libtest")]
 	public static extern int mono_test_marshal_array_ccw_itest (int count, [MarshalAs (UnmanagedType.LPArray, SizeParamIndex=0)] ITest[] ppUnk);
 
+	[DllImport ("libtest")]
+	public static extern int mono_test_cominterop_ccw_queryinterface ([MarshalAs (UnmanagedType.Interface)] IOtherTest itest);
+
 	[DllImport("libtest")]
 	public static extern int mono_test_marshal_safearray_out_1dim_vt_bstr_empty ([MarshalAs (UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)]out Array array);
 
@@ -571,6 +574,11 @@ public class Tests
 			var tests = new[] { test.Test };
 			if (mono_test_marshal_array_ccw_itest (1, tests) != 0)
 				return 201;
+
+			// test for #10737
+			var otherTest = new OtherTest ();
+			if (mono_test_cominterop_ccw_queryinterface (otherTest) != 0)
+				return 202;
 
 			#endregion // COM Callable Wrapper Tests
 
@@ -1121,6 +1129,15 @@ public class Tests
 		{
 			return 99;
 		}
+	}
+
+	[ComVisible (true)]
+	public interface IOtherTest
+	{
+	}
+
+	public class OtherTest : IOtherTest
+	{
 	}
 
 	public static int mono_test_marshal_variant_in_callback (VarEnum vt, object obj)
