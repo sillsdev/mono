@@ -1753,9 +1753,7 @@ mono_custom_attrs_get_attr_checked (MonoCustomAttrInfo *ainfo, MonoClass *attr_k
 			continue;
 		MonoClass *klass = centry->ctor->klass;
 		if (attr_klass == klass || mono_class_is_assignable_from (attr_klass, klass)) {
-			HANDLE_FUNCTION_ENTER ();
-			MonoObjectHandle result = create_custom_attr (ainfo->image, centry->ctor, centry->data, centry->data_size, error);
-			HANDLE_FUNCTION_RETURN_OBJ (result);
+			return create_custom_attr (ainfo->image, centry->ctor, centry->data, centry->data_size, error);
 		}
 	}
 
